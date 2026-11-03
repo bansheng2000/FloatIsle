@@ -30,6 +30,67 @@ internal static class NativeMethods
     // 窗口消息：注册的热键被按下
     internal const int WM_HOTKEY = 0x0312;
 
+    // ---- 全屏 / 锁屏判定（全屏让位用）----
+    // SHQueryUserNotificationState 返回 QUERY_USER_NOTIFICATION_STATE（shellapi.h，见下方常量）
+    [DllImport("shell32.dll", SetLastError = true)]
+    internal static extern int SHQueryUserNotificationState(out int state);
+
+    internal const int QUNS_NOT_PRESENT = 1;             // 屏保/锁屏/非活动快速用户切换会话
+    internal const int QUNS_BUSY = 2;                    // 有全屏应用在跑，或开了演示设置（实测无边框全屏窗口=2）
+    internal const int QUNS_RUNNING_D3D_FULL_SCREEN = 3; // 独占全屏 D3D 应用（游戏）
+    internal const int QUNS_PRESENTATION_MODE = 4;       // 用户手动开了演示模式
+    internal const int QUNS_ACCEPTS_NOTIFICATIONS = 5;   // 正常桌面
+    internal const int QUNS_QUIET_TIME = 6;              // 新用户首小时的安静时段
+    internal const int QUNS_APP = 7;                     // 有商店应用在前台
+
+    // ---- 前台窗口变化事件钩子 ----
+    internal const int EVENT_SYSTEM_FOREGROUND = 0x0003; // 前台窗口发生变化
+    internal const uint WINEVENT_OUTOFCONTEXT = 0x0000;  // 回调投递到安装钩子的那个线程的消息队列
+    internal const uint WINEVENT_SKIPOWNPROCESS = 0x0002; // 本进程自己的窗口事件不回调
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    internal delegate void WinEventProc(
+        IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild,
+        uint dwEventThread, uint dwmsEventTime);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern IntPtr SetWinEventHook(
+        uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventProc lpfnWinEventProc,
+        uint idProcess, uint idThread, uint dwFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+    // ---- 前台窗口几何（用来复核"全屏应用"是否真存在）----
+    internal const uint MONITOR_DEFAULTTONEAREST = 0x00000002; // MonitorFromWindow：窗口不在任何显示器上时取最近的
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MONITORINFO
+    {
+        public int cbSize;      // 结构大小，调用前必须填
+        public RECT rcMonitor;  // 显示器整块区域（含任务栏）
+        public RECT rcWork;     // 工作区（不含任务栏）
+        public uint dwFlags;    // 1 = 主显示器
+    }
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", SetLastError = true)]
+    internal static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO info);
+
     // ---- 窗口区域（异形命中）----
     // CreateRoundRectRgn 的 (x1,y1,x2,y2) 用窗口客户区坐标，(w,h) 是圆角椭圆的宽高（不是半径）
 

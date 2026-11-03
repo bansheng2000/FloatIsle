@@ -26,6 +26,8 @@ public partial class MainWindow : Window
     private bool _regionTracking;
     private TrayIcon? _tray;
     private readonly MediaSession _media;
+    private readonly FullscreenWatcher _fullscreen;
+    private bool _hiddenByFullscreen;
 
     /// <summary>当前是否整窗点击穿透（托盘菜单要读它）。</summary>
     internal bool ClickThrough => _clickThrough;
@@ -56,6 +58,61 @@ public partial class MainWindow : Window
         _media = new MediaSession(Dispatcher);
         _media.Updated += UpdateMedia;
         _media.Start();
+
+        // 全屏让位：全屏/锁屏时淡出隐藏，退出后淡入恢复
+        _fullscreen = new FullscreenWatcher();
+        _fullscreen.SuppressChanged += OnFullscreenChanged;
+        _fullscreen.Start();
+    }
+
+    /// <summary>全屏/锁屏时让位；退出全屏后恢复（淡入 160ms，远小于 1s 要求）。</summary>
+    private void OnFullscreenChanged(bool suppress)
+    {
+        if (suppress)
+        {
+            if (!IsVisible)
+            {
+                return;
+            }
+            _hiddenByFullscreen = true;
+            FadeOutThenHide();
+            return;
+        }
+
+        // 只有"因为全屏才隐藏"的才恢复；用户手动隐藏的不擅自弹出来
+        if (!_hiddenByFullscreen)
+        {
+            return;
+        }
+        _hiddenByFullscreen = false;
+        Show();
+        UpdateWindowRegion();
+        FadeIn();
+    }
+
+    private void FadeOutThenHide()
+    {
+        var fade = new DoubleAnimation(0, new Duration(TimeSpan.FromMilliseconds(140)))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+        };
+        fade.Completed += (_, _) =>
+        {
+            if (_hiddenByFullscreen)
+            {
+                Hide();
+            }
+        };
+        Island.BeginAnimation(OpacityProperty, fade);
+    }
+
+    private void FadeIn()
+    {
+        var fade = new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(160)))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        Island.BeginAnimation(OpacityProperty, fade);
     }
 
     /// <summary>把一次媒体快照写到岛上；没有会话时显示「无媒体」，不保留上一首。</summary>
@@ -108,6 +165,7 @@ public partial class MainWindow : Window
         // 托盘图标必须先撤掉，否则进程退出后托盘里留幽灵图标
         _tray?.Dispose();
         _media.Dispose();
+        _fullscreen.Dispose();
         base.OnClosed(e);
     }
 
@@ -156,7 +214,11 @@ public partial class MainWindow : Window
             Hide();
             return;
         }
+
+        _hiddenByFullscreen = false; // 用户手动要它出来，就别再按"全屏让位"的状态恢复
         Show();
+        Island.BeginAnimation(OpacityProperty, null); // 清掉淡出动画残留
+        Island.Opacity = 1;
         UpdateWindowRegion(); // 重新显示后按当前尺寸重算一次区域
     }
 
