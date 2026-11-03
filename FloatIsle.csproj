@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- net8 的引用包本机是 8.0.33、SDK 8.0.427 要 8.0.31，离线还原拿不到，所以用 10（同为 LTS）。
+         带 10.0.19041.0 这个 SDK 版本号是为了拿到 Windows.Media.Control（SMTC）的 WinRT 投影。
+         该投影包 Microsoft.Windows.SDK.NET.Ref 不在本机 SDK 里：首次构建要联网还原一次（约 75MB），
+         之后走全局缓存完全离线。见 README「首次构建要联网一次」。 -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- 托盘图标用框架自带的 WinForms NotifyIcon，不引 NuGet -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FloatIsle</RootNamespace>
+    <AssemblyName>FloatIsle</AssemblyName>
+  </PropertyGroup>
+
+</Project>
