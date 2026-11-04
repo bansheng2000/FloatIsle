@@ -40,11 +40,15 @@ internal sealed class TrayIcon : IDisposable
 
         var exitItem = new ToolStripMenuItem("退出", null, (_, _) => System.Windows.Application.Current.Shutdown());
 
+        // 设置窗口是普通窗口（有焦点、可拖动），不是岛那种置顶不抢焦点的
+        var settingsItem = new ToolStripMenuItem("设置…", null, (_, _) => window.ShowSettings());
+
         var menu = new ContextMenuStrip();
         menu.Items.Add(_visibilityItem);
         menu.Items.Add(_clickThroughItem);
         menu.Items.Add(_autoStartItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(settingsItem);
         menu.Items.Add(exitItem);
 
         _notify = new NotifyIcon

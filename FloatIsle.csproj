@@ -14,6 +14,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>FloatIsle</RootNamespace>
     <AssemblyName>FloatIsle</AssemblyName>
+    <!-- 版本号唯一真相源：安装包的 AppVersion 从这里编译进 exe 的版本资源里读（installer/FloatIsle.iss） -->
+    <Version>0.2.0</Version>
+    <!-- 默认会把 git 提交号拼进 ProductVersion（0.2.0+<sha>），安装包读到的版本就不干净了，关掉 -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
 </Project>

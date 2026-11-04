@@ -39,6 +39,11 @@ internal sealed class FullscreenWatcher : IDisposable
 
     internal void Start()
     {
+        if (_hook != IntPtr.Zero)
+        {
+            return; // 已经挂着钩子了，重复 Start 不重装
+        }
+
         // 只关心前台窗口变化；OUTOFCONTEXT 让回调进本线程的消息队列（不用跨线程封送）
         _hook = NativeMethods.SetWinEventHook(
             NativeMethods.EVENT_SYSTEM_FOREGROUND, NativeMethods.EVENT_SYSTEM_FOREGROUND,
@@ -47,6 +52,18 @@ internal sealed class FullscreenWatcher : IDisposable
 
         Evaluate();
         _timer.Start();
+    }
+
+    /// <summary>关掉监视（设置里可以关全屏让位）：卸钩子停定时器，之后不再发事件。</summary>
+    internal void Stop()
+    {
+        _timer.Stop();
+        if (_hook != IntPtr.Zero)
+        {
+            NativeMethods.UnhookWinEvent(_hook);
+            _hook = IntPtr.Zero;
+        }
+        _suppressed = false;
     }
 
     private void OnWinEvent(
@@ -111,13 +128,5 @@ internal sealed class FullscreenWatcher : IDisposable
             && r.Bottom >= mi.rcMonitor.Bottom;
     }
 
-    public void Dispose()
-    {
-        _timer.Stop();
-        if (_hook != IntPtr.Zero)
-        {
-            NativeMethods.UnhookWinEvent(_hook);
-            _hook = IntPtr.Zero;
-        }
-    }
+    public void Dispose() => Stop();
 }

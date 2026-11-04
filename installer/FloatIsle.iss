@@ -1,14 +1,20 @@
-﻿; FloatIsle 安装包（per-user，不签名，不写 HKLM）
+; FloatIsle 安装包（per-user，不签名，不写 HKLM）
 ; 编译：ISCC.exe FloatIsle.iss
 ; 前置：先 dotnet publish -c Release -r win-x64 --self-contained true -o publish
 
 #define AppExeName "FloatIsle.exe"
 
+; 版本号唯一真相源 = FloatIsle.csproj 里的 <Version>。SDK 把它写进 exe 的版本资源（ProductVersion），
+; 这里直接读，脚本里不再手写第二份（以前写死 1.0.0，跟 README 自称的 v0.2 对不上）。
+; 因此编译前必须先 dotnet publish，publish 目录里没有 exe 时这里会直接报错，不会静默用错版本。
+#define AppVersion GetStringFileInfo("..\publish\" + AppExeName, "ProductVersion")
+
 [Setup]
 ; 固定的 AppId：升级/卸载靠它识别，别改
 AppId={{7E2A4C61-3B5D-4F0A-9C8E-5D1B2A6F7C34}
 AppName=FloatIsle
-AppVersion=1.0.0
+AppVersion={#AppVersion}
+AppVerName=FloatIsle {#AppVersion}
 AppPublisher=FloatIsle
 ; per-user：装到 %LOCALAPPDATA%\Programs\FloatIsle，全程不需要管理员
 DefaultDirName={localappdata}\Programs\FloatIsle

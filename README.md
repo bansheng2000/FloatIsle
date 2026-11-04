@@ -1,6 +1,6 @@
 # FloatIsle
 
-Windows 桌面「灵动岛」外壳（v0.2）：透明、无边框、置顶、**不抢焦点**的胶囊窗口。鼠标悬停展开，**只有胶囊形状本身可点，形状外一律穿透**；展开后显示当前 SMTC 媒体的标题/艺人/播放状态；**全屏应用或锁屏时自动让位**；托盘菜单管显示、穿透、自启、退出。
+Windows 桌面「灵动岛」外壳（v0.2）：透明、无边框、置顶、**不抢焦点**的胶囊窗口。鼠标悬停展开，**只有胶囊形状本身可点，形状外一律穿透**；展开后显示当前 SMTC 媒体的标题/艺人/播放状态；**全屏应用或锁屏时自动让位**；托盘菜单管显示、穿透、自启、设置、退出；配置持久化在 `%APPDATA%\FloatIsle\settings.json`。
 
 ## 环境要求
 
@@ -49,7 +49,8 @@ dotnet run -c Release
 | `Ctrl`+`Alt`+`I`（全局热键） | 切换整窗点击穿透；状态写在第三行 |
 | 点在胶囊上 | 岛收下点击，但**不激活窗口、不抢焦点** |
 | 点在胶囊外（哪怕在 380×180 舞台内） | 直接落到下面那个窗口 |
-| 右键托盘图标 | 隐藏岛 / 点击穿透 / 开机自启 / 退出 |
+| 右键托盘图标 | 隐藏岛 / 点击穿透 / 开机自启 / 设置… / 退出 |
+| 托盘菜单「设置…」 | 打开普通设置窗口（有边框、能拖、正常获得焦点）：透明度、默认穿透、媒体开关、全屏让位开关、悬停延迟、位置复位 |
 
 展开态三行：媒体标题 → `艺人 · 播放状态`（无会话时是 `无媒体`）→ 穿透状态。
 
@@ -58,6 +59,7 @@ dotnet run -c Release
 - 数据源：`GlobalSystemMediaTransportControlsSessionManager`（SMTC），只读标题、艺人、播放状态。
 - 感知方式：**事件**，不是轮询。订阅 `CurrentSessionChanged`（换播放器）、`MediaPropertiesChanged`（换歌/改元数据）、`PlaybackInfoChanged`（播放/暂停），三者都切回 UI 线程处理（`Dispatcher.BeginInvoke`）。事件连着来时会合并成一次读取。
 - 没有会话、读取过程中会话被关、拿不到 SMTC：一律显示 `无媒体`，不弹窗、不抛异常。
+- **可关**：设置面板取消「显示媒体信息（SMTC 只读）」后不再创建会话管理器，岛上第二行显示 `媒体信息已关闭`。
 - 实测空闲 CPU（10 秒采样，`TotalProcessorTime` 差值）：播放中 0 ms、暂停 0 ms、无会话 0 ms。
 
 ## 打包（Inno Setup，不签名）
@@ -72,7 +74,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 
 | 形态 | 字节 | 文件数 | 前置 |
 | --- | --- | --- | --- |
-| self-contained | 204,886,383（195.39 MB） | 475 | 无 |
+| self-contained | 204,905,215（195.41 MB） | 475 | 无 |
 | framework-dependent | 25,621,558（24.43 MB） | 7 | 需 .NET 10 桌面运行时 |
 
 `PublishTrimmed=true` **不可用**：WPF/WinForms 直接报 `NETSDK1175`（SDK 明确不支持裁剪这些框架），与 WinRT 投影无关。
@@ -81,14 +83,20 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 
 ```powershell
 & "C:\Users\12576\AppData\Local\Programs\Inno Setup 6\ISCC.exe" "installer\FloatIsle.iss"
-# 产物 installer\Output\FloatIsle-Setup.exe（57,137,488 字节 / 54.49 MB，lzma2/max）
+# 产物 installer\Output\FloatIsle-Setup.exe（本次 57,154,023 字节 / 54.51 MB，md5 9D4EA4D3BE7A3B47330EB5CD79E0D352；lzma2/max）
 ```
+
+**版本号只有一个来源**：`FloatIsle.csproj` 里的 `<Version>0.2.0</Version>`。SDK 把它写进 exe 的版本资源，`installer/FloatIsle.iss` 用 `#define AppVersion GetStringFileInfo(...)` 从 publish 出来的 exe 里读，安装脚本里不再手写第二份（以前写死 `1.0.0`，跟 README 自称的 v0.2 对不上，装完「应用和功能」显示 `FloatIsle 1.0.0`）。
+
+**改版本号只改 `csproj` 的 `<Version>`**，然后重新 publish + 编译安装包即可；「应用和功能」里显示的就是 `FloatIsle <Version>`（实测 `FloatIsle 0.2.0`）。`IncludeSourceRevisionInInformationalVersion=false` 是为了不让 git 提交号混进 `ProductVersion`。
+
+`publish/` 实测 475 文件 / 204,905,215 字节；装完 `%LOCALAPPDATA%\Programs\FloatIsle` 是 477 文件 / 209,750,197 字节（多 `unins000.exe` + `unins000.dat`）。安装包的字节数每次 publish + 编译会因文件时间戳略有浮动（本次 57,154,023，上一次 57,139,450）。
 
 安装包行为：装到 `%LOCALAPPDATA%\Programs\FloatIsle`（per-user，不需要管理员、不写 HKLM）、开始菜单快捷方式、自带卸载器 `unins000.exe`、可选「开机自启」（只写 HKCU 的 Run 值）。卸载会删 Run 值、删安装目录、删快捷方式。
 
 **没有代码签名**：首次运行 Windows 会拦，需要点「更多信息」→「仍要运行」（安装界面第一页也写了这句）。
 
-> 本机环境的一个坑（**不是安装包的问题**）：本会话的工作区目录 `E:\文档\deepseek-harness\FloatIsle` 被 DSH 沙箱加过 ACL，`icacls` 能看到 `Everyone:(CI)(DENY)(DC)`、一个 `S-1-4-...` 沙箱 SID 的 `(OI)(CI)(W,D,DC)`、用户只剩 `(WO,S)`，以及 `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`。**从该目录里启动的 exe 会拿到受限上下文**：往 `%TEMP%` 写文件被拒、Inno Setup 建不了自己的临时目录后静默退出、`SHQueryUserNotificationState` 恒返回 2。同一份 exe（md5 相同、无 ADS）拷到工作区外（`E:\文档\big-cjk\`、`C:\...\Temp`）一切正常：安装 2 秒完成、状态读数正常。装完之后从 `%LOCALAPPDATA%\Programs\FloatIsle` 启动（在工作区外），不受影响。
+> 本机环境的一个坑（**不是安装包的问题**）：DSH 的工作区目录 `E:\文档\deepseek-harness\FloatIsle` 上挂了**低完整性标签**（`icacls` 能看到 `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`，以及 `Everyone:(CI)(DENY)(DC)`、一个 `S-1-4-...` 沙箱 SID 的 `(OI)(CI)(W,D,DC)`）。同一份 exe（md5 相同、无 ADS）拷进工作区就带这个标签、拷到工作区外就没有；`Chief`、`dsh-plot-clone` 这些工作区目录上同样有，还没跑过会话的目录则干净。**从该目录里启动的 exe 会拿到受限上下文**：往 `%TEMP%` 写文件被拒、Inno Setup 建不了自己的临时目录后静默退出、`SHQueryUserNotificationState` 恒返回 2。低完整性 + no-write-up 能解释前两件事；**第三个只确认了相关性，机制未验明**。同一份 exe 拷到工作区外（`E:\文档\big-cjk\`、`C:\...\Temp`）一切正常：安装 2 秒完成、状态读数正常。装完之后从 `%LOCALAPPDATA%\Programs\FloatIsle` 启动（在工作区外），不受影响。**要测装包/跑程序，先把 exe 拷到工作区外。**
 
 ## 全屏让位
 
@@ -98,6 +106,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 - **触发**：主路是 `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)`，前台窗口一变就查一次（实测从全屏窗口出现到岛隐藏 12 ms）；兜底是 1 秒一次的 `DispatcherTimer`，因为微软文档明说"用户启动/结束全屏应用时不会发出通知"，同一窗口里切全屏（比如浏览器 F11）不会有前台变化事件。
 - **过渡**：淡出 140 ms 后 `Hide()`，恢复时 `Show()` + 淡入 160 ms（实测恢复 130 ms，远小于 1 秒）。
 - **恢复条件**：只有"因为全屏才隐藏"的才自动恢复；用户手动隐藏的不会被弹出来。
+- **可关**：设置面板取消「全屏 / 锁屏时自动让位」后，`FullscreenWatcher.Stop()` 会卸钩子、停定时器，岛不再自动隐藏。
 - **钩子清理**：`FullscreenWatcher.Dispose()` 里 `UnhookWinEvent`，窗口关闭时调用；实测进出全屏 3 轮后句柄数 1180 → 1176，无增长。
 
 ## 开机自启
@@ -114,6 +123,55 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 1. 在新位置启动一次，托盘菜单里把「开机自启」关掉再打开，值会被当前路径覆盖；
 2. 或 `reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v FloatIsle /f`，再在新位置打开一次。
 
+## 设置与配置持久化（`%APPDATA%\FloatIsle\settings.json`）
+
+托盘菜单「设置…」打开的是**普通 WPF 窗口**：有边框、能拖动、正常获得焦点（没有 `WS_EX_NOACTIVATE`、不是穿透窗口、不置顶）。改一项**立即生效并落盘**，不需要「保存」按钮。
+
+```json
+{
+  "Left": 1090,
+  "Top": 6,
+  "Screen": "\\\\.\\DISPLAY1",
+  "Opacity": 1,
+  "ClickThrough": false,
+  "MediaEnabled": true,
+  "FullscreenSuppress": true,
+  "HoverDelayMs": 0
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `Left` / `Top` | 窗口左上角（DIP）。启动时读回并夹进主屏工作区，换分辨率不会跑到屏幕外 |
+| `Screen` | 上次所在显示器设备名，**只做记录**——多屏还原未实现 |
+| `Opacity` | 岛的不透明度，0.2–1.0 |
+| `ClickThrough` | 整窗穿透的当前状态（热键/托盘切换也会写回，所以"默认穿透"= 最后一次的状态） |
+| `MediaEnabled` | 关掉后不再读 SMTC，岛上第二行显示 `媒体信息已关闭` |
+| `FullscreenSuppress` | 关掉后全屏/锁屏也不再自动隐藏 |
+| `HoverDelayMs` | 鼠标停在岛上的展开延迟（0 = 立即，上限 2000）。收起不受延迟影响 |
+
+- **开机自启不在这里**：真源是注册表，设置面板只读回显，避免两份真相。
+- 位置目前只能靠面板里的「复位到顶部居中」或手改 JSON：**拖岛本身还没做**（岛是悬停展开的被动显示）。
+- 坏文件不崩、不删：解析失败时把原文件改名成 `settings.json.bak`（覆盖上一次的 .bak），用默认值启动，设置面板顶部红字给出 .bak 路径。
+- 写入走 `settings.json.tmp` + 替换，避免中途被杀留下半个 JSON。
+
+实测（用的是**装好的 exe**，从 `%LOCALAPPDATA%\Programs\FloatIsle` 启动，配置在 `%APPDATA%`；不要从仓库 `bin\Release\...` 里跑，那条路径带低完整性标签会写不进去）：
+
+| 检查 | 读数 |
+| --- | --- |
+| 首次启动生成默认配置 | `Left=1090, Top=6, Screen="\\\\.\\DISPLAY1", Opacity=1, ClickThrough=false, MediaEnabled=true, FullscreenSuppress=true, HoverDelayMs=0` |
+| 设置窗口属性 | `EXSTYLE=0x00040100`（无 NOACTIVATE / 无 TRANSPARENT）、`STYLE` 有 CAPTION+SYSMENU、`GetForegroundWindow()==设置窗口` |
+| 拖动窗口标题栏 | `rect` 1080,567 → 1140,637 |
+| 面板勾选穿透 | 岛 `EXSTYLE` 0x08080088 → **0x080800A8** |
+| 面板改透明度 0.6 | 胶囊体像素均值 **60.59 → 138.39**（桌面透上来了） |
+| 面板改悬停延迟 0 → 300 ms | 展开耗时 **61 ms → 341 ms** |
+| 杀进程 → 重启 | `EXSTYLE` 仍 0x080800A8；面板读回 `ClickThrough=On, Opacity=0.6, Hover=300, Media=Off` |
+| 手写坏 JSON → 启动 | 进程活着、**只有 1 个窗口**（无错误对话框）、`.bak` 里是原文、配置回默认值、面板红字显示 .bak 路径 |
+| 位置 | JSON 写 `240,420` → `RECT=240,420,620,600`；点「复位」→ `1090,6` 并写回 JSON |
+| 全屏让位开关 | `false`：全屏窗口盖上来岛仍可见；`true`：全屏后 **20 ms** 隐藏，退出后 **21 ms** 恢复 |
+| 空闲 CPU（稳定后） | **0 ms / 10 s**、**0 ms / 30 s**（启动后头 10 s 有一次性初始化，实测 31.2 ms，之后归零） |
+| 内存 | uptime 108 s：WSP **23.6 MB**、PrivateBytes 49.79 MB、17 线程、1175 句柄 |
+
 ## 各块怎么实现的
 
 1. **透明异形窗口**：`MainWindow.xaml:6-12`（`WindowStyle=None` + `AllowsTransparency` + 透明背景）；岛形是 `Border` 的 `CornerRadius=22`。
@@ -124,17 +182,22 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 6. **自启**：`AutoStart.cs`，值名 `FloatIsle`，路径取 `Environment.ProcessPath`，关掉走 `DeleteValue`。
 7. **媒体**：`MediaSession.cs`，三个 SMTC 事件 + 合并刷新 + `Dispatcher.BeginInvoke` 切回 UI；`MainWindow.UpdateMedia()` 负责文案（无会话时 `无媒体`）。
 8. **退出**：菜单「退出」→ `Application.Shutdown()` → `OnClosed` 里先 `_tray.Dispose()`（先 `Visible=false` 再释放，避免幽灵图标）再 `_media.Dispose()`。
+9. **设置**：`Settings.cs`（`AppSettings` + `SettingsStore.Load/Save`）、`SettingsWindow.xaml(.cs)`（普通窗口）、`MainWindow.UpdateSettings()`（唯一入口：改内存 → `Normalize()` → `ApplySettings()` → 落盘）。`ApplySettings()` 可重复调用，把透明度/穿透/媒体/全屏四项一起套上去。
 
 ## 已知限制（有意的取舍）
 
 - **系统阴影被裁掉了**。`SetWindowRgn` 按形状裁剪窗口，画在胶囊外的 `DropShadowEffect` 会被切出硬边，所以去掉阴影，只留 1px 描边。
 - 区域边缘没有抗锯齿，圆角是硬边（1px 级锯齿）。
 - **只认系统 SMTC**：不注册 SMTC 会话的播放器（部分小众播放器、网页里被浏览器接管的情况）读不到；浏览器类通常以浏览器进程为一个会话。
-- **全屏判定踩到一个反常现象**：本机实测，同一份 exe 放在仓库 `bin\Release\...` 目录里，`SHQueryUserNotificationState` 会稳定返回 `QUNS_BUSY(2)`；把同样的文件拷到 `C:\...\Temp` 或 `E:\temp-fi` 下运行则返回正常的 `5`。原因已定位到工作区目录的沙箱 ACL（见上面「打包」一节），不是程序问题。因此 2/3 两条路径不单看返回值，还要复核前台窗口是否盖满显示器——这样即使返回值异常也不会误隐藏。**独占全屏 D3D 游戏（state 3）本机没有可测环境，未实测。**
+- **全屏判定踩到一个反常现象**：本机实测，同一份 exe 放在仓库 `bin\Release\...` 目录里，`SHQueryUserNotificationState` 会稳定返回 `QUNS_BUSY(2)`；把同样的文件拷到 `C:\...\Temp` 或 `E:\temp-fi` 下运行则返回正常的 `5`。现象与工作区目录上的**低完整性标签**相关（见上面「打包」一节；机制未验明，只确认相关性），不是程序逻辑问题。因此 2/3 两条路径不单看返回值，还要复核前台窗口是否盖满显示器——这样即使返回值异常也不会误隐藏。**独占全屏 D3D 游戏（state 3）本机没有可测环境，未实测。**
 - 没有封面、没有进度条、没有任何播放控制（按 v0.2 范围只读）。
 - 输出目录 25 MB，主要来自 24.8 MB 的投影 DLL；要减小体积得裁剪 CsWinRT 投影，v0.2 不做。
 - 托盘图标用框架自带的 `SystemIcons.Application`（通用窗口图标），没有自带图标资源。
-- 没有设置界面、没有多显示器跟随、没有运行中 DPI 变化处理。
+- **岛不能拖动**：位置默认顶部居中，只能靠设置面板的「复位到顶部居中」或手改 `settings.json` 的 `Left/Top` 调整（`LocationChanged` 已经会写回，等以后加了拖动自动生效）。
+- **多屏只记录设备名**：`Screen` 字段会写当前显示器，但还原只按主屏工作区夹取，没有多屏跟随、没有运行中 DPI 变化处理。
+- **开了整窗穿透后悬停不会展开**：`WS_EX_TRANSPARENT` 让鼠标事件根本到不了岛，探测不到 MouseEnter。要展开先按 `Ctrl+Alt+I` 关掉穿透。
+- 设置窗口是**普通窗口、不置顶**：可能被别的窗口盖住，这是有意的（它要保持正常焦点/拖动语义）。
+- 坏 JSON 只会留**一份** `settings.json.bak`（再次损坏会覆盖），不保留历史。改文件时字段名拼错不会报错，那一项直接回默认值。
 - `Get-Process FloatIsle` 的 `MainWindowHandle` 是 0（窗口带 `WS_EX_TOOLWINDOW`），脚本要拿句柄得自己 `EnumWindows` + `GetWindowThreadProcessId` 按 PID 找。
 
 ## 自己验证（不要只信上面的描述）
@@ -145,6 +208,10 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 Get-Process FloatIsle | Select-Object Id, @{n='PrivateMB';e={[math]::Round($_.PrivateMemorySize64/1MB,2)}}
 # 自启项
 reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v FloatIsle
+# 配置（目录不存在说明还没启动过）
+Get-Content "$env:APPDATA\FloatIsle\settings.json" -Raw
+# 坏配置回默认 + 备份：手写一段坏 JSON 后启动，应生成 settings.json.bak 且程序不崩
+Test-Path "$env:APPDATA\FloatIsle\settings.json.bak"
 # 岛上实际显示的文字（UI Automation 读回，不是截图猜）
 [void][System.Reflection.Assembly]::LoadWithPartialName('UIAutomationClient')
 $pid_ = (Get-Process FloatIsle | Select-Object -First 1).Id
