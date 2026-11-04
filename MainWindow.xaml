@@ -22,7 +22,10 @@
                 BorderBrush="#3CFFFFFF" BorderThickness="1"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 MouseEnter="Island_MouseEnter"
-                MouseLeave="Island_MouseLeave">
+                MouseLeave="Island_MouseLeave"
+                MouseLeftButtonDown="Island_MouseLeftButtonDown"
+                MouseMove="Island_MouseMove"
+                MouseLeftButtonUp="Island_MouseLeftButtonUp">
             <!-- 注意：窗口被 SetWindowRgn 裁成胶囊形状后，任何画在胶囊外的效果（阴影/外发光）都会被切掉，
                  所以这里不再用 DropShadowEffect。取舍写在 README「已知限制」。 -->
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="280">
@@ -43,6 +46,22 @@
                            Margin="0,4,0,0"
                            Foreground="#88FFFFFF" FontSize="10"
                            HorizontalAlignment="Center" TextAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <!-- 贴顶工作台（Mode=top）：平时整窗隐藏，光标碰到屏幕顶边才从顶上滑下来。
+             卡片由 RefreshTopTiles() 生成（用量 / 任务 / 媒体），两列 WrapPanel 自动换行。 -->
+        <Border x:Name="TopPanel"
+                Width="560"
+                CornerRadius="16"
+                Background="#F2101216"
+                BorderBrush="#3CFFFFFF" BorderThickness="1"
+                HorizontalAlignment="Left" VerticalAlignment="Top"
+                Visibility="Collapsed"
+                MouseLeave="TopPanel_MouseLeave">
+            <StackPanel Margin="16">
+                <!-- ItemWidth 264 = (560 - 两侧 16 - 列间距 12) / 2，两块正好一行 -->
+                <WrapPanel x:Name="TopTiles" ItemWidth="264" />
             </StackPanel>
         </Border>
     </Grid>

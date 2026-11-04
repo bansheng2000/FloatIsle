@@ -57,6 +57,13 @@ internal sealed class AppSettings
     /// <summary>岛的不透明度，0.2–1.0。</summary>
     public double Opacity { get; set; } = 1.0;
 
+    /// <summary>形态：<c>capsule</c>（默认，胶囊悬停展开）/ <c>top</c>（贴顶工作台，光标碰顶才出现）。</summary>
+    public string Mode { get; set; } = ModeCapsule;
+
+    internal const string ModeCapsule = "capsule";
+
+    internal const string ModeTop = "top";
+
     /// <summary>整窗点击穿透的默认状态（热键/托盘切换时也会写回这里）。</summary>
     public bool ClickThrough { get; set; }
 
@@ -104,6 +111,13 @@ internal sealed class AppSettings
 
         TasksEndpoint = NormalizeEndpoint(TasksEndpoint, DefaultTasksEndpoint);
         TasksJumpEndpoint = NormalizeEndpoint(TasksJumpEndpoint, DefaultTasksJumpEndpoint);
+
+        // 手写文件里认中文别名（「贴顶」「胶囊」），存回去统一用英文 id
+        Mode = Mode.Trim().ToLowerInvariant() switch
+        {
+            ModeTop or "贴顶" or "贴顶工作台" => ModeTop,
+            _ => ModeCapsule
+        };
     }
 
     private static string NormalizeEndpoint(string? value, string fallback) =>

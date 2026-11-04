@@ -173,6 +173,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
     { "Id": "tasks", "Visible": true }
   ],
   "CollapsedLine": "media",
+  "Mode": "capsule",
   "TasksEndpoint": "127.0.0.1:47821",
   "TasksJumpEndpoint": "127.0.0.1:47822"
 }
@@ -192,9 +193,10 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | `CollapsedLine` | 收起态主行显示哪一项：`media`（默认）/ `usage` / `tasks` |
 | `TasksEndpoint` | 任务面板心跳地址，默认 `127.0.0.1:47821`（空或超过 64 字回默认） |
 | `TasksJumpEndpoint` | 点任务行时把 `sid` POST 过去的跳转地址，默认 `127.0.0.1:47822`（同上限） |
+| `Mode` | 形态：`capsule`（默认，顶部胶囊 + 悬停展开）/ `top`（贴顶工作台，光标碰屏顶才展开）。改这一项立即生效，不用重启 |
 
 - **开机自启不在这里**：真源是注册表，设置面板只读回显，避免两份真相。
-- 位置目前只能靠面板里的「复位到顶部居中」或手改 JSON：**拖岛本身还没做**（岛是悬停展开的被动显示）。
+- 位置可以直接拖：在胶囊上按住左键拖，松手写回 `LeftPx/TopPx`（细节见下一节）。面板里还有「复位到顶部居中」。
 - 坏文件不崩、不删：解析失败时把原文件改名成 `settings.json.bak`（覆盖上一次的 .bak），用默认值启动，设置面板顶部红字给出 .bak 路径。
 - 写入走 `settings.json.tmp` + 替换，避免中途被杀留下半个 JSON。
 
@@ -214,6 +216,40 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | 全屏让位开关 | `false`：全屏窗口盖上来岛仍可见；`true`：全屏后 **20 ms** 隐藏，退出后 **21 ms** 恢复 |
 | 空闲 CPU（稳定后） | **0 ms / 10 s**、**0 ms / 30 s**（启动后头 10 s 有一次性初始化，实测 31.2 ms，之后归零） |
 | 内存 | uptime 108 s：WSP **23.6 MB**、PrivateBytes 49.79 MB、17 线程、1175 句柄 |
+
+## 拖动与贴顶工作台
+
+**拖动胶囊**：在胶囊上按住左键拖，窗口跟手（`SetWindowPos` 循环；`WS_EX_NOACTIVATE` 的窗口不能 `DragMove`）。按下瞬间先切回收起态并停掉悬停定时器，所以拖动期间不会触发展开/收起动画；松手用 `Placement.ClampInto` 夹进当前显示器工作区，再写 `LeftPx/TopPx`。穿透开启时鼠标事件到不了窗口，先按 `Ctrl+Alt+I` 关掉。
+
+实测（100% 档，工作区 2560×1552）：
+
+| 检查 | 读数 |
+| --- | --- |
+| 拖前 | `RECT=1090,6,1470,186`，`REGION 159x43`（收起） |
+| 拖动中 | `RECT` 依次 1190,81 → 1290,156，**区域始终 `159x43`**（没有被悬停展开），`EXSTYLE=0x08080088`，`GetForegroundWindow()` 拖动前后同一句柄 |
+| 拖后 | `RECT=1290,156,1670,336`；`settings.json` 写回 `LeftPx=1290 TopPx=156` |
+| 重启 | `RECT=1290,156,1670,336`（原位） |
+| 拖出屏幕 | 拖到 (2555,1595) → 松手夹回 `2180,1372,2560,1552`，正好贴右/下边，无半截在屏外 |
+
+**贴顶工作台**（`Mode=top`）：空闲时**没有任何可见常驻窗口**。`WH_MOUSE_LL` 光标钩子常驻，光标进入屏幕顶 4 DIP（按该屏缩放折算成物理像素）才 `PostMessage` 叫醒 UI 线程，面板从顶边 180ms 滑下，宽 560 DIP、圆角 16，按唤醒时光标 X 居中并夹进工作区（左右各留 24 DIP）；鼠标离开面板后滑回并隐藏。
+
+钩子装在一个**独立后台线程**上（低级钩子的回调只在该线程被调用，且它必须自己泵消息：`WaitMessage` + `PeekMessage`）。回调里只有「判 `nCode`/`y` → `PostMessage`」，不建控件、不读文件、不写日志。另有两个实用点：`SetCursorPos` **不会**产生输入事件，低层钩子收不到，测唤醒必须用 `mouse_event`/`SendInput` 注入；面板开着时钩子置 `Open`，避免鼠标停在顶边时消息洪水。
+
+实测（100% 档，100% 缩放、单屏）：
+
+| 检查 | 读数 |
+| --- | --- |
+| 面板切到贴顶（不重启） | `settings.json` `Mode=top`；岛窗口立刻 `IsWindowVisible=False`，无可见常驻窗 |
+| 唤醒延迟 | 22 / 41 / 60 ms（轮询粒度 4 ms + 180 ms 下滑动画不计入可见时刻） |
+| 唤醒位置（夹紧） | X=200 → `RECT_L=24`（工作区左+24）；X=1280 → `1000`（居中）；X=2500 → `1976`（右-560-24） |
+| 面板尺寸与区域 | `RECT=1000,0,1560,184`，`REGION type=3 box=0,0,559,184 → 559x184`（三卡） |
+| 面板内容（UIA 读回） | `用量 | 今日 3.8 亿 token / 1752 次 | 余额 ¥37.56 · 5时 7% · 周 29% · 月 63% | 任务 | 1 个在跑 | 未命名工作区 · 在跑 | 媒体 | 无媒体` |
+| 鼠标离开面板 | 滑回耗时 **197–216 ms**（动画 180 ms + 轮询），随后 `IsWindowVisible=False` |
+| 钩子空闲 30 s | **31.2 ms / 2 个时间片**（15.625 ms 一片） |
+| 5 秒内 313 次注入移动 | **0 ms / 0 个时间片** |
+| 内存（uptime 104 s） | Private **82.64 MB**、WS 153.01 MB、25 线程、1275 句柄 |
+
+**未实测**：150% 档的贴顶面板（本机无法程序化改缩放，要用户手动切）；真双屏下的跨屏唤醒与夹紧（只有一块屏，位置逻辑走的是 `Placement` 纯函数单测）。
 
 ## 任务面板（心跳接收端，`127.0.0.1:47821` / 跳转 `47822`）
 
@@ -310,6 +346,8 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 10. **多屏与高 DPI**：`app.manifest`（PerMonitorV2）+ `MainWindow.CurrentScale`（= `GetDpiForWindow / 96`）驱动所有像素换算；`WndProc` 处理 `WM_DPICHANGED`（lParam 建议矩形 + 延迟到 `Loaded` 重算区域）；`Placement.cs` 纯函数定位，`PlacementSelfTest.cs` 10 条用例，入口在 `App.OnStartup` 的 `--selftest`。
 11. **用量/额度**：`UsageLedger.cs`（`Utf8JsonReader` 流式挑 `days`/`balanceRef`/`planSamples.go`，失败返回 null）、`UsageWatcher.cs`（`FileSystemWatcher` + 2 秒去抖，事件切回 UI 线程）、`MainWindow.RefreshIslandText()`（按 `Modules` 顺序拼三行文案）、`SettingsWindow` 的「岛内容」行（开关 + 上移/下移）。
 12. **任务面板**：`TasksHub.cs`（`TcpListener` 只绑回环 + 手写最小 HTTP/1.1 + 会话表 + 两个一次性 `DispatcherTimer`：25 秒心跳超时、5 秒「刚结束」淡出），`MainWindow.RefreshTaskRows()`（最多 4 行 + 签名缓存，内容没变不重建控件）、`TaskRow_Click` → `TasksHub.Jump`。
+13. **拖动**：`MainWindow.Island_MouseLeftButtonDown/MouseMove/MouseLeftButtonUp` → `MoveTo`（`SetWindowPos`，带 `SWP_NOACTIVATE`）→ `EndDrag` 里 `Placement.ClampInto` + `SavePlacement`；`_dragging` 优先级高于悬停定时器，`Island.IsMouseOver` 才重新起悬停。
+14. **贴顶工作台**：`TopEdgeHook.cs`（独立后台线程装 `WH_MOUSE_LL`，`WaitMessage`+`PeekMessage` 泵消息，回调只 `PostMessage`）、`MainWindow.ApplyMode/OnTopWake/ShowTopPanel/HideTopPanel/RefreshTopTiles`，面板卡片是 `WrapPanel` 两列 + `Tile()` 现拼；`UpdateWindowRegion()` 按当前形状（岛或面板）取圆角重设区域。
 
 ## 已知限制（有意的取舍）
 
@@ -328,7 +366,9 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 - 账本刷新是 2 秒去抖的事件驱动，**刻意不用定时器轮询**：轮询会把空闲 CPU 从 0 抬起来，这条是硬约束。
 - 输出目录 25 MB，主要来自 24.8 MB 的投影 DLL；要减小体积得裁剪 CsWinRT 投影，v0.2 不做。
 - 托盘图标用框架自带的 `SystemIcons.Application`（通用窗口图标），没有自带图标资源。
-- **岛不能拖动**：位置默认顶部居中，只能靠设置面板的「复位到顶部居中」或手改 `settings.json` 的 `LeftPx/TopPx` 调整（`LocationChanged` 已经会写回，等以后加了拖动自动生效）。
+- **拖动只在胶囊模式**：贴顶模式没有常驻窗口可拖，面板位置跟唤醒时的光标 X 走；拖岛时穿过窗口的鼠标事件需要穿透关闭（`Ctrl+Alt+I`）。
+- **贴顶模式的唤醒阈值是 4 DIP**，实测靠**注入输入事件**（`mouse_event`）验证，`SetCursorPos` 不产生输入、钩子收不到；真实手指/鼠标路径与注入事件走的是同一套 `WH_MOUSE_LL`，但没有物理鼠标的实测记录。
+- **贴顶面板在 150% 下未实测**：本轮系统缩放是 100%，面板宽 560 DIP、圆角 16、卡片间距 12 都是 DIP，理论同值，但没有读数。
 - **多屏只有自检，没有真机**：本机只有一块 2560×1600 屏，`Placement` 的 10 条用例是构造布局跑出来的纯函数自检；真实插拔第二块屏、跨屏缩放不同的场景**未实测**（设备名 `\\.\DISPLAY2` 这类在真机上是否稳定也给不出结论）。
 - **150% 及以上缩放未实测**：程序化改缩放在本机不可行（三条 API 路径都失败，见上），所以 `WM_DPICHANGED` 的实际重排、150% 下的区域/字号/像素均值、设置面板 150% 是否裁字，**都没有真机读数**。代码按「一个缩放因子派生」写并做了自检，但这不等于实测通过。
 - **DPI 变化时不主动改字号**：字号与边距是 DIP，交给 WPF 按新 DPI 自己缩放（WPF 里再乘一次会变成双倍）。这条依赖 WPF 行为，未实测验证。

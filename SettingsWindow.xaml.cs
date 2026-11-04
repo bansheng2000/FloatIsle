@@ -55,6 +55,11 @@ public partial class SettingsWindow : Window
         TasksEndpointBox.Text = s.TasksEndpoint;
         TasksJumpBox.Text = s.TasksJumpEndpoint;
 
+        // 形态下拉：value 存 Tag（capsule/top），显示名给人看
+        ModeCombo.Items.Add(new ComboBoxItem { Content = "胶囊（顶部居中，悬停展开）", Tag = AppSettings.ModeCapsule });
+        ModeCombo.Items.Add(new ComboBoxItem { Content = "贴顶工作台（光标碰顶才展开）", Tag = AppSettings.ModeTop });
+        ModeCombo.SelectedIndex = s.Mode == AppSettings.ModeTop ? 1 : 0;
+
         // 控件都建好、值也灌完了，从这里开始用户操作才算数
         _loading = false;
         RebuildModuleRows();
@@ -108,6 +113,17 @@ public partial class SettingsWindow : Window
         UpdateValueLabels();
         int ms = (int)Math.Round(e.NewValue);
         _owner.UpdateSettings(s => s.HoverDelayMs = ms);
+    }
+
+    /// <summary>形态切换立即生效（不用重启）：胶囊 ↔ 贴顶工作台。</summary>
+    private void Mode_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || ModeCombo.SelectedItem is not ComboBoxItem { Tag: string mode })
+        {
+            return;
+        }
+        _owner.UpdateSettings(s => s.Mode = mode);
+        PlacementText.Text = _owner.PlacementDescription();
     }
 
     private void ClickThrough_Changed(object sender, RoutedEventArgs e)

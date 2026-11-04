@@ -9,6 +9,13 @@
     <!-- 外面套 ScrollViewer：高缩放/小屏时窗口高度封顶（见 SettingsWindow.xaml.cs），内容进滚动条而不是被裁掉 -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="18,14,18,16">
+        <TextBlock Text="形态" FontWeight="SemiBold" />
+        <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+            <ComboBox x:Name="ModeCombo" Width="220" SelectionChanged="Mode_Changed" />
+        </StackPanel>
+        <TextBlock Text="胶囊：顶部居中，悬停展开；贴顶工作台：平时不占屏幕，鼠标碰到屏幕顶边才下滑展开。切换立即生效。"
+                   FontSize="12" Foreground="#666666" TextWrapping="Wrap" Margin="0,0,0,12" />
+
         <TextBlock Text="透明度" FontWeight="SemiBold" />
         <Slider x:Name="OpacitySlider" Minimum="0.2" Maximum="1" TickFrequency="0.05"
                 IsSnapToTickEnabled="True" Margin="0,4,0,2"
@@ -60,6 +67,8 @@
         <TextBlock Text="位置" FontWeight="SemiBold" />
         <TextBlock x:Name="PlacementText" Foreground="#666666" FontSize="12"
                    TextWrapping="Wrap" Margin="0,2,0,6" />
+        <TextBlock Text="提示：在胶囊上按住左键可以直接拖动岛，松手即保存位置（穿透开启时先按 Ctrl+Alt+I 关掉）。"
+                   Foreground="#666666" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6" />
         <Button x:Name="ResetPlacementButton" Content="复位到顶部居中"
                 HorizontalAlignment="Left" Padding="10,4" Click="ResetPlacement_Click" />
 

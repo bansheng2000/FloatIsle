@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -57,6 +57,21 @@ public partial class MainWindow : Window
     private string? _tasksEndpointApplied;
     private string? _taskRowsKey;
 
+    // 拖拽：WS_EX_NOACTIVATE 的窗口不能 DragMove（它要求窗口被激活，会把焦点抢走），只能自己跟手
+    private bool _dragging;
+    private NativeMethods.POINT _dragCursorStart;
+    private Rect _dragWindowStart;
+
+    // 贴顶工作台：钩子只在光标碰顶时投一条消息，回 UI 线程才建面板
+    private const double TopPanelWidth = 560;
+    private const double TopPanelEdgeMargin = 24;
+    private TopEdgeHook? _edgeHook;
+    private bool _topOpen;
+    private double _topHeight;
+    private string? _topTilesKey;
+    // 当前已经套用过的形态：设置每改一项都会走 ApplySettings，形态没变就别重摆窗口
+    private string? _appliedMode;
+
     /// <summary>当前是否整窗点击穿透（托盘菜单要读它）。</summary>
     internal bool ClickThrough => _clickThrough;
 
@@ -102,6 +117,13 @@ public partial class MainWindow : Window
         // 布局算完之后把窗口裁成胶囊形状，形状外一律穿透
         Loaded += (_, _) =>
         {
+            if (IsTopMode)
+            {
+                // 贴顶模式平时不该有窗口露在屏幕上：启动时已经挪到屏幕外，这里直接藏掉。
+                // 也绝不把当前（屏幕外/面板）坐标写进配置——那是胶囊的位置。
+                Hide();
+                return;
+            }
             UpdateWindowRegion();
             // 句柄就绪后才知道自己在哪个显示器上，这时把屏幕名补进配置
             SavePlacement();
@@ -132,6 +154,14 @@ public partial class MainWindow : Window
         _tasks.Changed += OnTasksChanged;
 
         Island.Opacity = _settings.Opacity;
+
+        // 贴顶模式启动时窗口会被第一帧的 Show() 摆出来：先挪到屏幕外，Loaded 里再藏（否则顶部会闪一下）
+        if (IsTopMode)
+        {
+            Left = -10000;
+            Top = -10000;
+        }
+
         ApplySettings();
 
         // 位置变化（拖动/复位）时把坐标写回去
@@ -157,8 +187,11 @@ public partial class MainWindow : Window
         ApplyMediaEnabled();
         ApplyFullscreenEnabled();
         ApplyTasks();
+        // 形态切换立即生效（胶囊 ↔ 贴顶），形态没变时这里什么都不做
+        ApplyMode();
         // 模块顺序/开关、账本快照、媒体快照都可能变，统一在这里重排岛上文字
         RefreshIslandText();
+        RefreshTopTiles();
     }
 
     /// <summary>接收地址变了就重开监听；绑定失败时任何一次设置变更都会自动重试。</summary>
@@ -180,6 +213,334 @@ public partial class MainWindow : Window
     {
         UpdateStatusText();
         RefreshIslandText();
+    }
+
+    /// <summary>当前是不是贴顶工作台形态（胶囊则保持全部原有行为）。</summary>
+    private bool IsTopMode => _settings.Mode == AppSettings.ModeTop;
+
+    /// <summary>
+    /// 形态切换立即生效，不用重启：
+    /// 贴顶 → 胶囊：摘下钩子、藏掉面板、把胶囊按存好的像素位置放回来；
+    /// 胶囊 → 贴顶：藏掉胶囊，挂上 WH_MOUSE_LL，等光标碰顶。
+    /// 形态没变时直接返回（否则每改一下透明度都会重摆一次窗口）。
+    /// </summary>
+    private void ApplyMode()
+    {
+        if (_hwnd == IntPtr.Zero || _appliedMode == _settings.Mode)
+        {
+            return;
+        }
+        _appliedMode = _settings.Mode;
+
+        Island.Visibility = IsTopMode ? Visibility.Collapsed : Visibility.Visible;
+
+        if (IsTopMode)
+        {
+            if (_edgeHook is null)
+            {
+                _edgeHook = new TopEdgeHook(_hwnd);
+                _edgeHook.Start();
+            }
+            else
+            {
+                _edgeHook.Start(); // 幂等：从胶囊切回来时重新挂上
+            }
+            UpdateTopThreshold();
+            if (IsVisible && !_topOpen)
+            {
+                Hide();
+            }
+            return;
+        }
+
+        _edgeHook?.Stop();
+        _topOpen = false;
+        TopPanel.Visibility = Visibility.Collapsed;
+        TopPanel.BeginAnimation(HeightProperty, null);
+        if (!IsVisible && !_hiddenByFullscreen)
+        {
+            Show();
+            Island.BeginAnimation(OpacityProperty, null);
+            Island.Opacity = _settings.Opacity;
+            RestorePlacementPixels();
+            UpdateWindowRegion();
+        }
+    }
+
+    /// <summary>
+    /// 贴顶模式的唤醒阈值：4 DIP 按缩放折算成物理像素。
+    /// 钩子里只拿这个最大阈值做粗判（少算几次 DPI），真正的精确判定在 OnTopWake 里按光标所在屏复核。
+    /// </summary>
+    private void UpdateTopThreshold()
+    {
+        if (_edgeHook is null)
+        {
+            return;
+        }
+        double maxScale = 1;
+        foreach (MonitorBox monitor in Placement.CurrentMonitors())
+        {
+            maxScale = Math.Max(maxScale, MonitorScale(monitor));
+        }
+        _edgeHook.ThresholdPx = (int)Math.Ceiling(4 * maxScale);
+    }
+
+    /// <summary>某块显示器的缩放（1.0 = 96 DPI）。取显示器中心点问 Shcore，问不到退回当前窗口的缩放。</summary>
+    private double MonitorScale(MonitorBox monitor)
+    {
+        var center = new NativeMethods.POINT
+        {
+            X = (int)Math.Round(monitor.Bounds.Left + monitor.Bounds.Width / 2),
+            Y = (int)Math.Round(monitor.Bounds.Top + monitor.Bounds.Height / 2)
+        };
+        IntPtr hmon = NativeMethods.MonitorFromPoint(center, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        if (hmon != IntPtr.Zero
+            && NativeMethods.GetDpiForMonitor(hmon, 0, out uint dpiX, out _) == 0
+            && dpiX > 0)
+        {
+            return dpiX / 96.0;
+        }
+        return CurrentScale;
+    }
+
+    /// <summary>光标在哪块显示器上（不在任何一块里时取主屏）。</summary>
+    private static MonitorBox MonitorAt(IReadOnlyList<MonitorBox> monitors, NativeMethods.POINT cursor)
+    {
+        foreach (MonitorBox monitor in monitors)
+        {
+            if (monitor.Bounds.Contains(cursor.X, cursor.Y))
+            {
+                return monitor;
+            }
+        }
+        return Placement.Primary(monitors);
+    }
+
+    /// <summary>钩子投来 WM_TOPWAKE 后的真正处理：复核阈值 → 按光标 X 摆面板 → 下滑展开。</summary>
+    private void OnTopWake()
+    {
+        if (!IsTopMode || _topOpen || _hiddenByFullscreen || _hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+        if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor))
+        {
+            return;
+        }
+
+        IReadOnlyList<MonitorBox> monitors = Placement.CurrentMonitors();
+        MonitorBox monitor = MonitorAt(monitors, cursor);
+        double scale = MonitorScale(monitor);
+
+        // 钩子是按"最大阈值"粗判的，这里按光标所在屏的缩放精确复核一次 4 DIP
+        if (cursor.Y - monitor.Bounds.Top > 4 * scale)
+        {
+            return;
+        }
+
+        ShowTopPanel(monitor, scale, cursor.X);
+    }
+
+    /// <summary>把面板按光标 X 摆好（左右各留 24 DIP），然后从高度 0 滑到内容高度。</summary>
+    private void ShowTopPanel(MonitorBox monitor, double scale, int cursorX)
+    {
+        _topOpen = true;
+        if (_edgeHook is not null)
+        {
+            _edgeHook.Open = true; // 面板开着期间钩子别再投消息
+        }
+        _expanded = true;      // 面板里的文字用展开态（完整行，不用收起态的紧凑文案）
+        RefreshTopTiles();
+        RefreshIslandText();
+
+        TopPanel.Visibility = Visibility.Visible;
+        TopTiles.Measure(new Size(TopPanelWidth - 32, double.PositiveInfinity));
+        _topHeight = Math.Max(120, TopTiles.DesiredSize.Height + 32); // 上下各 16 DIP 内边距
+
+        Width = TopPanelWidth;
+        Height = _topHeight;
+        TopPanel.BeginAnimation(HeightProperty, null);
+        TopPanel.Height = 0;
+
+        double panelPx = TopPanelWidth * scale;
+        double heightPx = _topHeight * scale;
+        double margin = TopPanelEdgeMargin * scale;
+        Rect work = monitor.Work;
+        double maxLeft = Math.Max(work.Left + margin, work.Right - panelPx - margin);
+        double left = Math.Clamp(cursorX - panelPx / 2, work.Left + margin, maxLeft);
+
+        MoveTo(new Rect(left, work.Top, panelPx, heightPx));
+        Show();
+        Island.BeginAnimation(OpacityProperty, null); // 清掉上次淡出动画的残留
+        UpdateWindowRegion();
+
+        var slide = new DoubleAnimation(0, _topHeight, AnimDuration)
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        TopPanel.BeginAnimation(HeightProperty, slide);
+        StartRegionTracking();
+    }
+
+    /// <summary>鼠标离开面板：向上滑回 0 再隐藏窗口；钩子重新允许唤醒。</summary>
+    private void HideTopPanel()
+    {
+        if (!_topOpen)
+        {
+            return;
+        }
+        _topOpen = false;
+        if (_edgeHook is not null)
+        {
+            _edgeHook.Open = false;
+        }
+
+        double from = TopPanel.ActualHeight;
+        if (from <= 0.5 || !IsVisible)
+        {
+            FinishHideTopPanel();
+            return;
+        }
+
+        var slide = new DoubleAnimation(from, 0, AnimDuration)
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+        };
+        slide.Completed += (_, _) => FinishHideTopPanel();
+        TopPanel.BeginAnimation(HeightProperty, slide);
+        StartRegionTracking();
+    }
+
+    private void FinishHideTopPanel()
+    {
+        TopPanel.BeginAnimation(HeightProperty, null);
+        TopPanel.Height = double.NaN;
+        TopPanel.Visibility = Visibility.Collapsed;
+        StopRegionTracking();
+        if (IsTopMode)
+        {
+            Hide();
+        }
+    }
+
+    private void TopPanel_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e) => HideTopPanel();
+
+    /// <summary>
+    /// 贴顶面板的三块卡片：用量 / 任务 / 媒体。数据与胶囊上的文字同源（同一份快照）。
+    /// 两列由 XAML 里 WrapPanel 的 ItemWidth=264 决定（560 - 32 内边距 - 12 间距，除 2）。
+    /// </summary>
+    private void RefreshTopTiles()
+    {
+        if (!IsTopMode || TopTiles is null)
+        {
+            return;
+        }
+
+        string key = string.Join("\u0001", new[]
+        {
+            _usage?.Day ?? "-",
+            (_usage?.Tokens ?? -1).ToString(),
+            (_usage?.Calls ?? -1).ToString(),
+            _usage?.Balance?.ToString("F2") ?? "-",
+            _usage?.FiveHour?.ToString() ?? "-",
+            _usage?.Weekly?.ToString() ?? "-",
+            _usage?.Monthly?.ToString() ?? "-",
+            _mediaInfo.Title ?? "",
+            _mediaInfo.Artist ?? "",
+            _mediaInfo.Status ?? "",
+            TasksConnectedNow ? "1" : "0",
+            string.Join("\u0002", TaskList.Select(r => $"{r.Sid}:{(int)r.State}:{r.Workspace}")),
+        });
+        if (key == _topTilesKey)
+        {
+            return;
+        }
+        _topTilesKey = key;
+
+        TopTiles.Children.Clear();
+        TopTiles.Children.Add(Tile(
+            "今日用量",
+            _usage is null ? "无数据" : UsageLedger.UsageLine(_usage),
+            _usage is null ? "账本里没有今天的数据" : UsageLedger.QuotaLine(_usage)));
+
+        IReadOnlyList<TaskRow> rows = TaskList;
+        var taskLines = new System.Collections.Generic.List<string>();
+        if (!TasksConnectedNow)
+        {
+            taskLines.Add(_tasks?.ShortStatus ?? "未连接");
+        }
+        else if (rows.Count == 0)
+        {
+            taskLines.Add("没有正在运行的会话");
+        }
+        else
+        {
+            foreach (TaskRow row in rows.Take(3))
+            {
+                string workspace = string.IsNullOrWhiteSpace(row.Workspace) ? "未命名工作区" : row.Workspace;
+                taskLines.Add($"{workspace} · {row.StateText}");
+            }
+            if (rows.Count > 3)
+            {
+                taskLines.Add($"还有 {rows.Count - 3} 个");
+            }
+        }
+        string taskMain = !TasksConnectedNow
+            ? "DSH 未运行"
+            : $"{rows.Count(r => r.State != TaskState.Ended)} 个在跑";
+        TopTiles.Children.Add(Tile("任务", taskMain, taskLines.ToArray()));
+
+        TopTiles.Children.Add(Tile(
+            "媒体",
+            _settings.MediaEnabled ? mediaTitleLine() : "媒体信息已关闭",
+            mediaDetailLine()));
+    }
+
+    /// <summary>一块卡片：标题 + 主行 + 若干副行。宽度由 WrapPanel 的 ItemWidth 决定，间距 12 DIP。</summary>
+    private static System.Windows.Controls.Border Tile(string title, string main, params string[] details)
+    {
+        var stack = new System.Windows.Controls.StackPanel();
+        stack.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = title,
+            FontSize = 11,
+            Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+        });
+        stack.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = main,
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xF2, 0xFF, 0xFF, 0xFF)),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 3, 0, 0),
+        });
+        foreach (string detail in details)
+        {
+            if (string.IsNullOrWhiteSpace(detail))
+            {
+                continue;
+            }
+            stack.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = detail,
+                FontSize = 10,
+                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF)),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 2, 0, 0),
+            });
+        }
+
+        return new System.Windows.Controls.Border
+        {
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(10),
+            Margin = new Thickness(0, 0, 12, 12),
+            Child = stack,
+        };
     }
 
     /// <summary>托盘菜单的「开机自启」不归 JSON 管，真源是注册表。</summary>
@@ -220,6 +581,10 @@ public partial class MainWindow : Window
         if (_hiddenByFullscreen)
         {
             _hiddenByFullscreen = false;
+            if (IsTopMode)
+            {
+                return; // 贴顶模式没有常驻窗口，退出全屏也不该自己弹出来
+            }
             Show();
             UpdateWindowRegion();
             FadeIn();
@@ -353,7 +718,9 @@ public partial class MainWindow : Window
 
     private void SavePlacement()
     {
-        if (_restoringPlacement)
+        // 拖动中每帧都会触发 LocationChanged，别每帧写一次文件
+        // 贴顶模式下的窗口坐标是面板位置，不是胶囊位置，绝不能覆盖 LeftPx/TopPx
+        if (_restoringPlacement || _dragging || IsTopMode)
         {
             return;
         }
@@ -388,6 +755,22 @@ public partial class MainWindow : Window
     /// <summary>全屏/锁屏时让位；退出全屏后恢复（淡入 160ms，远小于 1s 要求）。</summary>
     private void OnFullscreenChanged(bool suppress)
     {
+        // 钩子也要知道：全屏/锁屏期间不许把贴顶面板叫出来
+        if (_edgeHook is not null)
+        {
+            _edgeHook.Suppressed = suppress;
+        }
+
+        if (IsTopMode)
+        {
+            // 贴顶模式本来就没有常驻窗口：只需把已经弹出的面板收掉；退出全屏不自动弹（等用户再碰顶边）
+            if (suppress && _topOpen)
+            {
+                HideTopPanel();
+            }
+            return;
+        }
+
         if (suppress)
         {
             if (!IsVisible)
@@ -629,6 +1012,9 @@ public partial class MainWindow : Window
 
         // 句柄就绪、能问出"自己在哪块屏、什么缩放"之后，按设备像素落位
         RestorePlacementPixels();
+
+        // 形态：贴顶模式在这里挂上钩子并把自己藏起来（胶囊模式什么都不做）
+        ApplyMode();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -643,6 +1029,7 @@ public partial class MainWindow : Window
         _media?.Dispose();
         _usageWatcher?.Dispose();
         _tasks?.Dispose();
+        _edgeHook?.Dispose();
         _fullscreen.Dispose();
         base.OnClosed(e);
     }
@@ -652,6 +1039,12 @@ public partial class MainWindow : Window
         if (msg == NativeMethods.WM_HOTKEY && wParam.ToInt32() == HotKeyId)
         {
             SetClickThrough(!_clickThrough);
+            handled = true;
+        }
+        else if (msg == NativeMethods.WM_TOPWAKE)
+        {
+            // 钩子只在"光标碰顶且面板关着"时投这条；真正建面板在这里（UI 线程）做
+            OnTopWake();
             handled = true;
         }
         else if (msg == NativeMethods.WM_DPICHANGED)
@@ -689,8 +1082,11 @@ public partial class MainWindow : Window
 
         if (_hwnd != IntPtr.Zero)
         {
+            // 贴顶面板要能点（点任务行），所以这个形态下不套 WS_EX_TRANSPARENT；
+            // 胶囊形态照旧按设置/热键切换
+            bool effective = on && !IsTopMode;
             int ex = NativeMethods.GetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE);
-            if (on)
+            if (effective)
             {
                 ex |= NativeMethods.WS_EX_TRANSPARENT | NativeMethods.WS_EX_LAYERED;
             }
@@ -741,7 +1137,17 @@ public partial class MainWindow : Window
 
     private void Island_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        // 悬停延迟 0：直接展开，不必等定时器
+        // 拖拽期间鼠标在窗口边缘进出是常态，不许因此展开/收起
+        if (_dragging)
+        {
+            return;
+        }
+        StartHover();
+    }
+
+    /// <summary>悬停规则：0 = 立即展开，否则等 HoverDelayMs。</summary>
+    private void StartHover()
+    {
         if (_settings.HoverDelayMs <= 0)
         {
             Animate(true);
@@ -755,9 +1161,96 @@ public partial class MainWindow : Window
 
     private void Island_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        // 收起永远是立即的，不然鼠标走了它还挂着
+        // 拖拽期间不动；收起永远是立即的，不然鼠标走了它还挂着
+        if (_dragging)
+        {
+            return;
+        }
         _hoverTimer.Stop();
         Animate(false);
+    }
+
+    /// <summary>
+    /// 按住胶囊左键开始拖动：先收起（拖的时候还挂着展开态会很怪）并记住起点。
+    /// 不能用 DragMove()——那个要求窗口被激活，会直接破掉"不抢焦点"。
+    /// </summary>
+    private void Island_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (IsTopMode || _hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _dragging = true;
+        _hoverTimer.Stop();
+        Animate(false);
+
+        if (NativeMethods.GetCursorPos(out NativeMethods.POINT cursor))
+        {
+            _dragCursorStart = cursor;
+            _dragWindowStart = WindowPixelRect();
+            Island.CaptureMouse();
+        }
+        e.Handled = true;
+    }
+
+    /// <summary>拖动中：窗口跟着光标走（SetWindowPos + SWP_NOACTIVATE），松手前不夹、不落盘。</summary>
+    private void Island_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_dragging)
+        {
+            return;
+        }
+        // 鼠标在别处松开时收不到 MouseUp，这里兜一次，避免窗口一直黏在光标上
+        if (e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
+        {
+            EndDrag();
+            return;
+        }
+        if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor))
+        {
+            return;
+        }
+
+        MoveTo(new Rect(
+            _dragWindowStart.Left + (cursor.X - _dragCursorStart.X),
+            _dragWindowStart.Top + (cursor.Y - _dragCursorStart.Y),
+            _dragWindowStart.Width,
+            _dragWindowStart.Height));
+    }
+
+    private void Island_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (!_dragging)
+        {
+            return;
+        }
+        EndDrag();
+        e.Handled = true;
+    }
+
+    /// <summary>松手：夹进当前显示器工作区（不许留半截在屏幕外）→ 写回像素坐标 → 鼠标还在就按悬停规则展开。</summary>
+    private void EndDrag()
+    {
+        _dragging = false;
+        if (Island.IsMouseCaptured)
+        {
+            Island.ReleaseMouseCapture();
+        }
+
+        IReadOnlyList<MonitorBox> monitors = Placement.CurrentMonitors();
+        double scale = CurrentScale;
+        Rect current = WindowPixelRect();
+        MoveTo(Placement.ClampInto(
+            CurrentMonitorBox(monitors).Work,
+            new Point(current.Left, current.Top),
+            WindowPixelSize(scale)));
+        SavePlacement();
+
+        if (Island.IsMouseOver)
+        {
+            StartHover();
+        }
     }
 
     private void Animate(bool expand)
@@ -812,7 +1305,7 @@ public partial class MainWindow : Window
 
     private void OnRendering(object? sender, EventArgs e) => UpdateWindowRegion();
 
-    /// <summary>把窗口裁成与胶囊同形状的圆角矩形（区域外鼠标穿透）。</summary>
+    /// <summary>把窗口裁成当前形态的形状（胶囊圆角矩形 / 贴顶面板），区域外鼠标穿透。</summary>
     private void UpdateWindowRegion()
     {
         if (_hwnd == IntPtr.Zero)
@@ -820,23 +1313,29 @@ public partial class MainWindow : Window
             return;
         }
 
-        double islandW = Island.ActualWidth;
-        double islandH = Island.ActualHeight;
-        if (islandW <= 0 || islandH <= 0)
+        // 两种形态各裁各的：胶囊在窗口里居中，贴顶面板贴左上角
+        System.Windows.Controls.Border shape = IsTopMode ? TopPanel : Island;
+        if (shape.Visibility != Visibility.Visible)
         {
             return;
         }
 
-        // 岛在窗口里居中；窗口与岛的尺寸都是 DIP，SetWindowRgn 要设备像素
-        DpiScale dpi = VisualTreeHelper.GetDpi(this);
-        double left = (ActualWidth - islandW) / 2;
-        double top = (ActualHeight - islandH) / 2;
-        double radius = Island.CornerRadius.TopLeft; // 圆角半径（DIP），区域里要的是直径
+        double shapeW = shape.ActualWidth;
+        double shapeH = shape.ActualHeight;
+        if (shapeW <= 0 || shapeH <= 0)
+        {
+            return;
+        }
 
-        int x1 = (int)Math.Round(left * dpi.DpiScaleX);
-        int y1 = (int)Math.Round(top * dpi.DpiScaleY);
-        int x2 = (int)Math.Round((left + islandW) * dpi.DpiScaleX);
-        int y2 = (int)Math.Round((top + islandH) * dpi.DpiScaleY);
+        // 形状在窗口里的位置用变换算：居中/贴边都由布局决定，这里不重复一遍对齐逻辑
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        Point offset = shape.TransformToAncestor(this).Transform(new Point(0, 0));
+        double radius = shape.CornerRadius.TopLeft; // 圆角半径（DIP），区域里要的是直径
+
+        int x1 = (int)Math.Round(offset.X * dpi.DpiScaleX);
+        int y1 = (int)Math.Round(offset.Y * dpi.DpiScaleY);
+        int x2 = (int)Math.Round((offset.X + shapeW) * dpi.DpiScaleX);
+        int y2 = (int)Math.Round((offset.Y + shapeH) * dpi.DpiScaleY);
         int ellipseW = (int)Math.Round(radius * 2 * dpi.DpiScaleX);
         int ellipseH = (int)Math.Round(radius * 2 * dpi.DpiScaleY);
 
@@ -852,3 +1351,4 @@ public partial class MainWindow : Window
         }
     }
 }
+
