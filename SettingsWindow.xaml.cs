@@ -20,6 +20,9 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         _owner = owner;
 
+        // 高缩放 + 小屏时窗口不许长到工作区外：高度封顶，超出的内容进 ScrollViewer（不裁字、不越界）
+        MaxHeight = Math.Max(240, SystemParameters.WorkArea.Height * 0.9);
+
         AppSettings s = owner.Settings;
         OpacitySlider.Value = s.Opacity;
         ClickThroughCheck.IsChecked = s.ClickThrough;

@@ -120,4 +120,16 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    // ---- 高 DPI（Per-Monitor V2）----
+    // 显示器缩放变化（或窗口移到别的缩放显示器）时发来这条，lParam 指向建议窗口矩形（物理像素）
+    internal const int WM_DPICHANGED = 0x02E0;
+
+    // 窗口所在显示器的 DPI（96 = 100%）。PMv2 下这就是"当前缩放"的唯一来源
+    [DllImport("user32.dll")]
+    internal static extern uint GetDpiForWindow(IntPtr hWnd);
+
+    // 系统/主屏 DPI：句柄还没建时常它做初始换算（老配置的 DIP 坐标迁移用）
+    [DllImport("user32.dll")]
+    internal static extern uint GetDpiForSystem();
 }

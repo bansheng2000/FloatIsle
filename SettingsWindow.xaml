@@ -6,6 +6,8 @@
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize">
     <!-- 普通窗口：有边框、能拖动、正常获得焦点。别加 WS_EX_NOACTIVATE / 别做穿透 -->
+    <!-- 外面套 ScrollViewer：高缩放/小屏时窗口高度封顶（见 SettingsWindow.xaml.cs），内容进滚动条而不是被裁掉 -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="18,14,18,16">
         <TextBlock Text="透明度" FontWeight="SemiBold" />
         <Slider x:Name="OpacitySlider" Minimum="0.2" Maximum="1" TickFrequency="0.05"
@@ -43,4 +45,5 @@
         <Button Content="关闭" HorizontalAlignment="Right" Padding="16,5"
                 Margin="0,14,0,0" IsCancel="True" Click="Close_Click" />
     </StackPanel>
+    </ScrollViewer>
 </Window>

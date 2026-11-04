@@ -129,8 +129,10 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 
 ```json
 {
-  "Left": 1090,
-  "Top": 6,
+  "LeftPx": 1090,
+  "TopPx": 6,
+  "Left": null,
+  "Top": null,
   "Screen": "\\\\.\\DISPLAY1",
   "Opacity": 1,
   "ClickThrough": false,
@@ -142,8 +144,9 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 
 | 字段 | 含义 |
 | --- | --- |
-| `Left` / `Top` | 窗口左上角（DIP）。启动时读回并夹进主屏工作区，换分辨率不会跑到屏幕外 |
-| `Screen` | 上次所在显示器设备名，**只做记录**——多屏还原未实现 |
+| `LeftPx` / `TopPx` | 窗口左上角，**设备像素**（不是 DIP：两块屏缩放不同时，DIP 坐标没法跨屏比较） |
+| `Left` / `Top` | v0.2-D 的旧字段（DIP）。读到老文件时按主屏缩放折成像素迁移一次，随后写回 `null` |
+| `Screen` | 上次所在显示器设备名。还原时先按它找同名屏，找不到才回落主屏顶部居中 |
 | `Opacity` | 岛的不透明度，0.2–1.0 |
 | `ClickThrough` | 整窗穿透的当前状态（热键/托盘切换也会写回，所以"默认穿透"= 最后一次的状态） |
 | `MediaEnabled` | 关掉后不再读 SMTC，岛上第二行显示 `媒体信息已关闭` |
@@ -172,6 +175,46 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | 空闲 CPU（稳定后） | **0 ms / 10 s**、**0 ms / 30 s**（启动后头 10 s 有一次性初始化，实测 31.2 ms，之后归零） |
 | 内存 | uptime 108 s：WSP **23.6 MB**、PrivateBytes 49.79 MB、17 线程、1175 句柄 |
 
+## 多屏与高 DPI（Per-Monitor V2）
+
+- `app.manifest` 声明 `<dpiAwareness>PerMonitorV2</dpiAwareness>`（并留 `<dpiAware>true/pm</dpiAware>` 给不认新键的系统）。不是代码里 `SetProcessDpiAwareness`，也不是老的 system 级 `dpiAware`。
+- **像素量只有一个来源**：`MainWindow.CurrentScale` = `GetDpiForWindow(hwnd) / 96`。需要交给 Win32 的数字（`SetWindowRgn` 的圆角矩形、位置、舞台像素宽高）全部从它派生；字号/边距保持 DIP，由 WPF 自己乘缩放——在 WPF 里再乘一次会变成双倍缩放。
+- 缩放变化（系统改缩放，或岛被挪到缩放不同的屏）会收到 `WM_DPICHANGED`：用 lParam 里的建议矩形 `SetWindowPos`（带 `SWP_NOACTIVATE`），然后在 `DispatcherPriority.Loaded` 上重算区域并落盘位置——**不重启**。动画目标用的是 DIP 常量，天然跟随新缩放。
+- 位置存「设备名 + 设备像素」。`Placement.Resolve()`：先按 `Screen` 找同名显示器，把坐标 `Math.Clamp` 进**那块屏**的工作区；找不到同名屏（被拔掉/换了机器）才回落主屏顶部居中。逻辑是纯函数，可直接自检：
+
+```powershell
+# 不开窗口，跑完退出码 0/1，并把逐条结果写进报告文件
+E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
+```
+
+| 自检项（构造出来的显示器布局） | 结果 |
+| --- | --- |
+| 单屏默认 / 单屏存过位置 | `(1090,6,380x180)` / `(240,420,380x180)` |
+| 双屏左右：落在第二块屏 / 坐标越界夹回 | `(3000,100)` / `99999 → (4100,100)` |
+| 双屏上下：落在下方屏 | `(100,2000)` |
+| 负坐标显示器（第二块在左） | `(-1900,10)` 保持为负，不折回 0 |
+| 保存的显示器已拔掉 | 回落主屏顶部居中 `(1090,6)` |
+| 窗口比工作区还大 | 贴该屏左上角 `(2560,0)` |
+| 150% 缩放派生 | 默认 `(995,9,570x270)`；存过的像素坐标不换算 `(240,420,570x270)` |
+
+10 / 10 全过（`ALL PASS (10)`）。**但这台机器只有一块屏，上表是自检不是真机多屏——「真双屏未实测」。**
+
+### 高 DPI 实测（100% 档）
+
+| 检查 | 读数 |
+| --- | --- |
+| DPI 上下文 | `AreDpiAwarenessContextsEqual(ctx, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)` = **True**，与 PMv1 比较 = False；`GetProcessDpiAwareness` = 2；`GetDpiForWindow` = 96 |
+| 窗口 `RECT` | `1090,6,1470,186`（380×180 舞台，2560×1600 屏） |
+| 区域 `GetWindowRgn` | `type=3 box=110,68,269,111` → 159×43 |
+| `EXSTYLE` | `0x08080088`（`WS_EX_NOACTIVATE` 仍在，没抢焦点） |
+| 形状命中 | 胶囊中心 (1280,96) → 岛；舞台内胶囊下方 (1280,146) → 别的窗口；舞台左上角 (1100,16) → 桌面；胶囊左内缘 (1210,81) → 岛 |
+| 空闲 10 s CPU | **0 ms** |
+| 前台窗口 | 启动前后同一句柄（2429132），未抢焦点 |
+
+**150% 档未实测**：这台机器上「程序化改缩放」三条路都失败——`DISPLAYCONFIG_DEVICE_INFO_SET_DPI_SCALE` 返回 0 但只写注册表（`GetDpiForMonitor` 仍 96、逻辑分辨率不变）；`SetDisplayConfig(..., SDC_APPLY)` 返回 `87 ERROR_INVALID_PARAMETER`；`SPI_SETLOGICALDPIOVERRIDE` 返回成功但读回不变。要补这一档需要**手动切一次系统缩放**（设置 → 显示 → 缩放 → 150%）。
+
+**合成 `WM_DPICHANGED` 只算半个证据**：往窗口发一条 `WM_DPICHANGED`（wParam=144，lParam=建议矩形 `995,9,570×270`）后，窗口确实按建议矩形落位、区域读回 `box=308,170,547,235 → 239×65`（正是 159×43 的 1.5 倍），`LeftPx/TopPx` 也写回 `995,9`——证明处理器会执行、不重启就重算。但这条消息没有真的改显示器 DPI（`GetDpiForWindow` 仍 96），窗口在像素上被拉大而 WPF 的布局 DIP 没跟着变，岛在舞台里偏到右下角；**这是该测法的伪影，不代表真实 150% 布局**。真 150% 下窗口像素尺寸与布局 DIP 由系统同时给出，不会出现这种错位。
+
 ## 各块怎么实现的
 
 1. **透明异形窗口**：`MainWindow.xaml:6-12`（`WindowStyle=None` + `AllowsTransparency` + 透明背景）；岛形是 `Border` 的 `CornerRadius=22`。
@@ -183,6 +226,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 7. **媒体**：`MediaSession.cs`，三个 SMTC 事件 + 合并刷新 + `Dispatcher.BeginInvoke` 切回 UI；`MainWindow.UpdateMedia()` 负责文案（无会话时 `无媒体`）。
 8. **退出**：菜单「退出」→ `Application.Shutdown()` → `OnClosed` 里先 `_tray.Dispose()`（先 `Visible=false` 再释放，避免幽灵图标）再 `_media.Dispose()`。
 9. **设置**：`Settings.cs`（`AppSettings` + `SettingsStore.Load/Save`）、`SettingsWindow.xaml(.cs)`（普通窗口）、`MainWindow.UpdateSettings()`（唯一入口：改内存 → `Normalize()` → `ApplySettings()` → 落盘）。`ApplySettings()` 可重复调用，把透明度/穿透/媒体/全屏四项一起套上去。
+10. **多屏与高 DPI**：`app.manifest`（PerMonitorV2）+ `MainWindow.CurrentScale`（= `GetDpiForWindow / 96`）驱动所有像素换算；`WndProc` 处理 `WM_DPICHANGED`（lParam 建议矩形 + 延迟到 `Loaded` 重算区域）；`Placement.cs` 纯函数定位，`PlacementSelfTest.cs` 10 条用例，入口在 `App.OnStartup` 的 `--selftest`。
 
 ## 已知限制（有意的取舍）
 
@@ -193,8 +237,11 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 - 没有封面、没有进度条、没有任何播放控制（按 v0.2 范围只读）。
 - 输出目录 25 MB，主要来自 24.8 MB 的投影 DLL；要减小体积得裁剪 CsWinRT 投影，v0.2 不做。
 - 托盘图标用框架自带的 `SystemIcons.Application`（通用窗口图标），没有自带图标资源。
-- **岛不能拖动**：位置默认顶部居中，只能靠设置面板的「复位到顶部居中」或手改 `settings.json` 的 `Left/Top` 调整（`LocationChanged` 已经会写回，等以后加了拖动自动生效）。
-- **多屏只记录设备名**：`Screen` 字段会写当前显示器，但还原只按主屏工作区夹取，没有多屏跟随、没有运行中 DPI 变化处理。
+- **岛不能拖动**：位置默认顶部居中，只能靠设置面板的「复位到顶部居中」或手改 `settings.json` 的 `LeftPx/TopPx` 调整（`LocationChanged` 已经会写回，等以后加了拖动自动生效）。
+- **多屏只有自检，没有真机**：本机只有一块 2560×1600 屏，`Placement` 的 10 条用例是构造布局跑出来的纯函数自检；真实插拔第二块屏、跨屏缩放不同的场景**未实测**（设备名 `\\.\DISPLAY2` 这类在真机上是否稳定也给不出结论）。
+- **150% 及以上缩放未实测**：程序化改缩放在本机不可行（三条 API 路径都失败，见上），所以 `WM_DPICHANGED` 的实际重排、150% 下的区域/字号/像素均值、设置面板 150% 是否裁字，**都没有真机读数**。代码按「一个缩放因子派生」写并做了自检，但这不等于实测通过。
+- **DPI 变化时不主动改字号**：字号与边距是 DIP，交给 WPF 按新 DPI 自己缩放（WPF 里再乘一次会变成双倍）。这条依赖 WPF 行为，未实测验证。
+- **设置面板高度封顶到工作区 90%**：内容超出时进滚动条，避免高缩放 + 小屏时窗口长出屏幕（排版在 150% 下未实测）。
 - **开了整窗穿透后悬停不会展开**：`WS_EX_TRANSPARENT` 让鼠标事件根本到不了岛，探测不到 MouseEnter。要展开先按 `Ctrl+Alt+I` 关掉穿透。
 - 设置窗口是**普通窗口、不置顶**：可能被别的窗口盖住，这是有意的（它要保持正常焦点/拖动语义）。
 - 坏 JSON 只会留**一份** `settings.json.bak`（再次损坏会覆盖），不保留历史。改文件时字段名拼错不会报错，那一项直接回默认值。
@@ -206,6 +253,10 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 # 扩展样式：期望 0x08080088，开穿透后 0x080800A8
 # 位置：期望 RECT 在主屏顶部居中，如 1090,6,1470,186（2560x1600 屏）
 Get-Process FloatIsle | Select-Object Id, @{n='PrivateMB';e={[math]::Round($_.PrivateMemorySize64/1MB,2)}}
+# 位置解析自检（10 条用例，不开窗口；从仓库 bin 直接跑可能写不进 %TEMP%，先拷到工作区外再跑）
+& "E:\temp-fi2\e\FloatIsle.exe" --selftest "$env:TEMP\placement-report.txt"; Get-Content "$env:TEMP\placement-report.txt"
+# DPI 感知：应为 PerMonitorV2 —— 取窗口的 DPI 上下文与 (HANDLE)-4 比较（AreDpiAwarenessContextsEqual），
+# 或用 GetProcessDpiAwareness 得到 2（per-monitor）、GetDpiForWindow 得到 96（100% 档）
 # 自启项
 reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v FloatIsle
 # 配置（目录不存在说明还没启动过）

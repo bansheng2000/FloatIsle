@@ -1,6 +1,10 @@
 using System;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
+// UseWindowsForms 的隐式 using 会带来 System.Drawing.Size/Point，钉死用 WPF 的
+using Point = System.Windows.Point;
+using Size = System.Windows.Size;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -57,8 +61,7 @@ public partial class MainWindow : Window
         _settings = loaded.Settings;
         _settingsBackupPath = loaded.BackupPath;
 
-        // 位置（DIP）：存过就用存的，但夹进工作区，换分辨率后也不会跑到看不见的地方
-        RestorePlacement();
+        // 位置：等句柄建好、知道自己在哪个显示器上之后再按设备像素落位（见 RestorePlacementPixels）
 
         // 初始是收起态，状态行先藏起来（否则那行长文字会撑出胶囊）
         StatusText.Visibility = Visibility.Collapsed;
@@ -173,46 +176,114 @@ public partial class MainWindow : Window
         _settingsWindow.Activate();
     }
 
-    /// <summary>复位到顶部居中，并把实际坐标写回配置。</summary>
+    /// <summary>复位到<b>当前显示器</b>顶部居中，并把实际像素坐标写回配置。</summary>
     internal void ResetPlacement()
     {
+        _settings.LeftPx = null;
+        _settings.TopPx = null;
         _settings.Left = null;
         _settings.Top = null;
 
-        Rect wa = SystemParameters.WorkArea;
-        _restoringPlacement = true;
-        Left = wa.Left + (wa.Width - Width) / 2;
-        Top = wa.Top + 6;
-        _restoringPlacement = false;
-
+        IReadOnlyList<MonitorBox> monitors = Placement.CurrentMonitors();
+        double scale = CurrentScale;
+        Rect rect = Placement.DefaultRect(CurrentMonitorBox(monitors), WindowPixelSize(scale), scale);
+        MoveTo(rect);
         SavePlacement();
     }
 
-    /// <summary>设置面板上显示的位置说明（屏幕设备名 + 坐标）。</summary>
+    /// <summary>设置面板上显示的位置说明（屏幕设备名 + 像素坐标 + 当前缩放）。</summary>
     internal string PlacementDescription()
     {
         string screen = CurrentScreenName() is string name && name.Length > 0
             ? System.IO.Path.GetFileName(name)
             : "未识别";
-        return $"屏幕 {screen} · 左上角 {Left:F0},{Top:F0}（舞台 {ActualWidth:F0}×{ActualHeight:F0} DIP）";
+        Rect r = WindowPixelRect();
+        return $"屏幕 {screen} · 左上角 {r.Left:F0},{r.Top:F0} 像素 · 缩放 {CurrentScale * 100:F0}%"
+            + $"（舞台 {ActualWidth:F0}×{ActualHeight:F0} DIP）";
     }
 
-    private void RestorePlacement()
+    /// <summary>当前显示器的缩放（1.0 = 96 DPI）。像素量一律从这里派生，别散落硬编码。</summary>
+    private double CurrentScale
     {
-        Rect wa = SystemParameters.WorkArea;
-        double left = wa.Left + (wa.Width - Width) / 2;
-        double top = wa.Top + 6;
-
-        if (_settings.Left is double savedLeft && _settings.Top is double savedTop)
+        get
         {
-            left = Math.Clamp(savedLeft, wa.Left, Math.Max(wa.Left, wa.Right - Width));
-            top = Math.Clamp(savedTop, wa.Top, Math.Max(wa.Top, wa.Bottom - Height));
+            if (_hwnd != IntPtr.Zero)
+            {
+                uint dpi = NativeMethods.GetDpiForWindow(_hwnd);
+                if (dpi > 0)
+                {
+                    return dpi / 96.0;
+                }
+            }
+            return VisualTreeHelper.GetDpi(this).DpiScaleX;
+        }
+    }
+
+    /// <summary>窗口舞台尺寸，设备像素（WPF 的 Width/Height 是 DIP）。</summary>
+    private Size WindowPixelSize(double scale) =>
+        new(Math.Round(Width * scale), Math.Round(Height * scale));
+
+    /// <summary>窗口在屏幕上的真实矩形（设备像素）。</summary>
+    private Rect WindowPixelRect()
+    {
+        if (_hwnd != IntPtr.Zero && NativeMethods.GetWindowRect(_hwnd, out NativeMethods.RECT r))
+        {
+            return new Rect(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+        }
+        return new Rect(Left, Top, Width, Height);
+    }
+
+    /// <summary>按像素矩形落位。带 SWP_NOACTIVATE——岛任何时候都不许抢焦点。</summary>
+    private void MoveTo(Rect rect)
+    {
+        if (_hwnd == IntPtr.Zero)
+        {
+            return;
         }
 
         _restoringPlacement = true;
-        Left = left;
-        Top = top;
+        NativeMethods.SetWindowPos(_hwnd, IntPtr.Zero,
+            (int)Math.Round(rect.Left), (int)Math.Round(rect.Top), 0, 0,
+            NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
         _restoringPlacement = false;
+    }
+
+    /// <summary>句柄所属的显示器（按设备名匹，找不到用主屏）。</summary>
+    private MonitorBox CurrentMonitorBox(IReadOnlyList<MonitorBox> monitors)
+    {
+        string? name = CurrentScreenName();
+        foreach (MonitorBox m in monitors)
+        {
+            if (string.Equals(m.DeviceName, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return m;
+            }
+        }
+        return Placement.Primary(monitors);
+    }
+
+    /// <summary>启动落位：同名显示器还在就夹进它的工作区，否则主屏顶部居中。</summary>
+    private void RestorePlacementPixels()
+    {
+        IReadOnlyList<MonitorBox> monitors = Placement.CurrentMonitors();
+        double scale = CurrentScale;
+
+        Point? saved = null;
+        if (_settings.LeftPx is double px && _settings.TopPx is double py)
+        {
+            saved = new Point(px, py);
+        }
+        else if (_settings.Left is double oldLeft && _settings.Top is double oldTop)
+        {
+            // v0.2-D 存的是 DIP：按主屏缩放折成像素，迁移完这两条老字段就不再用
+            double systemScale = NativeMethods.GetDpiForSystem() / 96.0;
+            saved = new Point(oldLeft * systemScale, oldTop * systemScale);
+        }
+
+        MoveTo(Placement.Resolve(monitors, _settings.Screen, saved, WindowPixelSize(scale), scale));
+
+        _settings.Left = null;
+        _settings.Top = null;
     }
 
     private void SavePlacement()
@@ -222,13 +293,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        _settings.Left = Left;
-        _settings.Top = Top;
+        Rect r = WindowPixelRect();
+        _settings.LeftPx = r.Left;
+        _settings.TopPx = r.Top;
+        _settings.Left = null; // 老 DIP 字段不再写，留着只会和像素字段打架
+        _settings.Top = null;
         _settings.Screen = CurrentScreenName();
         SettingsStore.Save(_settings);
     }
 
-    /// <summary>当前显示器设备名（\\.\DISPLAY1）。多屏还原未实现，只做记录。</summary>
+    /// <summary>当前显示器设备名（\\.\DISPLAY1）。多屏还原按设备名找屏，找不到回落主屏顶部居中。</summary>
     private string? CurrentScreenName()
     {
         if (_hwnd == IntPtr.Zero)
@@ -343,6 +417,9 @@ public partial class MainWindow : Window
 
         // 配置里的「默认穿透」等句柄就绪后才真正生效
         SetClickThrough(_settings.ClickThrough);
+
+        // 句柄就绪、能问出"自己在哪块屏、什么缩放"之后，按设备像素落位
+        RestorePlacementPixels();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -365,6 +442,27 @@ public partial class MainWindow : Window
         {
             SetClickThrough(!_clickThrough);
             handled = true;
+        }
+        else if (msg == NativeMethods.WM_DPICHANGED)
+        {
+            // 缩放变了（系统改缩放，或岛被挪到另一块缩放不同的屏）：lParam 是系统给的建议矩形（物理像素）
+            NativeMethods.RECT r = Marshal.PtrToStructure<NativeMethods.RECT>(lParam);
+            _restoringPlacement = true;
+            NativeMethods.SetWindowPos(_hwnd, IntPtr.Zero, r.Left, r.Top,
+                r.Right - r.Left, r.Bottom - r.Top,
+                NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+            _restoringPlacement = false;
+
+            // 区域要等布局按新 DPI 落定后再算，否则仍拿旧 ActualWidth 画圆角
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    UpdateWindowRegion();
+                    SavePlacement();
+                }),
+                DispatcherPriority.Loaded);
+
+            // 不标 handled：WPF 自己也要按新 DPI 更新布局
         }
         return IntPtr.Zero;
     }

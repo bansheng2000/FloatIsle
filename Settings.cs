@@ -10,11 +10,15 @@ namespace FloatIsle;
 /// </summary>
 internal sealed class AppSettings
 {
-    /// <summary>窗口左上角（DIP）。null = 用默认的顶部居中。</summary>
+    /// <summary>窗口左上角，<b>设备像素</b>（不是 DIP：多屏缩放不同时 DIP 没法跨屏比较）。null = 默认顶部居中。</summary>
+    public double? LeftPx { get; set; }
+    public double? TopPx { get; set; }
+
+    /// <summary>v0.2-D 及更早存的 DIP 坐标，只在读旧文件时迁移一次；存新位置时清成 null。</summary>
     public double? Left { get; set; }
     public double? Top { get; set; }
 
-    /// <summary>上次所在的显示器设备名（如 \\.\DISPLAY1）。多屏还原未实现，只做记录。</summary>
+    /// <summary>上次所在的显示器设备名（如 \\.\DISPLAY1）。多屏还原按设备名找屏，找不到回落主屏顶部居中。</summary>
     public string? Screen { get; set; }
 
     /// <summary>岛的不透明度，0.2–1.0。</summary>

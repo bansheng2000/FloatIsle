@@ -14,6 +14,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>FloatIsle</RootNamespace>
     <AssemblyName>FloatIsle</AssemblyName>
+    <!-- Per-Monitor V2 声明在这里（<dpiAwareness>PerMonitorV2</dpiAwareness>），不是代码里 SetProcessDpiAwareness -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WFO0003：WinForms 分析器建议改用 ApplicationHighDpiMode，但那是 WinForms 单框架的做法；
+         本程序是 WPF 主窗口 + 只借 WinForms 的托盘，DPI 必须走清单里的 PerMonitorV2，故关掉这条警告 -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <!-- 版本号唯一真相源：安装包的 AppVersion 从这里编译进 exe 的版本资源里读（installer/FloatIsle.iss） -->
     <Version>0.2.0</Version>
     <!-- 默认会把 git 提交号拼进 ProductVersion（0.2.0+<sha>），安装包读到的版本就不干净了，关掉 -->
