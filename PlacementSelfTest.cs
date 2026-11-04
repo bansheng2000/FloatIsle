@@ -55,6 +55,13 @@ internal static class PlacementSelfTest
             new(@"\\\\.\\DISPLAY2", new Rect(-1920, 0, 1920, 1080), new Rect(-1920, 0, 1920, 1040), false),
         };
 
+        // 150% 档按实机读数建模：物理工作区 0,0,2560,1528（任务栏 72 px）。
+        // 实测（DPI=144）：收起 RECT=1148,9,1412,99 → 264×90，区域 box=12,12,251,77 → 239×65。
+        var single150 = new List<MonitorBox>
+        {
+            new(@"\\\\.\\DISPLAY1", new Rect(0, 0, 2560, 1600), new Rect(0, 0, 2560, 1528), true),
+        };
+
         Size collapsed150 = new(Collapsed.Width * 1.5, Collapsed.Height * 1.5); // 264×90
 
         var cases = new List<(string Name, Rect Expected, Rect Actual)>
@@ -85,12 +92,14 @@ internal static class PlacementSelfTest
             ("窗口比工作区大：贴该屏左上角", new Rect(2560, 0, 2000, 1200),
                 Placement.Resolve(sideBySide, @"\\\\.\\DISPLAY2", new Point(3000, 100), new Size(2000, 1200), 1.0)),
 
-            // 150%：176×60 → 264×90，(2560−264)/2 = 1148，顶边 6×1.5 = 9
-            ("150% 缩放：默认位置按缩放派生", new Rect(1148, 9, 264, 90),
-                Placement.Resolve(single, null, null, collapsed150, 1.5)),
+            // 150% 实机读数：176×60 → 264×90，(2560−264)/2 = 1148，顶边 6×1.5 = 9
+            // 与 Windows 实际落位一致（JSON 里就是 LeftPx=1148, TopPx=9，区域 239×65）
+            ("150% 缩放：默认位置（实机 1148,9 / 264×90）", new Rect(1148, 9, 264, 90),
+                Placement.Resolve(single150, null, null, collapsed150, 1.5)),
 
+            // 构造用例：存过的像素坐标在任何缩放下都不换算（不是实机读数，纯逻辑断言）
             ("150% 缩放：存过位置是像素，不做换算", new Rect(240, 420, 264, 90),
-                Placement.Resolve(single, @"\\\\.\\DISPLAY1", new Point(240, 420), collapsed150, 1.5)),
+                Placement.Resolve(single150, @"\\\\.\\DISPLAY1", new Point(240, 420), collapsed150, 1.5)),
 
             // 展开态不参与落位，仅验证夹紧：336×136 居中 → (2560−336)/2 = 1112
             ("展开尺寸传入时夹紧仍正确（仅夹紧，不是落位契约）", new Rect(1112, 6, 336, 136),
