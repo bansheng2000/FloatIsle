@@ -40,11 +40,33 @@ public partial class MainWindow : Window
     private SettingsWindow? _settingsWindow;
     private bool _hiddenByFullscreen;
 
+    // 媒体快照与账本快照都只存最近一份，岛上文字统一由 RefreshIslandText() 拼
+    private MediaInfo _mediaInfo = new(null, null, null);
+    private UsageSnapshot? _usage;
+    private UsageWatcher? _usageWatcher;
+    private bool _expanded;
+
+    /// <summary>
+    /// 任务面板的监听端还没接（插件侧心跳已在推，岛上还缺接收方）。
+    /// 未连接时任务模块整体不显示，按 Chief 的要求不留空壳——接上后把这里换成真状态。
+    /// </summary>
+    private const bool TasksConnected = false;
+
     /// <summary>当前是否整窗点击穿透（托盘菜单要读它）。</summary>
     internal bool ClickThrough => _clickThrough;
 
     /// <summary>设置面板直接改这份对象，改完走 UpdateSettings 生效并落盘。</summary>
     internal AppSettings Settings => _settings;
+
+    /// <summary>设置面板上的账本读数（null = 无数据）。</summary>
+    internal UsageSnapshot? Usage => _usage;
+
+    internal string UsagePath => _usageWatcher?.Path ?? UsageLedger.LedgerPath;
+
+    internal bool UsageWatching => _usageWatcher?.IsWatching == true;
+
+    /// <summary>任务面板是否已接上心跳（现在恒为 false，设置面板据此显示「未连接」）。</summary>
+    internal bool TasksConnectedNow => TasksConnected;
 
     /// <summary>上次读 settings.json 失败时的 .bak 路径（null = 正常读到/首次运行）。</summary>
     internal string? SettingsBackupPath => _settingsBackupPath;
@@ -63,9 +85,9 @@ public partial class MainWindow : Window
 
         // 位置：等句柄建好、知道自己在哪个显示器上之后再按设备像素落位（见 RestorePlacementPixels）
 
-        // 初始是收起态，状态行先藏起来（否则那行长文字会撑出胶囊）
+        // 初始是收起态：副行和状态行先藏起来（否则那几行字会撑出胶囊）
         StatusText.Visibility = Visibility.Collapsed;
-        MediaSubtitle.Visibility = Visibility.Collapsed;
+        Line2.Visibility = Visibility.Collapsed;
 
         // 布局算完之后把窗口裁成胶囊形状，形状外一律穿透
         Loaded += (_, _) =>
@@ -89,6 +111,11 @@ public partial class MainWindow : Window
         // 全屏让位：全屏/锁屏时淡出隐藏，退出后淡入恢复（设置里可以关）
         _fullscreen = new FullscreenWatcher();
         _fullscreen.SuppressChanged += OnFullscreenChanged;
+
+        // 账本：启动同步读一次拿初值，之后只靠 watcher 事件（+2 秒去抖），绝不轮询
+        _usage = UsageLedger.Read(UsageLedger.LedgerPath);
+        _usageWatcher = new UsageWatcher();
+        _usageWatcher.Changed += OnUsageChanged;
 
         Island.Opacity = _settings.Opacity;
         ApplySettings();
@@ -115,6 +142,8 @@ public partial class MainWindow : Window
         ApplyClickThrough();
         ApplyMediaEnabled();
         ApplyFullscreenEnabled();
+        // 模块顺序/开关、账本快照、媒体快照都可能变，统一在这里重排岛上文字
+        RefreshIslandText();
     }
 
     /// <summary>托盘菜单的「开机自启」不归 JSON 管，真源是注册表。</summary>
@@ -370,29 +399,93 @@ public partial class MainWindow : Window
         Island.BeginAnimation(OpacityProperty, fade);
     }
 
-    /// <summary>把一次媒体快照写到岛上；没有会话时显示「无媒体」，不保留上一首。</summary>
+    /// <summary>媒体快照只更新数据，岛上文字统一由 RefreshIslandText() 拼（模块可能被关掉/挪位）。</summary>
     private void UpdateMedia(MediaInfo info)
     {
-        // 面板里关掉 SMTC 后，别让残留事件再把标题写回来
+        _mediaInfo = info;
+        RefreshIslandText();
+    }
+
+    /// <summary>账本去抖后重读一次；读不出来就是「无数据」，不保留旧数字。</summary>
+    private void OnUsageChanged()
+    {
+        _usage = UsageLedger.Read(UsageLedger.LedgerPath);
+        RefreshIslandText();
+    }
+
+    /// <summary>
+    /// 按「岛内容」里的顺序和开关排岛上两行。
+    /// 收起时主行用设置里选定那一项；展开时主行是顺序里第一个可见模块，其余合并进副行。
+    /// </summary>
+    private void RefreshIslandText()
+    {
+        var ids = _settings.Modules.Where(m => m.Visible).Select(m => m.Id).ToList();
+        // 任务面板没有接收端时整体隐藏，不留「任务 0 项」这种空壳
+        ids.RemoveAll(id => id == IslandModuleIds.Tasks && !TasksConnected);
+
+        if (ids.Count == 0)
+        {
+            Line1.Text = "FloatIsle";
+            Line2.Text = "";
+            Line2.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        string primary = _expanded
+            ? ids[0]
+            : ids.Contains(_settings.CollapsedLine) ? _settings.CollapsedLine : ids[0];
+
+        Line1.Text = ModuleTitle(primary);
+
+        string mediaDetail = mediaDetailLine();
+        var parts = new System.Collections.Generic.List<string>(3);
+        if (mediaDetail.Length > 0 && (primary == IslandModuleIds.Media || ids.Contains(IslandModuleIds.Media)))
+        {
+            parts.Add(mediaDetail);
+        }
+        foreach (string id in ids)
+        {
+            if (id == primary || id == IslandModuleIds.Media)
+            {
+                continue;
+            }
+            parts.Add(ModuleTitle(id));
+        }
+
+        Line2.Text = string.Join(" · ", parts);
+        // 没有副行内容时别留一条空行（比如只开今日用量、又没在放歌）
+        Line2.Visibility = _expanded && parts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>主行文字：媒体只放标题，详情留给副行，免得 280px 里全被省略号吃掉。</summary>
+    private string ModuleTitle(string id) => id switch
+    {
+        IslandModuleIds.Usage => UsageLedger.UsageLine(_usage),
+        IslandModuleIds.Quota => UsageLedger.QuotaLine(_usage),
+        IslandModuleIds.Media => mediaTitleLine(),
+        IslandModuleIds.Tasks => TasksConnected ? "任务：已连接" : "",
+        _ => ""
+    };
+
+    private string mediaTitleLine()
+    {
         if (!_settings.MediaEnabled)
         {
-            MediaTitle.Text = "FloatIsle";
-            MediaSubtitle.Text = "媒体信息已关闭";
-            return;
+            return "媒体信息已关闭";
         }
+        return string.IsNullOrWhiteSpace(_mediaInfo.Title) ? "无媒体" : _mediaInfo.Title!;
+    }
 
-        bool hasMedia = !string.IsNullOrWhiteSpace(info.Title);
-        MediaTitle.Text = hasMedia ? info.Title! : "FloatIsle";
-
-        if (!hasMedia)
+    /// <summary>媒体副信息（艺人 · 播放状态）。关闭 SMTC 或没有会话时为空。</summary>
+    private string mediaDetailLine()
+    {
+        if (!_settings.MediaEnabled || string.IsNullOrWhiteSpace(_mediaInfo.Title))
         {
-            MediaSubtitle.Text = "无媒体";
-            return;
+            return "";
         }
-
-        string detail = string.Join(" · ", new[] { info.Artist, info.Status }
+        string detail = string.Join(" · ", new[] { _mediaInfo.Artist, _mediaInfo.Status }
             .Where(s => !string.IsNullOrWhiteSpace(s)));
-        MediaSubtitle.Text = string.IsNullOrEmpty(detail) ? "播放中" : detail;
+        return detail;
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -432,6 +525,7 @@ public partial class MainWindow : Window
         // 托盘图标必须先撤掉，否则进程退出后托盘里留幽灵图标
         _tray?.Dispose();
         _media?.Dispose();
+        _usageWatcher?.Dispose();
         _fullscreen.Dispose();
         base.OnClosed(e);
     }
@@ -550,9 +644,11 @@ public partial class MainWindow : Window
     {
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
-        // 收起时只留标题，避免一行状态文字撑出胶囊
+        // 收起时只留主行：副行和状态行都会把 160×44 撑爆
+        _expanded = expand;
         StatusText.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
-        MediaSubtitle.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
+        Line2.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
+        RefreshIslandText(); // 主行内容随展开/收起切换（收起用设置里选的那一项）
 
         var widthAnim = new DoubleAnimation(expand ? ExpandedWidth : CollapsedWidth, AnimDuration)
         {

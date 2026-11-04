@@ -26,11 +26,13 @@
             <!-- 注意：窗口被 SetWindowRgn 裁成胶囊形状后，任何画在胶囊外的效果（阴影/外发光）都会被切掉，
                  所以这里不再用 DropShadowEffect。取舍写在 README「已知限制」。 -->
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="280">
-                <TextBlock x:Name="MediaTitle" Text="FloatIsle"
+                <!-- 两行内容由 RefreshIslandText() 按「岛内容」模块顺序填：主行 14pt、副行 11pt。
+                     收起时只留主行，展开时两行 + 状态行（见 Animate）。 -->
+                <TextBlock x:Name="Line1" Text="FloatIsle"
                            Foreground="#F2FFFFFF" FontSize="14" FontWeight="SemiBold"
                            TextTrimming="CharacterEllipsis" TextAlignment="Center"
                            HorizontalAlignment="Center" />
-                <TextBlock x:Name="MediaSubtitle" Text="无媒体"
+                <TextBlock x:Name="Line2" Text=""
                            Margin="0,3,0,0"
                            Foreground="#CCFFFFFF" FontSize="11"
                            TextTrimming="CharacterEllipsis" TextAlignment="Center"

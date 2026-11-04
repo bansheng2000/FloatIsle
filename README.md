@@ -50,9 +50,32 @@ dotnet run -c Release
 | 点在胶囊上 | 岛收下点击，但**不激活窗口、不抢焦点** |
 | 点在胶囊外（哪怕在 380×180 舞台内） | 直接落到下面那个窗口 |
 | 右键托盘图标 | 隐藏岛 / 点击穿透 / 开机自启 / 设置… / 退出 |
-| 托盘菜单「设置…」 | 打开普通设置窗口（有边框、能拖、正常获得焦点）：透明度、默认穿透、媒体开关、全屏让位开关、悬停延迟、位置复位 |
+| 托盘菜单「设置…」 | 打开普通设置窗口（有边框、能拖、正常获得焦点）：透明度、默认穿透、媒体开关、全屏让位开关、悬停延迟、位置复位、岛内容顺序 |
 
-展开态三行：媒体标题 → `艺人 · 播放状态`（无会话时是 `无媒体`）→ 穿透状态。
+展开态三行：按「岛内容」顺序排（默认 今日用量 → 余额/额度 → 媒体 → 任务），第三行永远是穿透状态。收起态主行由设置里的「收起时主行显示」决定（媒体标题 / 今日用量 / 任务数）。
+
+## 用量与额度（只读账本）
+
+- 数据源：`%USERPROFILE%\.dsh\storages\cost-meter\ledger.json`（成本插件写的账本）。FloatIsle **只读**，从不写它，也不写同目录任何文件。
+- 只挑三个位置：`days[本地今天]`（token 与调用次数）、`balanceRef`（余额与币种）、`planSamples.go`（5 小时 / 周 / 月已用百分比，取最后一条）。用 `Utf8JsonReader` 流式跳过其余键，不把 2 MB 的账本建成对象树。
+- **订阅计划下 `cost`/`apiCost` 恒为 0**，所以默认显示 token 量与调用次数（`今日 2.6 亿 token / 1045 次`），不显示 `¥0.00`；只有当某天 `cost > 0` 时才追加金额并标币种。
+- 刷新是**事件驱动**：`FileSystemWatcher` 盯账本目录（`Changed`/`Created`/`Renamed`），加 2 秒去抖（账本是批量写的，一次刷新会连写多次）。**没有任何定时器去读文件**，所以空闲 CPU 仍是 0。
+- 账本缺失、被删、JSON 写坏、键缺失：一律显示 `今日用量：无数据` / `余额：无数据`，进程不崩、不弹窗、不写回。
+- 设置面板「岛内容」：每个模块一行 = 显示开关 + 上移 + 下移（不做拖拽，这个尺寸里拖拽是给自己找 bug）。顺序和开关直接落 `settings.json` 的 `Modules` 数组。
+- 「联动」栏是给任务面板占位用的：地址默认 `127.0.0.1:47821`，可改；状态目前恒为「未连接」，任务模块因此整体隐藏，不留空壳。
+
+实测（`FLOATISLE_LEDGER` 指向副本，避免碰真账本）：
+
+| 检查 | 读数 |
+| --- | --- |
+| 账本真值 → 界面 | `input=8435998 output=801903 cacheRead=243072384 cacheWrite=0 calls=1020` → `今日 2.5 亿 token / 1028 次`；`balanceRef.total=37.55767144 CNY` → `余额 ¥37.56`；`fiveHour/weekly/monthly.p` = 3 / 25 / 61 → `5时 3% · 周 25% · 月 61%` |
+| 改副本 → 界面变化 | 副本 `calls+700`、`cacheRead+50M` 后 **2074 ms** 界面刷新（2 秒去抖 + 一次读取） |
+| 空闲 CPU（watcher 待机） | **0 ms / 30 s**，uptime 173 s |
+| 账本写坏（36 字节残缺 JSON） | 岛展开显示 `今日用量：无数据`、`余额：无数据`，进程存活 |
+| 账本被删 | 同上，进程存活，文件未被重建 |
+| 面板换序 + 关一个模块 | `上移` 把「媒体信息」从第 3 位挪到第 2 位、取消「余额/额度」→ 落盘 `usage, media, quota, tasks` 且 `quota.Visible=false` |
+| 杀进程重启 | 顺序与开关仍在；收起态主行跟着可见模块走（媒体关掉后回落到今日用量） |
+
 
 ## 媒体信息（只读）
 
@@ -138,7 +161,15 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
   "ClickThrough": false,
   "MediaEnabled": true,
   "FullscreenSuppress": true,
-  "HoverDelayMs": 0
+  "HoverDelayMs": 0,
+  "Modules": [
+    { "Id": "usage", "Visible": true },
+    { "Id": "quota", "Visible": true },
+    { "Id": "media", "Visible": true },
+    { "Id": "tasks", "Visible": true }
+  ],
+  "CollapsedLine": "media",
+  "TasksEndpoint": "127.0.0.1:47821"
 }
 ```
 
@@ -152,6 +183,9 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | `MediaEnabled` | 关掉后不再读 SMTC，岛上第二行显示 `媒体信息已关闭` |
 | `FullscreenSuppress` | 关掉后全屏/锁屏也不再自动隐藏 |
 | `HoverDelayMs` | 鼠标停在岛上的展开延迟（0 = 立即，上限 2000）。收起不受延迟影响 |
+| `Modules` | 岛内容的顺序与显示开关，元素 `{Id, Visible}`；已知 id 只有 `usage`/`quota`/`media`/`tasks`，未知 id 会被丢掉、缺的按默认顺序补回来 |
+| `CollapsedLine` | 收起态主行显示哪一项：`media`（默认）/ `usage` / `tasks` |
+| `TasksEndpoint` | 任务面板心跳地址，默认 `127.0.0.1:47821`（空或超过 64 字回默认） |
 
 - **开机自启不在这里**：真源是注册表，设置面板只读回显，避免两份真相。
 - 位置目前只能靠面板里的「复位到顶部居中」或手改 JSON：**拖岛本身还没做**（岛是悬停展开的被动显示）。
@@ -227,6 +261,7 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 8. **退出**：菜单「退出」→ `Application.Shutdown()` → `OnClosed` 里先 `_tray.Dispose()`（先 `Visible=false` 再释放，避免幽灵图标）再 `_media.Dispose()`。
 9. **设置**：`Settings.cs`（`AppSettings` + `SettingsStore.Load/Save`）、`SettingsWindow.xaml(.cs)`（普通窗口）、`MainWindow.UpdateSettings()`（唯一入口：改内存 → `Normalize()` → `ApplySettings()` → 落盘）。`ApplySettings()` 可重复调用，把透明度/穿透/媒体/全屏四项一起套上去。
 10. **多屏与高 DPI**：`app.manifest`（PerMonitorV2）+ `MainWindow.CurrentScale`（= `GetDpiForWindow / 96`）驱动所有像素换算；`WndProc` 处理 `WM_DPICHANGED`（lParam 建议矩形 + 延迟到 `Loaded` 重算区域）；`Placement.cs` 纯函数定位，`PlacementSelfTest.cs` 10 条用例，入口在 `App.OnStartup` 的 `--selftest`。
+11. **用量/额度**：`UsageLedger.cs`（`Utf8JsonReader` 流式挑 `days`/`balanceRef`/`planSamples.go`，失败返回 null）、`UsageWatcher.cs`（`FileSystemWatcher` + 2 秒去抖，事件切回 UI 线程）、`MainWindow.RefreshIslandText()`（按 `Modules` 顺序拼三行文案）、`SettingsWindow` 的「岛内容」行（开关 + 上移/下移）。
 
 ## 已知限制（有意的取舍）
 
@@ -235,6 +270,9 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 - **只认系统 SMTC**：不注册 SMTC 会话的播放器（部分小众播放器、网页里被浏览器接管的情况）读不到；浏览器类通常以浏览器进程为一个会话。
 - **全屏判定踩到一个反常现象**：本机实测，同一份 exe 放在仓库 `bin\Release\...` 目录里，`SHQueryUserNotificationState` 会稳定返回 `QUNS_BUSY(2)`；把同样的文件拷到 `C:\...\Temp` 或 `E:\temp-fi` 下运行则返回正常的 `5`。现象与工作区目录上的**低完整性标签**相关（见上面「打包」一节；机制未验明，只确认相关性），不是程序逻辑问题。因此 2/3 两条路径不单看返回值，还要复核前台窗口是否盖满显示器——这样即使返回值异常也不会误隐藏。**独占全屏 D3D 游戏（state 3）本机没有可测环境，未实测。**
 - 没有封面、没有进度条、没有任何播放控制（按 v0.2 范围只读）。
+- **用量面板的数字来自成本插件的私有账本格式**：`days`/`balanceRef`/`planSamples.go` 任一改结构，这里就显示「无数据」（不会崩）。订阅计划下 `cost` 恒为 0，所以默认不显示金额。
+- **任务面板还没接心跳**：设置里的「联动」地址和「最后心跳」只是占位，`TasksConnected` 目前是常量 `false`，任务模块因此整体隐藏。等通知插件那边的心跳协议定下来再接。
+- 账本刷新是 2 秒去抖的事件驱动，**刻意不用定时器轮询**：轮询会把空闲 CPU 从 0 抬起来，这条是硬约束。
 - 输出目录 25 MB，主要来自 24.8 MB 的投影 DLL；要减小体积得裁剪 CsWinRT 投影，v0.2 不做。
 - 托盘图标用框架自带的 `SystemIcons.Application`（通用窗口图标），没有自带图标资源。
 - **岛不能拖动**：位置默认顶部居中，只能靠设置面板的「复位到顶部居中」或手改 `settings.json` 的 `LeftPx/TopPx` 调整（`LocationChanged` 已经会写回，等以后加了拖动自动生效）。

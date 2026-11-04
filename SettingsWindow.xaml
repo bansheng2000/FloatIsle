@@ -22,9 +22,31 @@
                   Margin="0,0,0,8"
                   Checked="Media_Changed" Unchecked="Media_Changed" />
         <CheckBox x:Name="FullscreenCheck" Content="全屏 / 锁屏时自动让位（隐藏岛）"
-                  Margin="0,0,0,12"
+                  Margin="0,0,0,10"
                   Checked="Fullscreen_Changed" Unchecked="Fullscreen_Changed" />
 
+        <Separator Margin="0,2,0,10" />
+        <TextBlock Text="岛内容（从上到下就是显示顺序）" FontWeight="SemiBold" />
+        <TextBlock x:Name="LedgerText" FontSize="12" Foreground="#666666"
+                   TextWrapping="Wrap" Margin="0,4,0,4" />
+        <!-- 行由 SettingsWindow.xaml.cs 的 RebuildModuleRows() 生成：显示开关 + 上移 + 下移（不做拖拽） -->
+        <StackPanel x:Name="ModulesPanel" Margin="0,2,0,4" />
+        <StackPanel Orientation="Horizontal" Margin="0,6,0,12">
+            <TextBlock Text="收起时主行显示：" FontSize="12" VerticalAlignment="Center" />
+            <ComboBox x:Name="CollapsedLineCombo" Width="150" Margin="8,0,0,0"
+                      SelectionChanged="CollapsedLine_Changed" />
+        </StackPanel>
+
+        <Separator Margin="0,2,0,10" />
+        <TextBlock Text="联动" FontWeight="SemiBold" />
+        <TextBlock Text="任务面板地址（插件那边也要改成一样）" FontSize="12" Foreground="#666666"
+                   TextWrapping="Wrap" Margin="0,2,0,4" />
+        <TextBox x:Name="TasksEndpointBox" Width="230" HorizontalAlignment="Left"
+                 TextChanged="TasksEndpoint_Changed" />
+        <TextBlock x:Name="TasksStatusText" FontSize="12" Foreground="#666666"
+                   TextWrapping="Wrap" Margin="0,4,0,12" />
+
+        <Separator Margin="0,2,0,10" />
         <TextBlock Text="悬停展开延迟" FontWeight="SemiBold" />
         <Slider x:Name="HoverSlider" Minimum="0" Maximum="1000" TickFrequency="50"
                 IsSnapToTickEnabled="True" Margin="0,4,0,2"
