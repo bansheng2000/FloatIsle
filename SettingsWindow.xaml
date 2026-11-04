@@ -39,12 +39,16 @@
 
         <Separator Margin="0,2,0,10" />
         <TextBlock Text="联动" FontWeight="SemiBold" />
-        <TextBlock Text="任务面板地址（插件那边也要改成一样）" FontSize="12" Foreground="#666666"
+        <TextBlock Text="接收地址（只绑 127.0.0.1；插件那边也要改成一样）" FontSize="12" Foreground="#666666"
                    TextWrapping="Wrap" Margin="0,2,0,4" />
         <TextBox x:Name="TasksEndpointBox" Width="230" HorizontalAlignment="Left"
                  TextChanged="TasksEndpoint_Changed" />
+        <TextBlock Text="跳转地址（点任务行时 POST /jump 到这里；插件那边两个端口都要一致）"
+                   FontSize="12" Foreground="#666666" TextWrapping="Wrap" Margin="0,8,0,4" />
+        <TextBox x:Name="TasksJumpBox" Width="230" HorizontalAlignment="Left"
+                 TextChanged="TasksJump_Changed" />
         <TextBlock x:Name="TasksStatusText" FontSize="12" Foreground="#666666"
-                   TextWrapping="Wrap" Margin="0,4,0,12" />
+                   TextWrapping="Wrap" Margin="0,6,0,12" />
 
         <Separator Margin="0,2,0,10" />
         <TextBlock Text="悬停展开延迟" FontWeight="SemiBold" />

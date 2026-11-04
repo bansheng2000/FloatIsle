@@ -173,7 +173,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
     { "Id": "tasks", "Visible": true }
   ],
   "CollapsedLine": "media",
-  "TasksEndpoint": "127.0.0.1:47821"
+  "TasksEndpoint": "127.0.0.1:47821",
+  "TasksJumpEndpoint": "127.0.0.1:47822"
 }
 ```
 
@@ -190,6 +191,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | `Modules` | 岛内容的顺序与显示开关，元素 `{Id, Visible}`；已知 id 只有 `usage`/`quota`/`media`/`tasks`，未知 id 会被丢掉、缺的按默认顺序补回来 |
 | `CollapsedLine` | 收起态主行显示哪一项：`media`（默认）/ `usage` / `tasks` |
 | `TasksEndpoint` | 任务面板心跳地址，默认 `127.0.0.1:47821`（空或超过 64 字回默认） |
+| `TasksJumpEndpoint` | 点任务行时把 `sid` POST 过去的跳转地址，默认 `127.0.0.1:47822`（同上限） |
 
 - **开机自启不在这里**：真源是注册表，设置面板只读回显，避免两份真相。
 - 位置目前只能靠面板里的「复位到顶部居中」或手改 JSON：**拖岛本身还没做**（岛是悬停展开的被动显示）。
@@ -212,6 +214,47 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | 全屏让位开关 | `false`：全屏窗口盖上来岛仍可见；`true`：全屏后 **20 ms** 隐藏，退出后 **21 ms** 恢复 |
 | 空闲 CPU（稳定后） | **0 ms / 10 s**、**0 ms / 30 s**（启动后头 10 s 有一次性初始化，实测 31.2 ms，之后归零） |
 | 内存 | uptime 108 s：WSP **23.6 MB**、PrivateBytes 49.79 MB、17 线程、1175 句柄 |
+
+## 任务面板（心跳接收端，`127.0.0.1:47821` / 跳转 `47822`）
+
+通知插件每 10 秒推一次心跳，本程序只做**接收端**（不改插件代码）。用 `TcpListener` 手写最小 HTTP/1.1 而不是 `HttpListener`：后者在 Windows 上要预先注册 URL ACL（`netsh http add urlacl`），普通用户跑不起来。
+
+```
+POST http://127.0.0.1:47821/event      # 只接受这一个路径、只接受 POST
+Content-Type: application/json
+{"type":"turn/start","sid":"<sessionId>","ws":"<工作区目录名>","turn":12,"ts":"..."}
+{"type":"turn/end","sid":"...","ws":"...","turn":12,"reason":"completed","ts":"..."}
+{"type":"question","sid":"...","ws":"...","brief":"<第一行问题>"}
+{"type":"approval","sid":"...","ws":"...","tool":"bash"}
+{"type":"heartbeat","sid":null,"ws":null,"running":["sid1","sid2"],"ts":"..."}
+```
+
+| 行为 | 规则 |
+| --- | --- |
+| 心跳权威 | `running` 里的 sid 才是「在跑」；不在里面且不是「刚结束」的行**立刻移除**（会话重启/崩溃不会留僵尸任务） |
+| `turn/end` | 状态「刚结束」保留 **5 秒**再消失（实测 5 秒整） |
+| 心跳超时 | **25 秒**没有心跳/事件 → 任务区整体隐藏、状态行显示 `DSH 未运行`（实测面板消失 26 秒，含 0.5 秒轮询粒度） |
+| 展开态 | 最多 4 行 `工作区名 · 状态`，多的收成「还有 N 个」；状态为 在跑 / 等你回答 / 等你批准 / 刚结束 |
+| 收起态 | 主行选 `tasks` 时显示 `N 个在跑`（`3 个在跑` 实测 55 px、`12 个在跑` 62 px，可用 158 DIP） |
+| 点一行 | `POST http://127.0.0.1:47822/jump`，body `{"sid":"..."}`，1 秒超时、失败静默（插件没起也不弹窗） |
+| 异常输入 | 坏 JSON 400、超 64 KB 413、`GET /event` 405、其它路径 404 |
+| 端口被占 | 不崩不弹框：岛上状态行 `任务面板不可用`，设置「联动」栏写 `47823 被占用，任务面板不可用` |
+| 任务区空 | 连上但没有任何会话时整块隐藏（不显示「任务 0 个在跑」） |
+
+实测（100% 档，`E:\temp-fi-g` 副本；发送端是我自己的 `curl`/临时接收器，**真通知插件未联调**）：
+
+| 检查 | 读数 |
+| --- | --- |
+| `POST turn/start` | 200；展开态 `任务 1 个在跑` + `demo · 在跑` |
+| `question`（UTF-8 body） | 200；`demo · 等你回答` |
+| `heartbeat running=[]` | 200；行消失，任务区整块隐藏 |
+| 停发心跳 | **26 秒**后任务区消失，状态行 `DSH 未运行 · 点击穿透：关 · Ctrl+Alt+I 开启`（202 px < 280） |
+| 点任务行 | 47822 临时接收器收到 `POST /jump` + `{"sid":"jump2"}`，回 200 |
+| 端口占用（47823 起占位监听） | 岛上 `任务面板不可用 · 点击穿透：关 · Ctrl+Alt+I 开启`；设置栏 `状态：47823 被占用，任务面板不可用` |
+| 空闲 CPU（无任务） | **0 个时间片 / 30 s** |
+| 空闲 CPU（3 个任务 + 3 次心跳） | 5 个时间片 / 30 s（78.1 ms，含心跳触发的状态刷新） |
+
+注意：`curl -d '{"brief":"中文"}'` 在 Git Bash / cmd 里会把中文按 GBK 送出去，本程序按 UTF-8 解析就回 400——这不是接口 bug，真实发送端（.NET/Node）都是 UTF-8。要手测中文请把 body 写进 UTF-8 文件再 `curl --data-binary @file`。
 
 ## 多屏与高 DPI（Per-Monitor V2）
 
@@ -266,6 +309,7 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 9. **设置**：`Settings.cs`（`AppSettings` + `SettingsStore.Load/Save`）、`SettingsWindow.xaml(.cs)`（普通窗口）、`MainWindow.UpdateSettings()`（唯一入口：改内存 → `Normalize()` → `ApplySettings()` → 落盘）。`ApplySettings()` 可重复调用，把透明度/穿透/媒体/全屏四项一起套上去。
 10. **多屏与高 DPI**：`app.manifest`（PerMonitorV2）+ `MainWindow.CurrentScale`（= `GetDpiForWindow / 96`）驱动所有像素换算；`WndProc` 处理 `WM_DPICHANGED`（lParam 建议矩形 + 延迟到 `Loaded` 重算区域）；`Placement.cs` 纯函数定位，`PlacementSelfTest.cs` 10 条用例，入口在 `App.OnStartup` 的 `--selftest`。
 11. **用量/额度**：`UsageLedger.cs`（`Utf8JsonReader` 流式挑 `days`/`balanceRef`/`planSamples.go`，失败返回 null）、`UsageWatcher.cs`（`FileSystemWatcher` + 2 秒去抖，事件切回 UI 线程）、`MainWindow.RefreshIslandText()`（按 `Modules` 顺序拼三行文案）、`SettingsWindow` 的「岛内容」行（开关 + 上移/下移）。
+12. **任务面板**：`TasksHub.cs`（`TcpListener` 只绑回环 + 手写最小 HTTP/1.1 + 会话表 + 两个一次性 `DispatcherTimer`：25 秒心跳超时、5 秒「刚结束」淡出），`MainWindow.RefreshTaskRows()`（最多 4 行 + 签名缓存，内容没变不重建控件）、`TaskRow_Click` → `TasksHub.Jump`。
 
 ## 已知限制（有意的取舍）
 
@@ -277,7 +321,10 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 - **用量面板的数字来自成本插件的私有账本格式**：`days`/`balanceRef`/`planSamples.go` 任一改结构，这里就显示「无数据」（不会崩）。订阅计划下 `cost` 恒为 0，所以默认不显示金额。
 - **收起态只显示 token 总数**（`2.8 亿 tok`），调用次数与额度百分比只在展开态：完整行 184 DIP 放不进收起态 158 DIP 的可用宽度，硬塞就是省略号。要看全就悬停展开。
 - **媒体标题仍可能被省略号截断**：标题长度不可预知，超出收起态 158 DIP / 展开态 280 DIP 就 `CharacterEllipsis`。这是标题本身长，不是排版问题（用量/额度文案已改成放得下的形式）。
-- **任务面板还没接心跳**：设置里的「联动」地址和「最后心跳」只是占位，`TasksConnected` 目前是常量 `false`，任务模块因此整体隐藏。等通知插件那边的心跳协议定下来再接。
+- **任务面板只验过自造事件，没和真通知插件联调**：`turn/start`/`question`/`heartbeat`/`jump` 都是我用 `curl` 和临时接收器推的；插件那边的报文是否逐字段一致、10 秒心跳在真实负载下是否稳定，**未实测**。
+- **任务面板的跳转依赖插件监听 47822**：插件没起时点任务行静默失败（1 秒超时），岛上不会有任何提示——这是按「跳转只是锦上添花」定的。
+- **任务行文字同样可能被省略号截断**：工作区目录名很长时按 280 DIP 宽度 `CharacterEllipsis`；状态部分是固定短词，不会截。
+- **任务面板在 150% 下没有真机读数**：本轮系统缩放已切回 100%，任务行与 `N 个在跑` 的宽度只在 100% 下扫过墨迹（DIP 与缩放无关，预期同值，但这是推理不是读数）。
 - 账本刷新是 2 秒去抖的事件驱动，**刻意不用定时器轮询**：轮询会把空闲 CPU 从 0 抬起来，这条是硬约束。
 - 输出目录 25 MB，主要来自 24.8 MB 的投影 DLL；要减小体积得裁剪 CsWinRT 投影，v0.2 不做。
 - 托盘图标用框架自带的 `SystemIcons.Application`（通用窗口图标），没有自带图标资源。
@@ -315,6 +362,13 @@ $w = $root.FindFirst('Children', (New-Object System.Windows.Automation.PropertyC
     [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $pid_)))
 $w.FindAll('Descendants', [System.Windows.Automation.Condition]::TrueCondition) |
     ForEach-Object { $_.Current.ControlType.ProgrammaticName + '=' + $_.Current.Name }
+# 任务面板接收端：端口在听（期望 127.0.0.1:47821 LISTENING）
+netstat -ano | Select-String '127.0.0.1:47821.*LISTENING'
+# 推一条事件，期望回 200，展开岛后出现「demo · 在跑」
+curl.exe -s -w "%{http_code}`n" -X POST http://127.0.0.1:47821/event -d '{\"type\":\"turn/start\",\"sid\":\"t1\",\"ws\":\"demo\",\"turn\":1}'
+# 非法输入四种，期望 400（坏 JSON）/ 413（>64 KB）/ 405（GET /event）/ 404（POST /other）
+curl.exe -s -o NUL -w "%{http_code}`n" -X POST http://127.0.0.1:47821/event -d 'not-json'
+curl.exe -s -o NUL -w "%{http_code}`n" http://127.0.0.1:47821/event
 ```
 
 形状命中的实测坐标（窗口 RECT=1090,6,1470,186；收起态胶囊占 x1200-1360 / y74-118，展开态占 x1120-1440 / y36-156）：

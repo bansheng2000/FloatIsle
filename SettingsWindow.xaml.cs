@@ -24,6 +24,9 @@ public partial class SettingsWindow : Window
     // 重建模块行时会新建 CheckBox 并赋初值，同样要挡住它们的 Checked 事件
     private bool _rebuildingRows;
 
+    // 联动状态每秒刷新一次；只在窗口开着时跑（Closed 里停掉）
+    private readonly System.Windows.Threading.DispatcherTimer _statusTimer;
+
     internal SettingsWindow(MainWindow owner)
     {
         InitializeComponent();
@@ -50,6 +53,7 @@ public partial class SettingsWindow : Window
             _ => 0
         };
         TasksEndpointBox.Text = s.TasksEndpoint;
+        TasksJumpBox.Text = s.TasksJumpEndpoint;
 
         // 控件都建好、值也灌完了，从这里开始用户操作才算数
         _loading = false;
@@ -61,6 +65,13 @@ public partial class SettingsWindow : Window
         AutoStartText.Text = AutoStart.IsEnabled()
             ? "开机自启：已开启（真源是注册表，在托盘菜单里切换）"
             : "开机自启：未开启（在托盘菜单里切换）";
+
+        // 联动状态每秒刷新（「最后心跳 N 秒前」会变）；只在设置窗口开着时跑，关掉就停，
+        // 岛上的空闲 CPU 不受影响（面板不是常驻窗口）
+        _statusTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _statusTimer.Tick += (_, _) => UpdateTasksStatus();
+        _statusTimer.Start();
+        Closed += (_, _) => _statusTimer.Stop();
 
         if (owner.SettingsBackupPath is string backup)
         {
@@ -251,31 +262,45 @@ public partial class SettingsWindow : Window
         _owner.UpdateSettings(s => s.CollapsedLine = id);
     }
 
-    // ---------- 联动（任务面板占位） ----------
+    // ---------- 联动（任务面板接收端） ----------
 
-    private void TasksEndpoint_Changed(object sender, TextChangedEventArgs e)
+    private void TasksEndpoint_Changed(object sender, TextChangedEventArgs e) => ApplyEndpoint(TasksEndpointBox.Text, jump: false);
+
+    private void TasksJump_Changed(object sender, TextChangedEventArgs e) => ApplyEndpoint(TasksJumpBox.Text, jump: true);
+
+    private void ApplyEndpoint(string text, bool jump)
     {
         if (_loading)
         {
             return;
         }
 
-        string text = TasksEndpointBox.Text.Trim();
         // 清空/超长算「正在输入」，先不落盘：Normalize 会把空串改成默认值，边打边写会打架
-        if (text.Length is 0 or > 64 || text == _owner.Settings.TasksEndpoint)
+        text = text.Trim();
+        if (text.Length is 0 or > 64 || text == (jump ? _owner.Settings.TasksJumpEndpoint : _owner.Settings.TasksEndpoint))
         {
             return;
         }
 
-        _owner.UpdateSettings(s => s.TasksEndpoint = text);
+        _owner.UpdateSettings(s =>
+        {
+            if (jump)
+            {
+                s.TasksJumpEndpoint = text;
+            }
+            else
+            {
+                s.TasksEndpoint = text;
+            }
+        });
         UpdateTasksStatus();
     }
 
     private void UpdateTasksStatus()
     {
-        TasksStatusText.Text = _owner.TasksConnectedNow
-            ? $"状态：已连接（地址 {_owner.Settings.TasksEndpoint}）"
-            : $"状态：未连接 · 监听端还没接上，任务面板暂时不显示（地址 {_owner.Settings.TasksEndpoint}）";
+        // 收到的状态文案和岛上用的是同一份（TasksHub.StatusText），不在这里另写一套判定
+        TasksStatusText.Text = $"状态：{_owner.TasksStatus}\n"
+                               + $"接收 {_owner.Settings.TasksEndpoint} · 跳转 {_owner.Settings.TasksJumpEndpoint}";
     }
 
     private void UpdateLedgerText()

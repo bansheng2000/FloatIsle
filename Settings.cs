@@ -75,10 +75,15 @@ internal sealed class AppSettings
     /// <summary>收起时主行显示哪一项：media / usage / tasks。</summary>
     public string CollapsedLine { get; set; } = IslandModuleIds.Media;
 
-    /// <summary>任务面板的插件侧地址（占位：监听端还没接）。</summary>
+    /// <summary>任务面板接收端地址（只绑 127.0.0.1，这里其实只用端口）。</summary>
     public string TasksEndpoint { get; set; } = DefaultTasksEndpoint;
 
+    /// <summary>点任务行时 POST /jump 的插件侧地址（同样只用端口）。</summary>
+    public string TasksJumpEndpoint { get; set; } = DefaultTasksJumpEndpoint;
+
     internal const string DefaultTasksEndpoint = "127.0.0.1:47821";
+
+    internal const string DefaultTasksJumpEndpoint = "127.0.0.1:47822";
 
     /// <summary>手改文件是信任边界：越界值夹回来，别让 NaN/负数传到动画里。</summary>
     internal void Normalize()
@@ -97,10 +102,12 @@ internal sealed class AppSettings
             CollapsedLine = IslandModuleIds.Media;
         }
 
-        TasksEndpoint = string.IsNullOrWhiteSpace(TasksEndpoint) || TasksEndpoint.Length > 64
-            ? DefaultTasksEndpoint
-            : TasksEndpoint.Trim();
+        TasksEndpoint = NormalizeEndpoint(TasksEndpoint, DefaultTasksEndpoint);
+        TasksJumpEndpoint = NormalizeEndpoint(TasksJumpEndpoint, DefaultTasksJumpEndpoint);
     }
+
+    private static string NormalizeEndpoint(string? value, string fallback) =>
+        string.IsNullOrWhiteSpace(value) || value.Length > 64 ? fallback : value.Trim();
 
     /// <summary>
     /// 手写的文件可能缺模块、多模块、重复：只认已知 id，去掉重复，缺的按默认顺序补在后面。

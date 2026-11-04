@@ -22,6 +22,12 @@ public partial class MainWindow : Window
     private const double ExpandedWidth = 320;
     private const double ExpandedHeight = 120;
 
+    /// <summary>展开态有任务行时的高（最多 4 行 + 一行「还有 N 个」，120 DIP 装不下）。</summary>
+    private const double ExpandedTasksHeight = 150;
+
+    /// <summary>任务区最多显示几行，多出来的收成「还有 N 个」。</summary>
+    private const int MaxTaskRows = 4;
+
     private static readonly Duration AnimDuration = new(TimeSpan.FromMilliseconds(180));
 
     private readonly AppSettings _settings;
@@ -46,11 +52,10 @@ public partial class MainWindow : Window
     private UsageWatcher? _usageWatcher;
     private bool _expanded;
 
-    /// <summary>
-    /// 任务面板的监听端还没接（插件侧心跳已在推，岛上还缺接收方）。
-    /// 未连接时任务模块整体不显示，按 Chief 的要求不留空壳——接上后把这里换成真状态。
-    /// </summary>
-    private const bool TasksConnected = false;
+    // 任务面板接收端：心跳/事件驱动，空闲时没有轮询（只有一个一次性超时定时器）
+    private TasksHub? _tasks;
+    private string? _tasksEndpointApplied;
+    private string? _taskRowsKey;
 
     /// <summary>当前是否整窗点击穿透（托盘菜单要读它）。</summary>
     internal bool ClickThrough => _clickThrough;
@@ -65,8 +70,13 @@ public partial class MainWindow : Window
 
     internal bool UsageWatching => _usageWatcher?.IsWatching == true;
 
-    /// <summary>任务面板是否已接上心跳（现在恒为 false，设置面板据此显示「未连接」）。</summary>
-    internal bool TasksConnectedNow => TasksConnected;
+    /// <summary>任务面板是否连着（25 秒内有心跳/事件；设置面板的状态栏读的也是这个判定）。</summary>
+    internal bool TasksConnectedNow => _tasks?.Connected == true;
+
+    internal IReadOnlyList<TaskRow> TaskList => _tasks?.Snapshot() ?? Array.Empty<TaskRow>();
+
+    /// <summary>人话状态（绑定失败/超时/已连接），设置面板与岛共用同一份文案。</summary>
+    internal string TasksStatus => _tasks?.StatusText ?? "未启动";
 
     /// <summary>上次读 settings.json 失败时的 .bak 路径（null = 正常读到/首次运行）。</summary>
     internal string? SettingsBackupPath => _settingsBackupPath;
@@ -117,6 +127,10 @@ public partial class MainWindow : Window
         _usageWatcher = new UsageWatcher();
         _usageWatcher.Changed += OnUsageChanged;
 
+        // 任务面板：只绑 127.0.0.1，接收插件推的事件与 10 秒心跳
+        _tasks = new TasksHub(Dispatcher);
+        _tasks.Changed += OnTasksChanged;
+
         Island.Opacity = _settings.Opacity;
         ApplySettings();
 
@@ -142,7 +156,29 @@ public partial class MainWindow : Window
         ApplyClickThrough();
         ApplyMediaEnabled();
         ApplyFullscreenEnabled();
+        ApplyTasks();
         // 模块顺序/开关、账本快照、媒体快照都可能变，统一在这里重排岛上文字
+        RefreshIslandText();
+    }
+
+    /// <summary>接收地址变了就重开监听；绑定失败时任何一次设置变更都会自动重试。</summary>
+    private void ApplyTasks()
+    {
+        if (_tasks is null)
+        {
+            return;
+        }
+        if (_tasksEndpointApplied == _settings.TasksEndpoint && _tasks.IsListening)
+        {
+            return;
+        }
+        _tasksEndpointApplied = _settings.TasksEndpoint;
+        _tasks.Start(_settings.TasksEndpoint);
+    }
+
+    private void OnTasksChanged()
+    {
+        UpdateStatusText();
         RefreshIslandText();
     }
 
@@ -420,8 +456,11 @@ public partial class MainWindow : Window
     private void RefreshIslandText()
     {
         var ids = _settings.Modules.Where(m => m.Visible).Select(m => m.Id).ToList();
-        // 任务面板没有接收端时整体隐藏，不留「任务 0 项」这种空壳
-        ids.RemoveAll(id => id == IslandModuleIds.Tasks && !TasksConnected);
+        // 任务面板没连上（25 秒内无心跳）或一个会话都没有时整体隐藏，不留「任务 0 个在跑」这种空壳
+        bool hasTasks = TasksConnectedNow && _tasks!.Snapshot().Count > 0;
+        ids.RemoveAll(id => id == IslandModuleIds.Tasks && !hasTasks);
+
+        RefreshTaskRows();
 
         if (ids.Count == 0)
         {
@@ -458,6 +497,77 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// 展开态任务区：最多 4 行「工作区 · 状态」，多的收成「还有 N 个」。
+    /// 收起态不建行（160 DIP 装不下），主行只显示「N 个在跑」。
+    /// </summary>
+    private void RefreshTaskRows()
+    {
+        IReadOnlyList<TaskRow> rows = _expanded && TasksConnectedNow ? TaskList : Array.Empty<TaskRow>();
+        // 心跳每 10 秒来一次、内容多数没变：签名相同就别重建控件（重建一轮 WPF 布局要几十毫秒）
+        string key = string.Join("\u0001", rows.Select(r => $"{r.Sid}\u0002{(int)r.State}\u0002{r.Workspace}\u0002{r.Detail}"));
+        if (key == _taskRowsKey)
+        {
+            return;
+        }
+        _taskRowsKey = key;
+
+        TaskRowsPanel.Children.Clear();
+        if (rows.Count == 0)
+        {
+            TaskRowsPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        foreach (TaskRow row in rows.Take(MaxTaskRows))
+        {
+            string workspace = string.IsNullOrWhiteSpace(row.Workspace) ? "未命名工作区" : row.Workspace;
+            var text = new System.Windows.Controls.TextBlock
+            {
+                Text = $"{workspace} · {row.StateText}",
+                Foreground = row.State == TaskState.Ended
+                    ? new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF))
+                    : new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+                FontSize = 10,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                Margin = new Thickness(0, 1, 0, 0),
+                Tag = row.Sid,
+            };
+            if (row.State != TaskState.Ended)
+            {
+                text.Cursor = System.Windows.Input.Cursors.Hand;
+                text.MouseLeftButtonUp += TaskRow_Click;
+            }
+            TaskRowsPanel.Children.Add(text);
+        }
+
+        if (rows.Count > MaxTaskRows)
+        {
+            TaskRowsPanel.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = $"还有 {rows.Count - MaxTaskRows} 个",
+                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                FontSize = 10,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                Margin = new Thickness(0, 1, 0, 0),
+            });
+        }
+
+        TaskRowsPanel.Visibility = TaskRowsPanel.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>点一行任务 = 让插件把该会话窗口拉到前台。插件不在就静默失败（TasksHub.Jump）。</summary>
+    private void TaskRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string sid })
+        {
+            TasksHub.Jump(_settings.TasksJumpEndpoint, sid);
+        }
+    }
+
+    /// <summary>
     /// 主行文字：媒体只放标题，详情留给副行，免得 280px 里全被省略号吃掉。
     /// compact = 收起态（可用宽度 158 DIP），用量/额度改用更短的一行；媒体标题无法预知长度，
     /// 仍交给 CharacterEllipsis（那是标题本身长，不是文案设计问题）。
@@ -467,7 +577,9 @@ public partial class MainWindow : Window
         IslandModuleIds.Usage => compact ? UsageLedger.UsageCompactLine(_usage) : UsageLedger.UsageLine(_usage),
         IslandModuleIds.Quota => UsageLedger.QuotaLine(_usage),
         IslandModuleIds.Media => mediaTitleLine(),
-        IslandModuleIds.Tasks => TasksConnected ? "任务：已连接" : "",
+        IslandModuleIds.Tasks => compact
+            ? $"{TaskList.Count(r => r.State != TaskState.Ended)} 个在跑"
+            : $"任务 {TaskList.Count(r => r.State != TaskState.Ended)} 个在跑",
         _ => ""
     };
 
@@ -530,6 +642,7 @@ public partial class MainWindow : Window
         _tray?.Dispose();
         _media?.Dispose();
         _usageWatcher?.Dispose();
+        _tasks?.Dispose();
         _fullscreen.Dispose();
         base.OnClosed(e);
     }
@@ -618,9 +731,12 @@ public partial class MainWindow : Window
     private void UpdateStatusText()
     {
         string hotKey = _hotKeyOk ? "Ctrl+Alt+I" : "热键注册失败";
-        StatusText.Text = _clickThrough
+        string click = _clickThrough
             ? $"点击穿透：开 · {hotKey} 关闭"
             : $"点击穿透：关 · {hotKey} 开启";
+        // 任务面板没连上时，状态行顶一句短的（设置里「联动」栏仍用完整文案，判定是同一个 Connected）
+        string tasks = TasksConnectedNow ? "" : _tasks?.ShortStatus ?? "";
+        StatusText.Text = tasks.Length > 0 ? $"{tasks} · {click}" : click;
     }
 
     private void Island_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
@@ -654,6 +770,11 @@ public partial class MainWindow : Window
         Line2.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
         RefreshIslandText(); // 主行内容随展开/收起切换（收起用设置里选的那一项）
 
+        // 展开态有任务行时要更高，否则第 3、4 行会被胶囊裁掉
+        double expandedHeight = TaskRowsPanel.Visibility == Visibility.Visible
+            ? ExpandedTasksHeight
+            : ExpandedHeight;
+
         var widthAnim = new DoubleAnimation(expand ? ExpandedWidth : CollapsedWidth, AnimDuration)
         {
             EasingFunction = ease
@@ -662,7 +783,7 @@ public partial class MainWindow : Window
 
         Island.BeginAnimation(WidthProperty, widthAnim);
         Island.BeginAnimation(HeightProperty,
-            new DoubleAnimation(expand ? ExpandedHeight : CollapsedHeight, AnimDuration) { EasingFunction = ease });
+            new DoubleAnimation(expand ? expandedHeight : CollapsedHeight, AnimDuration) { EasingFunction = ease });
 
         StartRegionTracking();
     }

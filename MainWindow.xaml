@@ -37,6 +37,8 @@
                            Foreground="#CCFFFFFF" FontSize="11"
                            TextTrimming="CharacterEllipsis" TextAlignment="Center"
                            HorizontalAlignment="Center" />
+                <!-- 任务区：展开时最多 4 行「工作区 · 状态」，行由 RefreshTaskRows() 生成（点一行 = 跳回会话） -->
+                <StackPanel x:Name="TaskRowsPanel" Margin="0,4,0,0" Visibility="Collapsed" />
                 <TextBlock x:Name="StatusText" Text="…"
                            Margin="0,4,0,0"
                            Foreground="#88FFFFFF" FontSize="10"
