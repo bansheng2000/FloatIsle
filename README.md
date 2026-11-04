@@ -60,6 +60,36 @@ dotnet run -c Release
 - 没有会话、读取过程中会话被关、拿不到 SMTC：一律显示 `无媒体`，不弹窗、不抛异常。
 - 实测空闲 CPU（10 秒采样，`TotalProcessorTime` 差值）：播放中 0 ms、暂停 0 ms、无会话 0 ms。
 
+## 打包（Inno Setup，不签名）
+
+发布形态是 **self-contained**（用户零前置，不需要装 .NET 运行时）：
+
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained true -o publish
+```
+
+实测体积对照：
+
+| 形态 | 字节 | 文件数 | 前置 |
+| --- | --- | --- | --- |
+| self-contained | 204,886,383（195.39 MB） | 475 | 无 |
+| framework-dependent | 25,621,558（24.43 MB） | 7 | 需 .NET 10 桌面运行时 |
+
+`PublishTrimmed=true` **不可用**：WPF/WinForms 直接报 `NETSDK1175`（SDK 明确不支持裁剪这些框架），与 WinRT 投影无关。
+
+编译安装包（Inno Setup 6.7.3）：
+
+```powershell
+& "C:\Users\12576\AppData\Local\Programs\Inno Setup 6\ISCC.exe" "installer\FloatIsle.iss"
+# 产物 installer\Output\FloatIsle-Setup.exe（57,137,488 字节 / 54.49 MB，lzma2/max）
+```
+
+安装包行为：装到 `%LOCALAPPDATA%\Programs\FloatIsle`（per-user，不需要管理员、不写 HKLM）、开始菜单快捷方式、自带卸载器 `unins000.exe`、可选「开机自启」（只写 HKCU 的 Run 值）。卸载会删 Run 值、删安装目录、删快捷方式。
+
+**没有代码签名**：首次运行 Windows 会拦，需要点「更多信息」→「仍要运行」（安装界面第一页也写了这句）。
+
+> 本机环境的一个坑（**不是安装包的问题**）：本会话的工作区目录 `E:\文档\deepseek-harness\FloatIsle` 被 DSH 沙箱加过 ACL，`icacls` 能看到 `Everyone:(CI)(DENY)(DC)`、一个 `S-1-4-...` 沙箱 SID 的 `(OI)(CI)(W,D,DC)`、用户只剩 `(WO,S)`，以及 `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`。**从该目录里启动的 exe 会拿到受限上下文**：往 `%TEMP%` 写文件被拒、Inno Setup 建不了自己的临时目录后静默退出、`SHQueryUserNotificationState` 恒返回 2。同一份 exe（md5 相同、无 ADS）拷到工作区外（`E:\文档\big-cjk\`、`C:\...\Temp`）一切正常：安装 2 秒完成、状态读数正常。装完之后从 `%LOCALAPPDATA%\Programs\FloatIsle` 启动（在工作区外），不受影响。
+
 ## 全屏让位
 
 玩游戏或看全屏视频时岛自动淡出隐藏，退出全屏后淡入恢复。
@@ -100,7 +130,7 @@ dotnet run -c Release
 - **系统阴影被裁掉了**。`SetWindowRgn` 按形状裁剪窗口，画在胶囊外的 `DropShadowEffect` 会被切出硬边，所以去掉阴影，只留 1px 描边。
 - 区域边缘没有抗锯齿，圆角是硬边（1px 级锯齿）。
 - **只认系统 SMTC**：不注册 SMTC 会话的播放器（部分小众播放器、网页里被浏览器接管的情况）读不到；浏览器类通常以浏览器进程为一个会话。
-- **全屏判定踩到一个反常现象（需进一步验证）**：本机实测，同一份 exe 放在仓库 `bin\Release\...` 目录里，`SHQueryUserNotificationState` 会稳定返回 `QUNS_BUSY(2)`；把同样的文件拷到 `C:\...\Temp` 或 `E:\temp-fi` 下运行则返回正常的 `5`。原因未查明（不是窗口、托盘、钩子、SMTC、CWD 引起，且同一时刻其他进程读到的都是 5）。因此 2/3 两条路径不单看返回值，还要复核前台窗口是否盖满显示器——这样即使返回值异常也不会误隐藏。**独占全屏 D3D 游戏（state 3）本机没有可测环境，未实测。**
+- **全屏判定踩到一个反常现象**：本机实测，同一份 exe 放在仓库 `bin\Release\...` 目录里，`SHQueryUserNotificationState` 会稳定返回 `QUNS_BUSY(2)`；把同样的文件拷到 `C:\...\Temp` 或 `E:\temp-fi` 下运行则返回正常的 `5`。原因已定位到工作区目录的沙箱 ACL（见上面「打包」一节），不是程序问题。因此 2/3 两条路径不单看返回值，还要复核前台窗口是否盖满显示器——这样即使返回值异常也不会误隐藏。**独占全屏 D3D 游戏（state 3）本机没有可测环境，未实测。**
 - 没有封面、没有进度条、没有任何播放控制（按 v0.2 范围只读）。
 - 输出目录 25 MB，主要来自 24.8 MB 的投影 DLL；要减小体积得裁剪 CsWinRT 投影，v0.2 不做。
 - 托盘图标用框架自带的 `SystemIcons.Application`（通用窗口图标），没有自带图标资源。
