@@ -435,7 +435,7 @@ public partial class MainWindow : Window
             ? ids[0]
             : ids.Contains(_settings.CollapsedLine) ? _settings.CollapsedLine : ids[0];
 
-        Line1.Text = ModuleTitle(primary);
+        Line1.Text = ModuleTitle(primary, compact: !_expanded);
 
         string mediaDetail = mediaDetailLine();
         var parts = new System.Collections.Generic.List<string>(3);
@@ -457,10 +457,14 @@ public partial class MainWindow : Window
         Line2.Visibility = _expanded && parts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    /// <summary>主行文字：媒体只放标题，详情留给副行，免得 280px 里全被省略号吃掉。</summary>
-    private string ModuleTitle(string id) => id switch
+    /// <summary>
+    /// 主行文字：媒体只放标题，详情留给副行，免得 280px 里全被省略号吃掉。
+    /// compact = 收起态（可用宽度 158 DIP），用量/额度改用更短的一行；媒体标题无法预知长度，
+    /// 仍交给 CharacterEllipsis（那是标题本身长，不是文案设计问题）。
+    /// </summary>
+    private string ModuleTitle(string id, bool compact = false) => id switch
     {
-        IslandModuleIds.Usage => UsageLedger.UsageLine(_usage),
+        IslandModuleIds.Usage => compact ? UsageLedger.UsageCompactLine(_usage) : UsageLedger.UsageLine(_usage),
         IslandModuleIds.Quota => UsageLedger.QuotaLine(_usage),
         IslandModuleIds.Media => mediaTitleLine(),
         IslandModuleIds.Tasks => TasksConnected ? "任务：已连接" : "",

@@ -132,6 +132,22 @@ internal static class UsageLedger
         return string.Join(" · ", parts);
     }
 
+    /// <summary>
+    /// 收起态胶囊只有 160 DIP（边框内 158），完整 UsageLine 实测 184 DIP，会被
+    /// CharacterEllipsis 截掉「次」和数字（用户全屏截图里就是「今日 2.7 亿 token / 1…」），
+    /// 所以收起态只留最关键的一个数；调用次数留给展开态（可用宽度 280 DIP）。
+    /// 不加「今日」前缀，是给数字涨到「18.4 亿」时留余量（带前缀实测 66 DIP，不带 48 DIP）。
+    /// </summary>
+    internal static string UsageCompactLine(UsageSnapshot? s)
+    {
+        if (s is null)
+        {
+            return "今日用量：无数据";
+        }
+        string line = $"{FormatTokens(s.Tokens)} tok";
+        return s.HasCost ? line + $" · {Symbol(s.Currency)}{s.Cost:F2}" : line;
+    }
+
     // ---------- 解析 ----------
 
     private struct Acc
