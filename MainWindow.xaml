@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="FloatIsle"
-        Width="380" Height="180"
+        Width="176" Height="60"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -28,7 +28,14 @@
                 MouseLeftButtonUp="Island_MouseLeftButtonUp">
             <!-- 注意：窗口被 SetWindowRgn 裁成胶囊形状后，任何画在胶囊外的效果（阴影/外发光）都会被切掉，
                  所以这里不再用 DropShadowEffect。取舍写在 README「已知限制」。 -->
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="280">
+            <Grid>
+                <!-- 呼吸辉光描边：铺满胶囊内侧（Margin 1 让开 1px 边框），只做装饰、不吃鼠标事件。
+                     整圈同步明暗（动画只改这一条的 Opacity），粗细是 DIP、随 WPF 缩放。 -->
+                <Rectangle x:Name="Glow"
+                           Margin="1" RadiusX="21" RadiusY="21"
+                           Stroke="#4DA3FF" StrokeThickness="3" Opacity="0"
+                           Visibility="Collapsed" IsHitTestVisible="False" />
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="280">
                 <!-- 两行内容由 RefreshIslandText() 按「岛内容」模块顺序填：主行 14pt、副行 11pt。
                      收起时只留主行，展开时两行 + 状态行（见 Animate）。 -->
                 <TextBlock x:Name="Line1" Text="FloatIsle"
@@ -42,11 +49,19 @@
                            HorizontalAlignment="Center" />
                 <!-- 任务区：展开时最多 4 行「工作区 · 状态」，行由 RefreshTaskRows() 生成（点一行 = 跳回会话） -->
                 <StackPanel x:Name="TaskRowsPanel" Margin="0,4,0,0" Visibility="Collapsed" />
+                <!-- 插件给的失败原因（心跳 notice），null 时下次心跳自动清掉 -->
+                <TextBlock x:Name="NoticeText" Text=""
+                           Margin="0,4,0,0"
+                           Foreground="#E8B24D" FontSize="10"
+                           TextWrapping="Wrap" MaxWidth="280"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           Visibility="Collapsed" />
                 <TextBlock x:Name="StatusText" Text="…"
                            Margin="0,4,0,0"
                            Foreground="#88FFFFFF" FontSize="10"
                            HorizontalAlignment="Center" TextAlignment="Center" />
-            </StackPanel>
+                </StackPanel>
+            </Grid>
         </Border>
 
         <!-- 贴顶工作台（Mode=top）：平时整窗隐藏，光标碰到屏幕顶边才从顶上滑下来。
@@ -66,3 +81,5 @@
         </Border>
     </Grid>
 </Window>
+
+

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -76,9 +76,13 @@ internal sealed class TasksHub : IDisposable
     private string _endpoint = "";
     private string _listenStatus = "未启动";
     private bool _disposed;
+    private string? _notice;
 
     /// <summary>会话表/连接状态变化（UI 线程回调，MainWindow 据此重排岛上文字）。</summary>
     internal event Action? Changed;
+
+    /// <summary>有会话以 <c>completed</c> 结束（完成闪烁/常亮用）。</summary>
+    internal event Action? Completed;
 
     internal TasksHub(Dispatcher dispatcher)
     {
@@ -110,6 +114,19 @@ internal sealed class TasksHub : IDisposable
     internal bool IsListening => _listening;
 
     internal DateTime? LastSeenAt => _sawAnyEvent ? _lastSeen : null;
+
+    /// <summary>插件给的用户可见提示（心跳 notice），null 表示没有；点击成功后会清掉。</summary>
+    internal string? Notice => _notice;
+
+    internal void ClearNotice()
+    {
+        if (_notice is null)
+        {
+            return;
+        }
+        _notice = null;
+        RaiseChanged();
+    }
 
     internal string Endpoint => _endpoint;
 
@@ -459,7 +476,9 @@ internal sealed class TasksHub : IDisposable
         string Reason,
         string Brief,
         string Tool,
-        string[]? Running);
+        string[]? Running,
+        Dictionary<string, string>? Names,
+        string? Notice);
 
     private static TaskEvent? Parse(byte[] body)
     {
@@ -486,7 +505,7 @@ internal sealed class TasksHub : IDisposable
                         }
                     }
                 }
-                return new TaskEvent("heartbeat", "", "", "", "", "", running.ToArray());
+                return new TaskEvent("heartbeat", "", "", "", "", "", running.ToArray(), ParseNames(root), NullableStr(root, "notice"));
             }
 
             if (type is not ("turn/start" or "turn/end" or "question" or "approval"))
@@ -501,7 +520,7 @@ internal sealed class TasksHub : IDisposable
             }
 
             return new TaskEvent(type, id, Str(root, "ws"), Str(root, "reason"),
-                Str(root, "brief"), Str(root, "tool"), null);
+                Str(root, "brief"), Str(root, "tool"), null, null, null);
         }
         catch (Exception)
         {
@@ -515,6 +534,33 @@ internal sealed class TasksHub : IDisposable
             ? value.GetString() ?? ""
             : "";
 
+    /// <summary>可能为 null 的字符串字段（心跳的 <c>notice</c>）：null/缺省/非字符串都当没有。</summary>
+    private static string? NullableStr(JsonElement element, string name) =>
+        element.TryGetProperty(name, out JsonElement value) &&
+        value.ValueKind == JsonValueKind.String &&
+        value.GetString() is { Length: > 0 } text
+            ? text
+            : null;
+
+    /// <summary>心跳里的可选 <c>names</c>：<c>{"sid": "工作区名"}</c>，只给还没有 ws 的会话兜底。</summary>
+    private static Dictionary<string, string>? ParseNames(JsonElement root)
+    {
+        if (!root.TryGetProperty("names", out JsonElement names) || names.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (JsonProperty property in names.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String &&
+                property.Value.GetString() is { Length: > 0 } ws)
+            {
+                result[property.Name] = ws;
+            }
+        }
+        return result.Count > 0 ? result : null;
+    }
+
     /// <summary>UI 线程：落一条事件并重排任务表。</summary>
     private void Apply(TaskEvent ev)
     {
@@ -525,6 +571,7 @@ internal sealed class TasksHub : IDisposable
         if (ev.Type == "heartbeat")
         {
             _lastHeartbeat = now;
+            _notice = ev.Notice; // null 就清掉：插件说清原因，我们只负责显示
         }
         _timeoutTimer.Stop();
         _timeoutTimer.Start();
@@ -548,10 +595,15 @@ internal sealed class TasksHub : IDisposable
                     {
                         row.State = TaskState.Running;
                     }
+                    // turn/start 没带 ws 的会话，用心跳 names 里工作区名兜底
+                    if (row.Workspace.Length == 0)
+                    {
+                        row.Workspace = WorkspaceOf(ev.Names, sid);
+                    }
                 }
                 else
                 {
-                    _rows[sid] = new TaskRow { Sid = sid };
+                    _rows[sid] = new TaskRow { Sid = sid, Workspace = WorkspaceOf(ev.Names, sid) };
                 }
             }
             RaiseChanged();
@@ -571,6 +623,10 @@ internal sealed class TasksHub : IDisposable
                 target.EndedAt = now;
                 _lingerTimer.Stop();
                 _lingerTimer.Start();
+                if (ev.Reason == "completed")
+                {
+                    Completed?.Invoke();
+                }
                 break;
             case "question":
                 target.State = TaskState.Question;
@@ -598,6 +654,9 @@ internal sealed class TasksHub : IDisposable
         }
         return row;
     }
+
+    private static string WorkspaceOf(Dictionary<string, string>? names, string sid) =>
+        names is not null && names.TryGetValue(sid, out string? ws) ? ws : "";
 
     private static string FirstLine(string text)
     {
@@ -667,3 +726,6 @@ internal sealed class TasksHub : IDisposable
         Changed = null;
     }
 }
+
+
+

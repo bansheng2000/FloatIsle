@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -17,16 +17,19 @@ public partial class MainWindow : Window
     // RegisterHotKey 的 id，同一进程内唯一即可
     private const int HotKeyId = 0x4F49;
 
-    private const double CollapsedWidth = 160;
-    private const double CollapsedHeight = 44;
-    private const double ExpandedWidth = 320;
-    private const double ExpandedHeight = 120;
+    internal const double CollapsedWidth = 160;
+    internal const double CollapsedHeight = 44;
+    internal const double ExpandedWidth = 320;
+    internal const double ExpandedHeight = 120;
 
     /// <summary>展开态有任务行时的高（最多 4 行 + 一行「还有 N 个」，120 DIP 装不下）。</summary>
     private const double ExpandedTasksHeight = 150;
 
     /// <summary>任务区最多显示几行，多出来的收成「还有 N 个」。</summary>
     private const int MaxTaskRows = 4;
+
+    /// <summary>窗口只在岛上内容外面留 8 DIP：1px 描边 + 圆角抗锯齿，不再合成整片透明空气。</summary>
+    internal const double WindowPadding = 8;
 
     private static readonly Duration AnimDuration = new(TimeSpan.FromMilliseconds(180));
 
@@ -152,6 +155,7 @@ public partial class MainWindow : Window
         // 任务面板：只绑 127.0.0.1，接收插件推的事件与 10 秒心跳
         _tasks = new TasksHub(Dispatcher);
         _tasks.Changed += OnTasksChanged;
+        _tasks.Completed += OnTaskCompleted;
 
         Island.Opacity = _settings.Opacity;
 
@@ -187,6 +191,7 @@ public partial class MainWindow : Window
         ApplyMediaEnabled();
         ApplyFullscreenEnabled();
         ApplyTasks();
+        ApplyGlowColor();
         // 形态切换立即生效（胶囊 ↔ 贴顶），形态没变时这里什么都不做
         ApplyMode();
         // 模块顺序/开关、账本快照、媒体快照都可能变，统一在这里重排岛上文字
@@ -212,7 +217,129 @@ public partial class MainWindow : Window
     private void OnTasksChanged()
     {
         UpdateStatusText();
+        UpdateGlow();
         RefreshIslandText();
+    }
+
+    // ---------- 呼吸辉光（有活在跑才呼吸，完成闪 3 下再常亮） ----------
+
+    // 呼吸是慢动画，10fps 肉眼看不出台阶；CPU 硬线优先（实测见 README）
+    private const int GlowFps = 5;
+
+    private readonly SolidColorBrush _glowBrush =
+        new(System.Windows.Media.Color.FromRgb(0x4D, 0xA3, 0xFF));
+
+    private bool _glowBreathing;
+    private bool _glowSteady;
+    private bool _glowPulse;
+
+    private bool HasActiveTasks => TasksConnectedNow && _tasks!.ActiveCount > 0;
+
+    private void ApplyGlowColor()
+    {
+        if (AppSettings.TryNormalizeColor(_settings.GlowColor, out string hex) &&
+            System.Windows.Media.ColorConverter.ConvertFromString(hex) is System.Windows.Media.Color color)
+        {
+            _glowBrush.Color = color;
+        }
+        Glow.Stroke = _glowBrush;
+    }
+
+    /// <summary>有任务在跑 → 边框呼吸；任务清空 → 立刻停（除非正显示「已完成」常亮）。</summary>
+    private void UpdateGlow()
+    {
+        if (HasActiveTasks)
+        {
+            _glowSteady = false;
+            StartBreath();
+        }
+        else if (_glowBreathing)
+        {
+            StopBreath();
+        }
+    }
+
+    /// <summary>整圈同步明暗：亮 1 秒 / 暗 1 秒，正弦缓动，只动描边透明度（胶囊本体和文字不动）。</summary>
+    private void StartBreath()
+    {
+        if (_glowBreathing)
+        {
+            return;
+        }
+        _glowBreathing = true;
+        Glow.Stroke = _glowBrush;
+        Glow.Visibility = Visibility.Visible;
+        var breath = new DoubleAnimation(0.25, 1, TimeSpan.FromMilliseconds(1000))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+        Timeline.SetDesiredFrameRate(breath, GlowFps);
+        Glow.BeginAnimation(UIElement.OpacityProperty, breath);
+    }
+
+    private void StopBreath()
+    {
+        _glowBreathing = false;
+        Glow.BeginAnimation(UIElement.OpacityProperty, null);
+        if (!_glowSteady && !_glowPulse)
+        {
+            Glow.Visibility = Visibility.Collapsed;
+            Glow.Opacity = 0;
+        }
+    }
+
+    /// <summary>收到 completed：600ms 内脉冲 3 次（同色，只抬透明度），然后转常亮。</summary>
+    private void OnTaskCompleted()
+    {
+        if (_glowSteady)
+        {
+            return;
+        }
+        Glow.Stroke = _glowBrush;
+        _glowPulse = true;
+        _glowBreathing = false; // 呼吸让位给脉冲
+        Glow.Visibility = Visibility.Visible;
+        Glow.BeginAnimation(UIElement.OpacityProperty, null);
+        var pulse = new DoubleAnimation(0.25, 1, TimeSpan.FromMilliseconds(100))
+        {
+            AutoReverse = true,
+            RepeatBehavior = new RepeatBehavior(3)
+        };
+        Timeline.SetDesiredFrameRate(pulse, 30); // 脉冲只有 600ms，5fps 会一帧都抽不到
+        Glow.Opacity = 1;
+        pulse.Completed += (_, _) =>
+        {
+            _glowPulse = false;
+            // 闪完：还有活就回呼吸，否则保持「常亮但暗一档」
+            if (HasActiveTasks)
+            {
+                _glowBreathing = false;
+                StartBreath();
+                return;
+            }
+            _glowSteady = true;
+            Glow.BeginAnimation(UIElement.OpacityProperty, null);
+            Glow.Opacity = 0.55;
+        };
+        Glow.BeginAnimation(UIElement.OpacityProperty, pulse);
+    }
+
+    /// <summary>展开/看一眼就算「已读」，常亮消失（不自动定时熄灭）。</summary>
+    private void ClearGlowSteady()
+    {
+        if (!_glowSteady)
+        {
+            return;
+        }
+        _glowSteady = false;
+        Glow.BeginAnimation(UIElement.OpacityProperty, null);
+        Glow.Opacity = 0;
+        if (!_glowBreathing)
+        {
+            Glow.Visibility = Visibility.Collapsed;
+        }
     }
 
     /// <summary>当前是不是贴顶工作台形态（胶囊则保持全部原有行为）。</summary>
@@ -257,6 +384,8 @@ public partial class MainWindow : Window
         _topOpen = false;
         TopPanel.Visibility = Visibility.Collapsed;
         TopPanel.BeginAnimation(HeightProperty, null);
+        ApplyWindowSize(_expanded ? ExpandedWidth : CollapsedWidth,
+            _expanded ? ExpandedHeight : CollapsedHeight);
         if (!IsVisible && !_hiddenByFullscreen)
         {
             Show();
@@ -663,6 +792,37 @@ public partial class MainWindow : Window
         return new Rect(Left, Top, Width, Height);
     }
 
+    /// <summary>
+    /// 窗口尺寸 = 岛上内容 + 两侧留白。尺寸变了要顺手把窗口挪一下，
+    /// 保证胶囊中心不跳（区域随后按新尺寸重算）。
+    /// </summary>
+    private void ApplyWindowSize(double islandWidth, double islandHeight)
+    {
+        double width = islandWidth + WindowPadding * 2;
+        double height = islandHeight + WindowPadding * 2;
+        if (Math.Abs(Width - width) < 0.5 && Math.Abs(Height - height) < 0.5)
+        {
+            return;
+        }
+
+        Rect before = WindowPixelRect();
+        double centerX = before.Left + before.Width / 2.0;
+        double centerY = before.Top + before.Height / 2.0;
+
+        Width = width;
+        Height = height;
+
+        if (_hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+        double scale = CurrentScale;
+        double px = width * scale;
+        double py = height * scale;
+        MoveTo(new Rect(centerX - px / 2.0, centerY - py / 2.0, px, py));
+        UpdateWindowRegion();
+    }
+
     /// <summary>按像素矩形落位。带 SWP_NOACTIVATE——岛任何时候都不许抢焦点。</summary>
     private void MoveTo(Rect rect)
     {
@@ -708,6 +868,18 @@ public partial class MainWindow : Window
             // v0.2-D 存的是 DIP：按主屏缩放折成像素，迁移完这两条老字段就不再用
             double systemScale = NativeMethods.GetDpiForSystem() / 96.0;
             saved = new Point(oldLeft * systemScale, oldTop * systemScale);
+        }
+
+        // v0.2-E/H 的位置是「380×180 窗口」的左上角、胶囊居中；现在窗口贴着胶囊，
+        // 按胶囊中心换算一次，升级后岛不会横跳 100 多像素
+        if (saved is Point old && _settings.PlacementVersion < 2)
+        {
+            const double legacyWindowWidth = 380;   // v0.2-E/H 的窗口尺寸，只用于这次迁移
+            const double legacyWindowHeight = 180;
+            double offsetX = ((legacyWindowWidth - CollapsedWidth) / 2.0 - WindowPadding) * scale;
+            double offsetY = ((legacyWindowHeight - CollapsedHeight) / 2.0 - WindowPadding) * scale;
+            saved = new Point(old.X + offsetX, old.Y + offsetY);
+            _settings.PlacementVersion = 2;
         }
 
         MoveTo(Placement.Resolve(monitors, _settings.Screen, saved, WindowPixelSize(scale), scale));
@@ -877,6 +1049,18 @@ public partial class MainWindow : Window
         Line2.Text = string.Join(" · ", parts);
         // 没有副行内容时别留一条空行（比如只开今日用量、又没在放歌）
         Line2.Visibility = _expanded && parts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateNoticeText();
+    }
+
+    /// <summary>
+    /// 插件给的失败原因（心跳 notice）只在展开态占一行；null 时下一次心跳就清掉，
+    /// 我们不自己编文案、也不自己计时。
+    /// </summary>
+    private void UpdateNoticeText()
+    {
+        string notice = _tasks?.Notice ?? "";
+        NoticeText.Text = notice;
+        NoticeText.Visibility = _expanded && notice.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -1009,6 +1193,9 @@ public partial class MainWindow : Window
 
         // 配置里的「默认穿透」等句柄就绪后才真正生效
         SetClickThrough(_settings.ClickThrough);
+
+        // 收起态窗口贴着胶囊（176×60），先定尺寸再落位，夹紧才算得对
+        ApplyWindowSize(CollapsedWidth, CollapsedHeight);
 
         // 句柄就绪、能问出"自己在哪块屏、什么缩放"之后，按设备像素落位
         RestorePlacementPixels();
@@ -1240,6 +1427,7 @@ public partial class MainWindow : Window
 
         IReadOnlyList<MonitorBox> monitors = Placement.CurrentMonitors();
         double scale = CurrentScale;
+        ApplyWindowSize(CollapsedWidth, CollapsedHeight); // 拖拽期间没收的窗口在这里收
         Rect current = WindowPixelRect();
         MoveTo(Placement.ClampInto(
             CurrentMonitorBox(monitors).Work,
@@ -1259,6 +1447,10 @@ public partial class MainWindow : Window
 
         // 收起时只留主行：副行和状态行都会把 160×44 撑爆
         _expanded = expand;
+        if (expand)
+        {
+            ClearGlowSteady(); // 看一眼就算已读，常亮收掉
+        }
         StatusText.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
         Line2.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
         RefreshIslandText(); // 主行内容随展开/收起切换（收起用设置里选的那一项）
@@ -1267,12 +1459,31 @@ public partial class MainWindow : Window
         double expandedHeight = TaskRowsPanel.Visibility == Visibility.Visible
             ? ExpandedTasksHeight
             : ExpandedHeight;
+        if (NoticeText.Visibility == Visibility.Visible)
+        {
+            expandedHeight += 16; // 提示行自己占一行，别把状态行挤掉
+        }
+
+        // 展开：窗口先长到目标尺寸（区域永远装在窗口里，中间帧不会出现「区域比窗口大」）；
+        // 收起：等胶囊缩回去再收窗口，避免最后一帧把胶囊切掉
+        if (expand)
+        {
+            ApplyWindowSize(ExpandedWidth, expandedHeight);
+        }
 
         var widthAnim = new DoubleAnimation(expand ? ExpandedWidth : CollapsedWidth, AnimDuration)
         {
             EasingFunction = ease
         };
-        widthAnim.Completed += (_, _) => StopRegionTracking();
+        widthAnim.Completed += (_, _) =>
+        {
+            StopRegionTracking();
+            if (!expand && !_dragging)
+            {
+                // 拖拽中先不收窗口：尺寸一改窗口原点会跟着挪，拖拽位移就不跟手了
+                ApplyWindowSize(CollapsedWidth, CollapsedHeight);
+            }
+        };
 
         Island.BeginAnimation(WidthProperty, widthAnim);
         Island.BeginAnimation(HeightProperty,
@@ -1351,4 +1562,24 @@ public partial class MainWindow : Window
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

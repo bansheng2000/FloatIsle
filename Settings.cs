@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -64,6 +64,9 @@ internal sealed class AppSettings
 
     internal const string ModeTop = "top";
 
+    /// <summary>位置迁移版本：1 = 旧版窗口固定 380×180（胶囊居中），2 = 窗口贴着胶囊。</summary>
+    public int PlacementVersion { get; set; } = 1;
+
     /// <summary>整窗点击穿透的默认状态（热键/托盘切换时也会写回这里）。</summary>
     public bool ClickThrough { get; set; }
 
@@ -92,6 +95,11 @@ internal sealed class AppSettings
 
     internal const string DefaultTasksJumpEndpoint = "127.0.0.1:47822";
 
+    /// <summary>呼吸辉光颜色（#RRGGBB）；默认是不刺眼的蓝。</summary>
+    public string GlowColor { get; set; } = DefaultGlowColor;
+
+    internal const string DefaultGlowColor = "#4DA3FF";
+
     /// <summary>手改文件是信任边界：越界值夹回来，别让 NaN/负数传到动画里。</summary>
     internal void Normalize()
     {
@@ -112,6 +120,16 @@ internal sealed class AppSettings
         TasksEndpoint = NormalizeEndpoint(TasksEndpoint, DefaultTasksEndpoint);
         TasksJumpEndpoint = NormalizeEndpoint(TasksJumpEndpoint, DefaultTasksJumpEndpoint);
 
+        // 颜色是信任边界：只认 #RRGGBB，其余一律回默认（面板上会标红提示）
+        if (!TryNormalizeColor(GlowColor, out string color))
+        {
+            GlowColor = DefaultGlowColor;
+        }
+        else
+        {
+            GlowColor = color;
+        }
+
         // 手写文件里认中文别名（「贴顶」「胶囊」），存回去统一用英文 id
         Mode = Mode.Trim().ToLowerInvariant() switch
         {
@@ -122,6 +140,34 @@ internal sealed class AppSettings
 
     private static string NormalizeEndpoint(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) || value.Length > 64 ? fallback : value.Trim();
+
+    /// <summary>只认 <c>#RRGGBB</c>（也接受不带 #），输出统一大写带 # 的形式。</summary>
+    internal static bool TryNormalizeColor(string? value, out string normalized)
+    {
+        normalized = DefaultGlowColor;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+        string text = value.Trim();
+        if (!text.StartsWith('#'))
+        {
+            text = "#" + text;
+        }
+        if (text.Length != 7)
+        {
+            return false;
+        }
+        for (int i = 1; i < 7; i++)
+        {
+            if (!Uri.IsHexDigit(text[i]))
+            {
+                return false;
+            }
+        }
+        normalized = text.ToUpperInvariant();
+        return true;
+    }
 
     /// <summary>
     /// 手写的文件可能缺模块、多模块、重复：只认已知 id，去掉重复，缺的按默认顺序补在后面。
@@ -223,3 +269,6 @@ internal static class SettingsStore
         }
     }
 }
+
+
+

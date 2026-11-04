@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -54,6 +54,7 @@ public partial class SettingsWindow : Window
         };
         TasksEndpointBox.Text = s.TasksEndpoint;
         TasksJumpBox.Text = s.TasksJumpEndpoint;
+        GlowColorBox.Text = s.GlowColor;
 
         // 形态下拉：value 存 Tag（capsule/top），显示名给人看
         ModeCombo.Items.Add(new ComboBoxItem { Content = "胶囊（顶部居中，悬停展开）", Tag = AppSettings.ModeCapsule });
@@ -66,6 +67,7 @@ public partial class SettingsWindow : Window
         UpdateValueLabels();
         UpdateLedgerText();
         UpdateTasksStatus();
+        UpdateGlowHint();
         PlacementText.Text = owner.PlacementDescription();
         AutoStartText.Text = AutoStart.IsEnabled()
             ? "开机自启：已开启（真源是注册表，在托盘菜单里切换）"
@@ -278,6 +280,44 @@ public partial class SettingsWindow : Window
         _owner.UpdateSettings(s => s.CollapsedLine = id);
     }
 
+    // ---------- 呼吸辉光颜色 ----------
+
+    private void GlowColor_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+        string text = GlowColorBox.Text.Trim();
+        if (AppSettings.TryNormalizeColor(text, out string hex))
+        {
+            if (hex != _owner.Settings.GlowColor)
+            {
+                _owner.UpdateSettings(s => s.GlowColor = hex);
+            }
+        }
+        else if (text.Length >= 7)
+        {
+            // 输入到 7 位还不合法就落默认值，免得岛上一半新色一半旧色
+            _owner.UpdateSettings(s => s.GlowColor = AppSettings.DefaultGlowColor);
+        }
+        UpdateGlowHint();
+    }
+
+    private void UpdateGlowHint()
+    {
+        string text = GlowColorBox.Text.Trim();
+        bool ok = AppSettings.TryNormalizeColor(text, out string hex);
+        GlowColorHint.Text = ok ? hex : "非法颜色，已回默认 #4DA3FF";
+        GlowColorHint.Foreground = ok
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x66, 0x66, 0x66))
+            : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xC0, 0x39, 0x2B));
+        if (ok && System.Windows.Media.ColorConverter.ConvertFromString(hex) is System.Windows.Media.Color color)
+        {
+            GlowColorSwatch.Fill = new System.Windows.Media.SolidColorBrush(color);
+        }
+    }
+
     // ---------- 联动（任务面板接收端） ----------
 
     private void TasksEndpoint_Changed(object sender, TextChangedEventArgs e) => ApplyEndpoint(TasksEndpointBox.Text, jump: false);
@@ -328,3 +368,6 @@ public partial class SettingsWindow : Window
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 }
+
+
+
