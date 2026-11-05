@@ -489,7 +489,7 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 - 输出目录 25 MB，主要来自 24.8 MB 的投影 DLL；要减小体积得裁剪 CsWinRT 投影，v0.2 不做。
 - 托盘图标用仓库里 `assets/floatisle.ico`（九档 16/20/24/32/40/48/64/128/256），按 `GetDpiForWindow` 选档（`16×dpi/96`，100% → 16 px、150% → 24 px），同时作为 exe 的 `ApplicationIcon` 与嵌入资源，不依赖 exe 旁的散文件。
 - **拖动只在胶囊模式**：贴顶模式下胶囊常驻但不可拖（位置由工作台的贴顶规则决定），面板横向位置跟胶囊走；拖岛时穿过窗口的鼠标事件需要穿透关闭（`Ctrl+Alt+I`）。
-- **贴顶模式没有单实例互斥**：`grep Mutex` 在源码里 0 命中，两个 FloatIsle 可以同时跑并共享 `%APPDATA%\FloatIsle\settings.json`。调试时同时起了安装版与自测副本，后者在老版本 `Mode=top` 下窗口隐藏、`MainWindowHandle=0`，会让按窗口找句柄的测试脚本挑错对象。是否加互斥待定，本轮未改。
+- **已加全局单实例互斥**（`App.OnStartup`：`new Mutex(true, "Global\\FloatIsle.SingleInstance")`）：第二个实例 `createdNew == false` 直接 `Shutdown()` 退出，不做「激活已有实例」的 IPC。互斥不覆盖 `--selftest`（装着的实例在跑时也能跑自检）。
 - **贴顶模式的唤醒阈值是 4 DIP**，实测靠**注入输入事件**（`mouse_event`）验证，`SetCursorPos` 不产生输入、钩子收不到；真实手指/鼠标路径与注入事件走的是同一套 `WH_MOUSE_LL`，但没有物理鼠标的实测记录。
 - **琥珀 / 绿两态只在 100% 下测过**：三态色值与切换时序都是 100%、单屏 2560×1552 的读数；150% 下只验过蓝色呼吸（描边不越界、区域外 0），琥珀与绿的 150% 读数未测。
 - **呼吸辉光在 150% 下只验到「描边不越界 + 呼吸不灭」**：描边四边内缩 4/2/4/2 px、区域外蓝像素 0、振幅 44.2→201.6；150% 的完成闪 3 连峰时序**没有**与 100% 同套采样（150% 只跑了修前那组），上面修后序列是 100% 档读数。
