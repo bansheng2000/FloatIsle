@@ -259,6 +259,35 @@ internal static class PlacementSelfTest
         extra.Add(("贴顶展开不靠碰顶唤醒（无 OnTopWake）", noWakeMethod, "不存在", noWakeMethod ? "不存在" : "仍存在"));
         extra.Add(("贴顶展开不靠碰顶唤醒（无 TopEdgeHook）", noHookType, "不存在", noHookType ? "不存在" : "仍存在"));
 
+        // 用户要求「按会话记账」：完成的会话显示「已完成」，点进去才清，不自己消失
+        var done = new DoneLedger();
+        var t0 = new DateTime(2026, 11, 5, 16, 0, 0);
+        done.Mark("s1", "FloatIsle", t0);
+        done.Mark("s2", "Chief", t0.AddSeconds(5));
+        bool twoRows = done.Count == 2
+                       && done.Snapshot().All(r => r.LineText.Contains("已完成", StringComparison.Ordinal))
+                       && done.Snapshot()[0].Sid == "s2"; // 最近完成的在最上面
+        extra.Add(("两个会话先后完成 → 未查看 2 条，文案含「已完成」", twoRows,
+            "2 / 两行含已完成 / s2 在前",
+            $"{done.Count} / {string.Join("|", done.Snapshot().Select(r => r.LineText))}"));
+
+        done.Clear("s2");
+        bool oneLeft = done.Count == 1 && done.Contains("s1") && !done.Contains("s2");
+        extra.Add(("清掉其中一个 → 集合 = 1，另一个仍在", oneLeft, "1 / s1 在 / s2 不在",
+            $"{done.Count} / s1={done.Contains("s1")} / s2={done.Contains("s2")}"));
+
+        // 该 sid 重新开跑 → 它自己从集合消失（Apply 里 turn/start 走的就是 DoneLedger.Clear）
+        bool restarted = done.Clear("s1") && done.Count == 0;
+        extra.Add(("该 sid 重新 turn/start → 它自己从集合消失", restarted, "0", done.Count.ToString()));
+
+        // 辉光优先级：等你/在跑（呼吸）> 未查看的完成（绿常亮）> 不发光
+        var greenWhenIdle = MainWindow.DecideGlow(false, true) == MainWindow.GlowPlan.SteadyGreen;
+        var blueWhenRunning = MainWindow.DecideGlow(true, true) == MainWindow.GlowPlan.Breath;
+        var darkWhenEmpty = MainWindow.DecideGlow(false, false) == MainWindow.GlowPlan.None;
+        extra.Add(("集合非空且无在跑 → 绿常亮", greenWhenIdle, "SteadyGreen", MainWindow.DecideGlow(false, true).ToString()));
+        extra.Add(("有在跑 → 蓝呼吸（绿不覆盖）", blueWhenRunning, "Breath", MainWindow.DecideGlow(true, true).ToString()));
+        extra.Add(("集合清空 → 不发光", darkWhenEmpty, "None", MainWindow.DecideGlow(false, false).ToString()));
+
         foreach ((string name, bool ok, string expected, string actual) in extra)
         {
             if (!ok)

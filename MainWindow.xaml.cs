@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -30,6 +30,9 @@ public partial class MainWindow : Window
 
     /// <summary>任务区最多显示几行，多出来的收成「还有 N 个」。</summary>
     private const int MaxTaskRows = 4;
+
+    /// <summary>「清除全部已完成」那行的 Tag：非空字符串，保证它被当成「行内点击」而不是拖动。</summary>
+    private const string ClearDoneTag = "!clear-done";
 
     /// <summary>窗口只在岛上内容外面留 8 DIP：1px 描边 + 圆角抗锯齿，不再合成整片透明空气。</summary>
     internal const double WindowPadding = 8;
@@ -272,12 +275,20 @@ public partial class MainWindow : Window
         UpdateStatusText();
         UpdateGlow();
         RefreshIslandText();
+        // 工作台开着时卡片也要跟着变：否则点了「已完成」那一行，行还挂在那儿（拖拽中不重建，会掐掉拖拽）
+        if (_topOpen && !_draggingTile)
+        {
+            RefreshTopTiles();
+        }
     }
 
     // ---------- 呼吸辉光（有活在跑才呼吸，完成闪 3 下再常亮） ----------
 
     // 呼吸是慢动画，10fps 肉眼看不出台阶；CPU 硬线优先（实测见 README）
     private const int GlowFps = 5;
+
+    // 完成状态按会话记账（用户要求）：没点进去看过的一直显示「已完成」，不自己超时消失。
+    // 绿常亮 = 「有未查看的完成」这个事实的可视化，集合空了才灭，没有计时器。
 
     private readonly SolidColorBrush _glowBrush =
         new(System.Windows.Media.Color.FromRgb(0x4D, 0xA3, 0xFF));
@@ -298,6 +309,8 @@ public partial class MainWindow : Window
     private bool _glowBreathing;
     private bool _glowSteady;
     private bool _glowPulse;
+    // 任务区下面要不要多一行「清除全部已完成」（占 16 DIP 高，Animate 里按它加高）
+    private int _taskRowsExtra;
     // 脉冲是「独占」状态：期间任何 Changed 都不许重开呼吸（会通过 BeginAnimation 顶掉脉冲），
     // 这段时间内又完成的任务排一次队，等当前 3 次脉冲放完再放下一组
     private bool _glowPulseQueued;
@@ -322,18 +335,67 @@ public partial class MainWindow : Window
         GlowOuter.Stroke = brush;
     }
 
-    /// <summary>有任务在跑 → 边框呼吸；任务清空 → 立刻停（除非正显示「已完成」常亮）。</summary>
+    /// <summary>辉光该是哪种形态。抽成纯方法，自检能直接断言（不依赖 UI）。</summary>
+    internal enum GlowPlan
+    {
+        /// <summary>没活在跑、也没有未查看的完成：不画。</summary>
+        None,
+        /// <summary>有活在跑（含等你回答/批准）：呼吸，蓝色或琥珀色。</summary>
+        Breath,
+        /// <summary>没有在跑的活、但有未查看的完成：绿色常亮，等用户点开。</summary>
+        SteadyGreen,
+    }
+
+    /// <summary>优先级：等你确认（琥珀呼吸）&gt; 在跑（蓝呼吸）&gt; 未查看的完成（绿常亮）&gt; 不发光。</summary>
+    internal static GlowPlan DecideGlow(bool hasActiveTasks, bool hasUnseenDone)
+    {
+        if (hasActiveTasks)
+        {
+            return GlowPlan.Breath; // 有活在跑时绿不抢
+        }
+        return hasUnseenDone ? GlowPlan.SteadyGreen : GlowPlan.None;
+    }
+
+    /// <summary>按「有没有活在跑 / 有没有未查看的完成」摆辉光，没有计时器。</summary>
     private void UpdateGlow()
     {
-        if (HasActiveTasks)
+        switch (DecideGlow(HasActiveTasks, _tasks?.HasUnseenDone == true))
         {
-            _glowSteady = false;
-            StartBreath();
+            case GlowPlan.Breath:
+                // 常亮期间来了新任务：绿色必须立刻让位给呼吸，不许残留
+                _glowSteady = false;
+                StartBreath();
+                break;
+            case GlowPlan.SteadyGreen:
+                if (_glowPulse)
+                {
+                    return; // 正在闪，闪完自己落到常亮
+                }
+                ShowSteadyGreen();
+                break;
+            default:
+                if (_glowBreathing)
+                {
+                    StopBreath();
+                }
+                ClearGlowSteady();
+                break;
         }
-        else if (_glowBreathing)
-        {
-            StopBreath();
-        }
+    }
+
+    /// <summary>绿色常亮：芯满、晕留一档，表示「有完成没看」。</summary>
+    private void ShowSteadyGreen()
+    {
+        _glowSteady = true;
+        _glowBreathing = false;
+        _breathKind = "";
+        PaintGlow(_doneBrush);
+        Glow.Visibility = Visibility.Visible;
+        GlowOuter.Visibility = Visibility.Visible;
+        Glow.BeginAnimation(UIElement.OpacityProperty, null);
+        GlowOuter.BeginAnimation(UIElement.OpacityProperty, null);
+        Glow.Opacity = 1.0;
+        GlowOuter.Opacity = 0.35;
     }
 
     /// <summary>整圈同步明暗：亮 1 秒 / 暗 1 秒，正弦缓动，只动描边透明度（胶囊本体和文字不动）。</summary>
@@ -451,18 +513,14 @@ public partial class MainWindow : Window
                 StartBreath();
                 return;
             }
-            // 常亮：芯满、晕留一档（不再是内层 0.55 那种「暗一档」）
-            _glowSteady = true;
-            Glow.BeginAnimation(UIElement.OpacityProperty, null);
-            GlowOuter.BeginAnimation(UIElement.OpacityProperty, null);
-            Glow.Opacity = 1.0;
-            GlowOuter.Opacity = 0.35;
+            // 闪完落到常亮（不再有 120 s 超时：没点进去看的一直亮着）
+            ShowSteadyGreen();
         };
         Glow.BeginAnimation(UIElement.OpacityProperty, pulse);
         GlowOuter.BeginAnimation(UIElement.OpacityProperty, pulseOuter);
     }
 
-    /// <summary>展开/看一眼就算「已读」，常亮消失（不自动定时熄灭）。</summary>
+    /// <summary>未查看的完成被清空（点开该行/清全部/重新开跑）时，常亮消失。</summary>
     private void ClearGlowSteady()
     {
         if (!_glowSteady)
@@ -653,6 +711,7 @@ public partial class MainWindow : Window
             _mediaInfo.Status ?? "",
             TasksConnectedNow ? "1" : "0",
             string.Join("\u0002", TaskList.Select(r => $"{r.Sid}:{(int)r.State}:{r.Workspace}")),
+            string.Join("\u0002", (_tasks?.DoneRows ?? Array.Empty<DoneRow>()).Select(r => $"{r.Sid}:{r.DoneAt.Ticks}")),
             // 顺序与显示开关也进 key：设置里上移/下移、关掉一个模块、拖拽换位都要重建
             string.Join(",", _settings.Modules.Select(m => m.Id + (m.Visible ? "+" : "-"))),
         });
@@ -837,30 +896,92 @@ public partial class MainWindow : Window
     private System.Windows.Controls.Border BuildTaskTile()
     {
         IReadOnlyList<TaskRow> rows = TaskList;
-        var details = new List<string>();
+        IReadOnlyList<DoneRow> done = _tasks?.DoneRows ?? Array.Empty<DoneRow>();
+        string main = !TasksConnectedNow
+            ? "DSH 未运行"
+            : $"{rows.Count(r => r.State != TaskState.Ended)} 个在跑";
+        // 卡片壳用公共 Tile（高度仍由内容决定），行自己往里加：已完成的行要能点
+        System.Windows.Controls.Border card = Tile("任务", main);
+        if (card.Child is not System.Windows.Controls.StackPanel stack)
+        {
+            return card;
+        }
+
+        // 已完成未查看的排最上面：点这一行 = 跳到该会话并清掉它这一条
+        foreach (DoneRow row in done.Take(MaxTaskRows))
+        {
+            string sid = row.Sid;
+            System.Windows.Controls.TextBlock line = TileLine(
+                row.LineText, System.Windows.Media.Color.FromArgb(0xEE, DoneColor.R, DoneColor.G, DoneColor.B));
+            line.Cursor = System.Windows.Input.Cursors.Hand;
+            // 先吃掉按下：否则气泡到卡片上会变成「拖拽换位」
+            line.MouseLeftButtonDown += (_, e) => e.Handled = true;
+            line.MouseLeftButtonUp += async (_, e) =>
+            {
+                e.Handled = true;
+                await JumpAndClear(sid);
+            };
+            stack.Children.Add(line);
+        }
+        if (done.Count > MaxTaskRows)
+        {
+            stack.Children.Add(TileLine($"还有 {done.Count - MaxTaskRows} 个已完成", DimTileColor));
+        }
+
+        int room = done.Count > 0 ? 2 : 4;
         if (!TasksConnectedNow)
         {
-            details.Add(_tasks?.ShortStatus ?? "未连接");
+            stack.Children.Add(TileLine(_tasks?.ShortStatus ?? "未连接", DimTileColor));
         }
         else if (rows.Count == 0)
         {
-            details.Add("没有正在运行的会话");
+            if (done.Count == 0)
+            {
+                stack.Children.Add(TileLine("没有正在运行的会话", DimTileColor));
+            }
         }
         else
         {
-            foreach (TaskRow row in rows.Take(4))
+            foreach (TaskRow row in rows.Take(room))
             {
                 string workspace = string.IsNullOrWhiteSpace(row.Workspace) ? "未命名工作区" : row.Workspace;
-                details.Add($"{workspace}：{row.StateText}");
+                stack.Children.Add(TileLine($"{workspace}：{row.StateText}", DimTileColor));
             }
-            if (rows.Count > 4)
+            if (rows.Count > room)
             {
-                details.Add($"还有 {rows.Count - 4} 个");
+                stack.Children.Add(TileLine($"还有 {rows.Count - room} 个", DimTileColor));
             }
         }
-        string main = !TasksConnectedNow ? "DSH 未运行" : $"{rows.Count(r => r.State != TaskState.Ended)} 个在跑";
-        return Tile("任务", main, details.ToArray());
+
+        if (done.Count > 0)
+        {
+            System.Windows.Controls.TextBlock clear = TileLine("清除全部已完成", DimTileColor);
+            clear.Cursor = System.Windows.Input.Cursors.Hand;
+            clear.MouseLeftButtonDown += (_, e) => e.Handled = true;
+            clear.MouseLeftButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                _tasks?.ClearAllDone();
+            };
+            stack.Children.Add(clear);
+        }
+
+        return card;
     }
+
+    private static readonly System.Windows.Media.Color DimTileColor =
+        System.Windows.Media.Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF);
+
+    /// <summary>卡片里的一行副文字（与 Tile 的 details 同一套字号/颜色规则）。</summary>
+    private static System.Windows.Controls.TextBlock TileLine(string text, System.Windows.Media.Color color) => new()
+    {
+        Text = text,
+        FontSize = 10,
+        Foreground = new SolidColorBrush(color),
+        TextWrapping = TextWrapping.NoWrap,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        Margin = new Thickness(0, 2, 0, 0),
+    };
 
     /// <summary>
     /// 一块卡片：标题 + 主行 + 若干副行。<b>高度完全由内容决定</b>（Height 不设、MinHeight 不设），
@@ -1432,7 +1553,8 @@ public partial class MainWindow : Window
         bool expanded = IslandExpanded;
         var ids = _settings.Modules.Where(m => m.Visible).Select(m => m.Id).ToList();
         // 任务面板没连上（25 秒内无心跳）或一个会话都没有时整体隐藏，不留「任务 0 个在跑」这种空壳
-        bool hasTasks = TasksConnectedNow && _tasks!.Snapshot().Count > 0;
+        bool hasTasks = TasksConnectedNow
+                        && (_tasks!.Snapshot().Count > 0 || _tasks.HasUnseenDone);
         ids.RemoveAll(id => id == IslandModuleIds.Tasks && !hasTasks);
 
         RefreshTaskRows();
@@ -1490,9 +1612,14 @@ public partial class MainWindow : Window
     /// </summary>
     private void RefreshTaskRows()
     {
-        IReadOnlyList<TaskRow> rows = IslandExpanded && TasksConnectedNow ? TaskList : Array.Empty<TaskRow>();
+        bool show = IslandExpanded && TasksConnectedNow;
+        // 已完成未查看的排最上面（用户要求：没点进去过的一直显示「已完成」）
+        IReadOnlyList<DoneRow> done = show ? _tasks!.DoneRows : Array.Empty<DoneRow>();
+        IReadOnlyList<TaskRow> rows = show ? TaskList : Array.Empty<TaskRow>();
         // 心跳每 10 秒来一次、内容多数没变：签名相同就别重建控件（重建一轮 WPF 布局要几十毫秒）
-        string key = string.Join("\u0001", rows.Select(r => $"{r.Sid}\u0002{(int)r.State}\u0002{r.Workspace}\u0002{r.Detail}"));
+        string key = string.Join("",
+            done.Select(r => $"D{r.Sid}{r.Workspace}{r.DoneAt.Ticks}")
+                .Concat(rows.Select(r => $"R{r.Sid}{(int)r.State}{r.Workspace}{r.Detail}")));
         if (key == _taskRowsKey)
         {
             return;
@@ -1500,13 +1627,22 @@ public partial class MainWindow : Window
         _taskRowsKey = key;
 
         TaskRowsPanel.Children.Clear();
-        if (rows.Count == 0)
+        if (done.Count == 0 && rows.Count == 0)
         {
+            _taskRowsExtra = 0;
             TaskRowsPanel.Visibility = Visibility.Collapsed;
             return;
         }
 
-        foreach (TaskRow row in rows.Take(MaxTaskRows))
+        int doneShown = 0;
+        foreach (DoneRow row in done.Take(MaxTaskRows))
+        {
+            TaskRowsPanel.Children.Add(DoneLine(row));
+            doneShown++;
+        }
+
+        int room = Math.Max(0, MaxTaskRows - doneShown);
+        foreach (TaskRow row in rows.Take(room))
         {
             string workspace = string.IsNullOrWhiteSpace(row.Workspace) ? "未命名工作区" : row.Workspace;
             var text = new System.Windows.Controls.TextBlock
@@ -1532,22 +1668,82 @@ public partial class MainWindow : Window
             TaskRowsPanel.Children.Add(text);
         }
 
-        if (rows.Count > MaxTaskRows)
+        // 超出部分各自兜一行（已完成优先报「还有 N 个已完成」）
+        if (done.Count > doneShown)
         {
-            TaskRowsPanel.Children.Add(new System.Windows.Controls.TextBlock
-            {
-                Text = $"还有 {rows.Count - MaxTaskRows} 个",
-                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
-                FontSize = 10,
-                TextWrapping = TextWrapping.NoWrap,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-                Margin = new Thickness(0, 2, 0, 0),
-            });
+            TaskRowsPanel.Children.Add(DimLine($"还有 {done.Count - doneShown} 个已完成"));
+        }
+        else if (rows.Count > room && room > 0)
+        {
+            TaskRowsPanel.Children.Add(DimLine($"还有 {rows.Count - room} 个"));
         }
 
+        // 有未查看的完成就给一个「清除全部已完成」入口（纯文本，点一下全清）
+        if (done.Count > 0)
+        {
+            TaskRowsPanel.Children.Add(ClearDoneLine());
+        }
+        _taskRowsExtra = done.Count > 0 ? 1 : 0;
+
         TaskRowsPanel.Visibility = TaskRowsPanel.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>一行「已完成」：绿色系 + 明确的「已完成」字样，点它 = 跳到该会话并清掉这一条。</summary>
+    private System.Windows.Controls.TextBlock DoneLine(DoneRow row)
+    {
+        var text = new System.Windows.Controls.TextBlock
+        {
+            Text = row.LineText,
+            Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xEE, DoneColor.R, DoneColor.G, DoneColor.B)),
+            FontSize = 10,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+            Margin = new Thickness(0, 2, 0, 0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Tag = row.Sid,
+        };
+        text.MouseLeftButtonUp += TaskRow_Click;
+        return text;
+    }
+
+    private System.Windows.Controls.TextBlock ClearDoneLine()
+    {
+        var text = new System.Windows.Controls.TextBlock
+        {
+            Text = "清除全部已完成",
+            Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+            FontSize = 10,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+            Margin = new Thickness(0, 2, 0, 0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Tag = ClearDoneTag, // 有 Tag 就走「行内」判定，不会被当成拖动
+        };
+        text.MouseLeftButtonUp += ClearDone_Click;
+        return text;
+    }
+
+    private static System.Windows.Controls.TextBlock DimLine(string text) => new()
+    {
+        Text = text,
+        Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+        FontSize = 10,
+        TextWrapping = TextWrapping.NoWrap,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        TextAlignment = TextAlignment.Center,
+        HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+        Margin = new Thickness(0, 2, 0, 0),
+    };
+
+    /// <summary>「清除全部已完成」：把未查看的完成一次清空（绿色常亮随之熄灭）。</summary>
+    private void ClearDone_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _tasks?.ClearAllDone();
     }
 
     /// <summary>点一行任务 = 让插件把该会话窗口拉到前台。插件不在就静默失败（TasksHub.Jump）。</summary>
@@ -1558,9 +1754,17 @@ public partial class MainWindow : Window
         {
             return;
         }
+        await JumpAndClear(sid);
+    }
+
+    /// <summary>点任务行 = 跳到该会话；跳转被受理（202）才算「看过」，清掉它那条已完成。</summary>
+    private async Task JumpAndClear(string sid)
+    {
         bool jumped = await TasksHub.JumpAsync(_settings.TasksJumpEndpoint, sid).ConfigureAwait(true);
         if (jumped)
         {
+            // 只清它自己，别的会话的「已完成」不动
+            _tasks?.ClearDone(sid);
             return;
         }
         // 别让用户以为「点了没反应」：跳转端口不通时在岛上说一句（4 秒后自动清）
@@ -2030,10 +2234,7 @@ public partial class MainWindow : Window
 
         // 收起时只留主行：副行和状态行都会把 160×44 撑爆
         _expanded = expand;
-        if (expand)
-        {
-            ClearGlowSteady(); // 看一眼就算已读，常亮收掉
-        }
+        // 注意：展开**不再**算已读——用户要求「点进那个会话才清除」，展开只是看一眼列表
         StatusText.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
         Line2.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
         RefreshIslandText(); // 主行内容随展开/收起切换（收起用设置里选的那一项）
@@ -2045,6 +2246,10 @@ public partial class MainWindow : Window
         if (NoticeText.Visibility == Visibility.Visible)
         {
             expandedHeight += 16; // 提示行自己占一行，别把状态行挤掉
+        }
+        if (_taskRowsExtra > 0)
+        {
+            expandedHeight += 16; // 「清除全部已完成」自己占一行
         }
 
         // 展开：窗口先长到目标尺寸（区域永远装在窗口里，中间帧不会出现「区域比窗口大」）；

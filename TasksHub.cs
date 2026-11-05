@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -44,6 +44,56 @@ internal sealed class TaskRow
     };
 }
 
+/// <summary>一条「已完成、还没被点开看」的记录（按 sid 记账，用户要求「没点进去过的就一直显示已完成」）。</summary>
+internal sealed class DoneRow
+{
+    public string Sid { get; init; } = "";
+
+    public string Workspace { get; init; } = "";
+
+    public DateTime DoneAt { get; init; }
+
+    /// <summary>岛上那一行的文案：必须写明「已完成」，不能只靠颜色区分。</summary>
+    public string LineText => $"{(Workspace.Length > 0 ? Workspace : "未命名工作区")} · 已完成";
+}
+
+/// <summary>
+/// 「已完成未查看」账本：纯内存、纯同步，自检可以直接构造，不碰网络也不碰 Dispatcher。
+/// 清一条只认三件事：点该行且跳转被受理、该 sid 重新开跑、用户按「清除全部已完成」。
+/// </summary>
+internal sealed class DoneLedger
+{
+    private readonly Dictionary<string, DoneRow> _rows = new(StringComparer.Ordinal);
+
+    internal int Count => _rows.Count;
+
+    internal bool Contains(string sid) => _rows.ContainsKey(sid);
+
+    /// <summary>同一 sid 再完成一次就刷新完成时间（不重复记账）。</summary>
+    internal void Mark(string sid, string workspace, DateTime doneAt)
+    {
+        if (sid.Length == 0)
+        {
+            return;
+        }
+        string ws = workspace;
+        if (ws.Length == 0 && _rows.TryGetValue(sid, out DoneRow? old))
+        {
+            ws = old.Workspace; // 这次事件没带工作区名，沿用上次的
+        }
+        _rows[sid] = new DoneRow { Sid = sid, Workspace = ws, DoneAt = doneAt };
+    }
+
+    internal bool Clear(string sid) => _rows.Remove(sid);
+
+    internal void ClearAll() => _rows.Clear();
+
+    /// <summary>最近完成的排最前（岛上任务区第一行就是它）。</summary>
+    internal IReadOnlyList<DoneRow> Snapshot() => _rows.Values
+        .OrderByDescending(r => r.DoneAt)
+        .ToList();
+}
+
 /// <summary>
 /// 任务面板的接收端：只绑 127.0.0.1，只收 POST /event。
 /// 用 TcpListener 手写最小 HTTP/1.1，不用 HttpListener —— 后者要 URL ACL，普通用户装不上。
@@ -63,6 +113,9 @@ internal sealed class TasksHub : IDisposable
 
     private readonly Dispatcher _dispatcher;
     private readonly Dictionary<string, TaskRow> _rows = new(StringComparer.Ordinal);
+
+    // 已完成未查看（按 sid 记账）：不在 _rows 里，但要一直显示到用户点开为止
+    private readonly DoneLedger _done = new();
     private readonly DispatcherTimer _timeoutTimer;
     private readonly DispatcherTimer _lingerTimer;
 
@@ -178,6 +231,34 @@ internal sealed class TasksHub : IDisposable
 
     /// <summary>在跑的会话数（「刚结束」不算，收起态就显示这个数）。</summary>
     internal int ActiveCount => _rows.Values.Count(r => r.State != TaskState.Ended);
+
+    /// <summary>已完成未查看的行（最近完成的在前）。</summary>
+    internal IReadOnlyList<DoneRow> DoneRows => _done.Snapshot();
+
+    /// <summary>还有没点开看过的完成——绿常亮就看它。</summary>
+    internal bool HasUnseenDone => _done.Count > 0;
+
+    internal int UnseenDoneCount => _done.Count;
+
+    /// <summary>点开某个会话并跳转成功后清掉它自己那条。</summary>
+    internal void ClearDone(string sid)
+    {
+        if (_done.Clear(sid))
+        {
+            RaiseChanged();
+        }
+    }
+
+    /// <summary>「清除全部已完成」。</summary>
+    internal void ClearAllDone()
+    {
+        if (_done.Count == 0)
+        {
+            return;
+        }
+        _done.ClearAll();
+        RaiseChanged();
+    }
 
     /// <summary>（重新）在 endpoint 上监听。端口被占用不抛异常，写进状态文字。</summary>
     internal void Start(string endpoint)
@@ -591,6 +672,12 @@ internal sealed class TasksHub : IDisposable
             }
             foreach (string sid in running)
             {
+                if (_done.Contains(sid))
+                {
+                    // 已经记账为「完成未查看」的会话，心跳里的 running 可能是上一拍的残留，
+                    // 不许把它又拉回在跑列表（真正重开会先来 turn/start，那条会清账）
+                    continue;
+                }
                 if (_rows.TryGetValue(sid, out TaskRow? row))
                 {
                     if (row.State == TaskState.Ended)
@@ -618,16 +705,24 @@ internal sealed class TasksHub : IDisposable
             case "turn/start":
                 target.State = TaskState.Running;
                 target.Detail = "";
+                // 重新开跑 = 用户已经不需要那条「已完成」了，清掉自己这一条
+                _done.Clear(ev.Sid);
                 break;
             case "turn/end":
                 target.State = TaskState.Ended;
                 target.Detail = ev.Reason;
                 target.EndedAt = now;
-                _lingerTimer.Stop();
-                _lingerTimer.Start();
                 if (ev.Reason == "completed")
                 {
+                    // 按会话记账：从在跑列表移进「已完成未查看」，行本身不丢（用户点开才清）
+                    _done.Mark(ev.Sid, target.Workspace, now);
+                    _rows.Remove(ev.Sid);
                     Completed?.Invoke();
+                }
+                else
+                {
+                    _lingerTimer.Stop();
+                    _lingerTimer.Start();
                 }
                 break;
             case "question":
