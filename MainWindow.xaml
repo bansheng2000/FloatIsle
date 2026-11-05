@@ -18,7 +18,7 @@
         <Border x:Name="Island"
                 Width="160" Height="44"
                 CornerRadius="22"
-                Background="#E6101216"
+                Background="#A60E1014"
                 BorderBrush="#3CFFFFFF" BorderThickness="1"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 MouseEnter="Island_MouseEnter"
@@ -29,6 +29,12 @@
             <!-- 注意：窗口被 SetWindowRgn 裁成胶囊形状后，任何画在胶囊外的效果（阴影/外发光）都会被切掉，
                  所以这里不再用 DropShadowEffect。取舍写在 README「已知限制」。 -->
             <Grid>
+                <!-- 假磨砂（系统 Acrylic 在「分层窗口 + 异形区域」上会糊满整个矩形，判不可用，见 README）：
+                     65% 半透明底 + 内侧 1px 高光，全部画在胶囊形状内，区域外仍然全透明。
+                     噪点纹理试过（烘进背景、32 DIP 平铺、1:1 直贴）：呼吸时 14–17 片/30 s，超 10 片预算，所以不做；
+                     这条 1px 高光自己只占一层，删掉实测呼吸不变（见 README）。取舍写在 README「已知限制」。 -->
+                <Rectangle x:Name="FrostHighlight" Margin="1" RadiusX="21" RadiusY="21"
+                           Stroke="#26FFFFFF" StrokeThickness="1" IsHitTestVisible="False" />
                 <!-- 呼吸辉光描边：铺满胶囊内侧（Margin 1 让开 1px 边框），只做装饰、不吃鼠标事件。
                      整圈同步明暗（动画只改这一条的 Opacity），粗细是 DIP、随 WPF 缩放。 -->
                 <Rectangle x:Name="Glow"
@@ -55,7 +61,7 @@
                            Foreground="#E8B24D" FontSize="10"
                            TextWrapping="Wrap" MaxWidth="280"
                            HorizontalAlignment="Center" TextAlignment="Center"
-                           Visibility="Collapsed" />
+                           />
                 <TextBlock x:Name="StatusText" Text="…"
                            Margin="0,4,0,0"
                            Foreground="#88FFFFFF" FontSize="10"
@@ -72,7 +78,7 @@
                 Background="#F2101216"
                 BorderBrush="#3CFFFFFF" BorderThickness="1"
                 HorizontalAlignment="Left" VerticalAlignment="Top"
-                Visibility="Collapsed"
+               
                 MouseLeave="TopPanel_MouseLeave">
             <StackPanel Margin="16">
                 <!-- ItemWidth 264 = (560 - 两侧 16 - 列间距 12) / 2，两块正好一行 -->

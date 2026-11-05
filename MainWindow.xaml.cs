@@ -3,11 +3,13 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 // UseWindowsForms 的隐式 using 会带来 System.Drawing.Size/Point，钉死用 WPF 的
+using Brush = System.Windows.Media.Brush;
 using Point = System.Windows.Point;
 using Size = System.Windows.Size;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace FloatIsle;
@@ -23,7 +25,7 @@ public partial class MainWindow : Window
     internal const double ExpandedHeight = 120;
 
     /// <summary>展开态有任务行时的高（最多 4 行 + 一行「还有 N 个」，120 DIP 装不下）。</summary>
-    private const double ExpandedTasksHeight = 150;
+    internal const double ExpandedTasksHeight = 150;
 
     /// <summary>任务区最多显示几行，多出来的收成「还有 N 个」。</summary>
     private const int MaxTaskRows = 4;
@@ -32,6 +34,12 @@ public partial class MainWindow : Window
     internal const double WindowPadding = 8;
 
     private static readonly Duration AnimDuration = new(TimeSpan.FromMilliseconds(180));
+
+    /// <summary>展开/收起的弹簧：200ms + 轻微过冲（selftest 断言过冲 ≤ 4 DIP）。</summary>
+    internal static readonly Duration SpringDuration = new(TimeSpan.FromMilliseconds(200));
+
+    /// <summary>BackEase 的幅度：0.19 在 160 DIP 位移上约 3 px 过冲（selftest 卡 4 DIP，0.35 会到 11 px）。</summary>
+    internal const double SpringAmplitude = 0.19;
 
     private readonly AppSettings _settings;
     private readonly string? _settingsBackupPath;
@@ -65,6 +73,10 @@ public partial class MainWindow : Window
 
     // 拖拽：WS_EX_NOACTIVATE 的窗口不能 DragMove（它要求窗口被激活，会把焦点抢走），只能自己跟手
     private bool _dragging;
+
+    // 悬停强调：平时 1px 24% 白边，悬停加深到 40%（改 Brush 比重画几何便宜）
+    private static readonly Brush HoverBorderBrush = Frozen("#66FFFFFF");
+    private Brush? _idleBorderBrush;
     private NativeMethods.POINT _dragCursorStart;
     private Rect _dragWindowStart;
 
@@ -120,6 +132,9 @@ public partial class MainWindow : Window
         StatusText.Visibility = Visibility.Collapsed;
         Line2.Visibility = Visibility.Collapsed;
 
+        // 假磨砂的噪点：一块 64×64 的固定灰度噪声平铺，种子写死 → 每次启动纹理一致、可复现
+        _idleBorderBrush = Island.BorderBrush; // 悬停强调的还原值
+
         // 布局算完之后把窗口裁成胶囊形状，形状外一律穿透
         Loaded += (_, _) =>
         {
@@ -149,6 +164,7 @@ public partial class MainWindow : Window
             {
                 return; // 假离开：光标还在岛上，保持展开
             }
+            Island.BorderBrush = _idleBorderBrush; // 确认走了才收回悬停强调（避免假 MouseLeave 让边框闪）
             Animate(false);
         };
 
@@ -334,7 +350,9 @@ public partial class MainWindow : Window
         var pulse = new DoubleAnimation(0.35, 1, TimeSpan.FromMilliseconds(100))
         {
             AutoReverse = true,
-            RepeatBehavior = new RepeatBehavior(3)
+            RepeatBehavior = new RepeatBehavior(3),
+            // 正弦缓入缓出：峰和谷都不是硬拐点，避免锯齿感（时长不变，600ms 三连峰时序不变）
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
         };
         Timeline.SetDesiredFrameRate(pulse, 30); // 脉冲只有 600ms，5fps 会一帧都抽不到
         Glow.Opacity = 1;
@@ -1236,6 +1254,7 @@ public partial class MainWindow : Window
         // 有了窗口句柄才知道真实 DPI：托盘图标按它选 ico 档位（100% → 16 px，150% → 24 px）
         _tray?.UpdateIconSize((int)NativeMethods.GetDpiForWindow(_hwnd));
 
+
         // 收起态窗口贴着胶囊（176×60），先定尺寸再落位，夹紧才算得对
         ApplyWindowSize(CollapsedWidth, CollapsedHeight);
 
@@ -1247,8 +1266,7 @@ public partial class MainWindow : Window
     }
 
     protected override void OnClosed(EventArgs e)
-    {
-        if (_hwnd != IntPtr.Zero)
+    {        if (_hwnd != IntPtr.Zero)
         {
             NativeMethods.UnregisterHotKey(_hwnd, HotKeyId);
         }
@@ -1375,6 +1393,8 @@ public partial class MainWindow : Window
             return;
         }
         _leaveTimer.Stop();
+        // 悬停时描边加深一档（"轻微强调"，不放大几何，免得和展开动画的尺寸打架）
+        Island.BorderBrush = HoverBorderBrush;
         StartHover();
     }
 
@@ -1504,6 +1524,14 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>把 "#AARRGGBB" 变成冻结的实色刷（冻结后跨线程也安全，不参与布局失效）。</summary>
+    private static Brush Frozen(string hex)
+    {
+        var brush = (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
+        brush.Freeze();
+        return brush;
+    }
+
     private void Animate(bool expand)
     {
         // 已经在往同一目标动，就别重启：悬停期间 WPF 会因为窗口尺寸变化重复送 MouseEnter，
@@ -1514,7 +1542,10 @@ public partial class MainWindow : Window
         }
         _animating = true;
 
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        // 弹簧感：BackEase 的 EaseOut 会在收尾处轻轻过冲一下。Amplitude 由 SpringAmplitude 定，
+        // selftest 里按同一公式算出最大过冲像素，超过 4 DIP 就红（不许弹成果冻）。
+        var ease = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = SpringAmplitude };
+        var spring = SpringDuration;
 
         // 收起时只留主行：副行和状态行都会把 160×44 撑爆
         _expanded = expand;
@@ -1542,7 +1573,7 @@ public partial class MainWindow : Window
             ApplyWindowSize(ExpandedWidth, expandedHeight);
         }
 
-        var widthAnim = new DoubleAnimation(expand ? ExpandedWidth : CollapsedWidth, AnimDuration)
+        var widthAnim = new DoubleAnimation(expand ? ExpandedWidth : CollapsedWidth, spring)
         {
             EasingFunction = ease
         };
@@ -1559,7 +1590,7 @@ public partial class MainWindow : Window
 
         Island.BeginAnimation(WidthProperty, widthAnim);
         Island.BeginAnimation(HeightProperty,
-            new DoubleAnimation(expand ? expandedHeight : CollapsedHeight, AnimDuration) { EasingFunction = ease });
+            new DoubleAnimation(expand ? expandedHeight : CollapsedHeight, spring) { EasingFunction = ease });
 
         StartRegionTracking();
     }

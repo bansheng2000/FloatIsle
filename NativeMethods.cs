@@ -108,6 +108,7 @@ internal static class NativeMethods
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
     internal static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
+
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
     internal static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 

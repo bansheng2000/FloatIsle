@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Media.Animation;
 // UseWindowsForms 的隐式 using 会带来 System.Drawing.Size/Point
 using Point = System.Windows.Point;
 using Size = System.Windows.Size;
@@ -130,7 +131,22 @@ internal static class PlacementSelfTest
             log.AppendLine(string.Format(CultureInfo.InvariantCulture,
                 "{0} {1}  期望 {2}  实际 {3}", ok ? "PASS" : "FAIL", name, Fmt(expected), Fmt(actual)));
         }
-        log.AppendLine(failed == 0 ? $"ALL PASS ({cases.Count})" : $"FAILED {failed}/{cases.Count}");
+        // 弹簧过冲：同一组常量喂给 BackEase，算它在这批动画的最大位移上会过冲多少 DIP
+        double maxDelta = Math.Max(
+            MainWindow.ExpandedWidth - MainWindow.CollapsedWidth,
+            MainWindow.ExpandedTasksHeight - MainWindow.CollapsedHeight);
+        double overshoot = SpringOvershoot(maxDelta);
+        bool springOk = overshoot <= 4.0;
+        if (!springOk)
+        {
+            failed++;
+        }
+        log.AppendLine(string.Format(CultureInfo.InvariantCulture,
+            "{0} 弹簧过冲 ≤ 4 DIP（最大位移 {1} DIP）  期望 ≤4.00  实际 {2:F2}",
+            springOk ? "PASS" : "FAIL", maxDelta, overshoot));
+
+        int total = cases.Count + 1;
+        log.AppendLine(failed == 0 ? $"ALL PASS ({total})" : $"FAILED {failed}/{total}");
 
         try
         {
@@ -141,6 +157,22 @@ internal static class PlacementSelfTest
             // 报告写不出去也要让退出码说话
         }
         return failed == 0 ? 0 : 1;
+    }
+
+    /// <summary>把 BackEase 的最大值找出来，换算成"在这段位移上过冲了几个 DIP"。</summary>
+    private static double SpringOvershoot(double delta)
+    {
+        var ease = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = MainWindow.SpringAmplitude };
+        double max = 0;
+        for (int i = 0; i <= 1000; i++)
+        {
+            double v = ease.Ease(i / 1000.0);
+            if (v > max)
+            {
+                max = v;
+            }
+        }
+        return (max - 1.0) * delta;
     }
 
     private static string Fmt(Rect r) => string.Format(CultureInfo.InvariantCulture,
