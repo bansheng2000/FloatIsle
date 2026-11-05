@@ -54,6 +54,9 @@ public partial class MainWindow : Window
     private bool _hotKeyOk;
     private bool _regionTracking;
     private bool _restoringPlacement;
+
+    // 这次展开用的是「对称」还是「上沿不动向下长」，收回按同一模式反向走回去
+    private bool _expandSymmetric;
     private TrayIcon? _tray;
     private MediaSession? _media;
     private SettingsWindow? _settingsWindow;
@@ -872,10 +875,28 @@ public partial class MainWindow : Window
             return;
         }
 
-        // 上边缘不动、向下长（胶囊上沿不跳，贴顶展开不会把上部顶出屏幕）；左右仍居中，
-        // 超出当前显示器工作区才由 GrowDown 内部的 ClampInto 夹回来
-        Rect target = Placement.GrowDown(CurrentMonitorBox(Placement.CurrentMonitors()).Work,
-            before, new Size(width * scale, height * scale));
+        // 展开规则：上方空间够就对称（岛中心不动、四向各扩一半）；不够才上沿不动向下长，
+        // 再放不下由 GrowDown 内部的 ClampInto 夹回来。收回按同一模式反向回去。
+        Rect work = CurrentMonitorBox(Placement.CurrentMonitors()).Work;
+        Size targetSize = new(width * scale, height * scale);
+        Rect target;
+        if (height > before.Height + 0.5)
+        {
+            Rect? symmetric = Placement.ExpandSymmetric(work, before, targetSize);
+            _expandSymmetric = symmetric is not null;
+            target = symmetric ?? Placement.GrowDown(work, before, targetSize);
+        }
+        else
+        {
+            target = _expandSymmetric
+                ? Placement.ExpandSymmetric(work, before, targetSize) ?? Placement.GrowDown(work, before, targetSize)
+                : Placement.GrowDown(work, before, targetSize);
+        }
+
+        // 对称模式：岛在窗口里居中 → 窗口中心不动，岛中心自然不动。
+        // 向下长模式：岛必须贴住窗口上沿，否则岛高了以后「居中」会让岛顶往上跑（看着就是上下移动）。
+        Island.Margin = new Thickness(WindowPadding);   // 上下左右各留 padding，两种对齐才都算得对
+        Island.VerticalAlignment = _expandSymmetric ? VerticalAlignment.Center : VerticalAlignment.Top;
 
         _restoringPlacement = true;
         NativeMethods.SetWindowPos(_hwnd, IntPtr.Zero,

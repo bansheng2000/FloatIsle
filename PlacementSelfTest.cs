@@ -113,6 +113,15 @@ internal static class PlacementSelfTest
             // 150% 实机：收起 (1148,9,264×90) → 有任务行展开 504×249，top 仍为 9（不越出工作区顶）
             ("默认贴顶展开不离屏（150%，有任务行）", new Rect(1028, 9, 504, 249),
                 Placement.GrowDown(single150[0].Work, new Rect(1148, 9, 264, 90), new Size(504, 249))),
+
+            // 对称展开：上方空间够时窗口中心不动 → 岛中心也不动（1228,700 收 176×60，中心 1316,730）
+            ("对称展开：胶囊中心不变（100%，有任务行）", new Rect(1148, 647, 336, 166),
+                Placement.ExpandSymmetric(single[0].Work, new Rect(1228, 700, 176, 60), new Size(336, 166)) ?? Rect.Empty),
+
+            // 贴顶（top=0）时上方放不下 → 必须退回「上沿不动、向下长」
+            ("贴顶时对称展开放不下，退回向下长", new Rect(1148, 0, 336, 166),
+                Placement.ExpandSymmetric(single[0].Work, new Rect(1228, 0, 176, 60), new Size(336, 166))
+                ?? Placement.GrowDown(single[0].Work, new Rect(1228, 0, 176, 60), new Size(336, 166))),
         };
 
         var log = new StringBuilder();

@@ -91,6 +91,22 @@ internal static class Placement
         return ClampInto(work, new Point(x, current.Top), target);
     }
 
+    /// <summary>
+    /// 对称展开：窗口中心不动（岛本体在窗口里居中，所以岛中心也不动），四向各扩一半。
+    /// 放不进工作区就返回 null，让调用方退回 <see cref="GrowDown"/>（贴顶时上沿不动）。
+    /// </summary>
+    internal static Rect? ExpandSymmetric(Rect work, Rect current, Size target)
+    {
+        double x = current.Left + (current.Width - target.Width) / 2.0;
+        double y = current.Top + (current.Height - target.Height) / 2.0;
+        if (x < work.Left - 0.5 || y < work.Top - 0.5 ||
+            x + target.Width > work.Right + 0.5 || y + target.Height > work.Bottom + 0.5)
+        {
+            return null;
+        }
+        return new Rect(x, y, target.Width, target.Height);
+    }
+
     /// <summary>主屏；列表为空时给个 0,0 的假显示器（不该发生，但别让调用方空引用）。</summary>
     internal static MonitorBox Primary(IReadOnlyList<MonitorBox> monitors)
     {
