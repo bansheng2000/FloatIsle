@@ -511,6 +511,7 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 - **拖动只在胶囊模式**：贴顶模式下胶囊常驻但不可拖（位置由工作台的贴顶规则决定），面板横向位置跟胶囊走；拖岛时穿过窗口的鼠标事件需要穿透关闭（`Ctrl+Alt+I`）。
 - **工作台卡片拖拽只在面板内生效**：`TopTiles.CaptureMouse()` 独占鼠标，`_draggingTile` 期间 `ScheduleCollapse()` 直接 return，所以拖卡片既不会把岛拖走、也不会触发展开/收起、更不会触发任务行跳转（任务行在胶囊模式，两者不重叠）。代价是拖拽期间鼠标离开面板也保持展开，松手才恢复正常判定。
 - **卡片高度不设固定值**：`Height`/`MinHeight` 一律不写（自检断言 `Height` 是 `NaN`、`MinHeight == 0`），面板高由内容撑开；行内明细每条独立成行，不再用 ` · ` 拼串，长文案用 `CharacterEllipsis` 截断而不是换行压到下一行。
+- **不做自由坐标摆放（卡片拖到任意 x/y）**：那会直接破掉「自动列数」和「最后一行按实际高度收口」两条——卡片可以叠在一起、也可以在半空留洞，等于把布局责任推给用户。现在的「拖拽换序 + 自动列数」已经满足「我怎么拖就怎么排」；真要任意摆放得单开一套自由画布布局，不在这个网格上硬改。
 - **面板宽上限是工作区宽的一半**：卡片最小 180 DIP、最大 420 DIP，1 列时保持最小宽不拉整宽；所以内容特别短时面板会留白（180 宽），内容特别长时明细先被省略号截断。这个上限是刻意定的（岛是浮在别人窗口上的，不该占半屏以上）。
 - **`ModuleOrder` 与 `Modules` 双写**：内存里只有 `Modules` 一个真源，`ModuleOrder` 是给外部/手改留的兼容字段，只在 `SettingsStore.Save` 时回写。手改 `ModuleOrder` 后要保证 `Modules` 为空才会被采用；两者不一致时以 `Modules` 为准。
 - **设置窗整窗拖动用 `PreviewMouseLeftButtonDown`**：普通 `MouseLeftButtonDown` 会被 `ScrollViewer` 吃掉（实测 Window 上收不到事件、窗口拖不动），所以挂在隧道事件上；命中 `ButtonBase/TextBoxBase/ComboBox/Slider/ScrollBar/Thumb/PasswordBox` 时不抢拖动。设置窗位置按设备像素存 `SettingsLeftPx/TopPx`，记忆位置不在任何工作区内（含拔掉显示器）回落居中。
