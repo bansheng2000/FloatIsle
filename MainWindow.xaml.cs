@@ -1573,12 +1573,30 @@ public partial class MainWindow : Window
             ApplyWindowSize(ExpandedWidth, expandedHeight);
         }
 
-        var widthAnim = new DoubleAnimation(expand ? ExpandedWidth : CollapsedWidth, spring)
+        double targetWidth = expand ? ExpandedWidth : CollapsedWidth;
+        double targetHeight = expand ? expandedHeight : CollapsedHeight;
+
+        // FillBehavior=Stop：动画一结束就把时钟摘掉。默认的 HoldEnd 会让 Island.Width/Height
+        // 永久停在「被动画驱动」的状态（IsAnimated 一直为 true），布局/DPI/区域重算读到的
+        // 都不是基值，而且时钟一直挂着不放。
+        var widthAnim = new DoubleAnimation(targetWidth, spring)
         {
-            EasingFunction = ease
+            EasingFunction = ease,
+            FillBehavior = FillBehavior.Stop
+        };
+        var heightAnim = new DoubleAnimation(targetHeight, spring)
+        {
+            EasingFunction = ease,
+            FillBehavior = FillBehavior.Stop
         };
         widthAnim.Completed += (_, _) =>
         {
+            // 先把目标值落到基值，再摘时钟：两步顺序反了会瞬间弹回动画前的尺寸
+            Island.Width = targetWidth;
+            Island.Height = targetHeight;
+            Island.BeginAnimation(WidthProperty, null);
+            Island.BeginAnimation(HeightProperty, null);
+
             _animating = false;
             StopRegionTracking();
             if (!expand && !_dragging)
@@ -1589,8 +1607,7 @@ public partial class MainWindow : Window
         };
 
         Island.BeginAnimation(WidthProperty, widthAnim);
-        Island.BeginAnimation(HeightProperty,
-            new DoubleAnimation(expand ? expandedHeight : CollapsedHeight, spring) { EasingFunction = ease });
+        Island.BeginAnimation(HeightProperty, heightAnim);
 
         StartRegionTracking();
     }
