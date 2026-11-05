@@ -849,6 +849,9 @@ public partial class MainWindow : Window
     /// <summary>
     /// 窗口尺寸 = 岛上内容 + 两侧留白。尺寸变了要顺手把窗口挪一下，
     /// 保证胶囊中心不跳（区域随后按新尺寸重算）。
+    /// 位置和尺寸**必须一次 SetWindowPos 落地**：先改 WPF 的 Width/Height 会让布局单独
+    /// 再发一次 SetWindowPos，那一次位置还是旧的——用户看到的就是「先原地长大、40ms 后
+    /// 再左移 80px」。收也是同理（先在偏左位置缩回、再右移）。
     /// </summary>
     private void ApplyWindowSize(double islandWidth, double islandHeight)
     {
@@ -859,24 +862,34 @@ public partial class MainWindow : Window
             return;
         }
 
+        double scale = CurrentScale;
         Rect before = WindowPixelRect();
-
-        Width = width;
-        Height = height;
 
         if (_hwnd == IntPtr.Zero)
         {
+            Width = width;
+            Height = height;
             return;
         }
-        double scale = CurrentScale;
-        double px = width * scale;
-        double py = height * scale;
 
         // 上边缘不动、向下长（胶囊上沿不跳，贴顶展开不会把上部顶出屏幕）；左右仍居中，
         // 超出当前显示器工作区才由 GrowDown 内部的 ClampInto 夹回来
         Rect target = Placement.GrowDown(CurrentMonitorBox(Placement.CurrentMonitors()).Work,
-            before, new Size(px, py));
-        MoveTo(target);
+            before, new Size(width * scale, height * scale));
+
+        _restoringPlacement = true;
+        NativeMethods.SetWindowPos(_hwnd, IntPtr.Zero,
+            (int)Math.Round(target.Left), (int)Math.Round(target.Top),
+            (int)Math.Round(target.Width), (int)Math.Round(target.Height),
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+
+        // 再把 WPF 侧同步到同一个矩形；值已经一致，WPF 后续自己的 SetWindowPos 不会再挪一下
+        Left = target.Left / scale;
+        Top = target.Top / scale;
+        Width = target.Width / scale;
+        Height = target.Height / scale;
+        _restoringPlacement = false;
+
         UpdateWindowRegion();
     }
 
