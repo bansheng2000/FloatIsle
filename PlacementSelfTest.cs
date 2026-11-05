@@ -104,6 +104,14 @@ internal static class PlacementSelfTest
             // 展开态不参与落位，仅验证夹紧：336×136 居中 → (2560−336)/2 = 1112
             ("展开尺寸传入时夹紧仍正确（仅夹紧，不是落位契约）", new Rect(1112, 6, 336, 136),
                 Placement.Resolve(single, null, null, Expanded, 1.0)),
+
+            // 贴顶展开必须留在屏内：上边缘不动、向下长（100% 默认 top=6，有任务行 336×166）
+            ("默认贴顶展开不离屏（100%，有任务行）", new Rect(1112, 6, 336, 166),
+                Placement.GrowDown(single[0].Work, new Rect(1192, 6, 176, 60), new Size(336, 166))),
+
+            // 150% 实机：收起 (1148,9,264×90) → 有任务行展开 504×249，top 仍为 9（不越出工作区顶）
+            ("默认贴顶展开不离屏（150%，有任务行）", new Rect(1028, 9, 504, 249),
+                Placement.GrowDown(single150[0].Work, new Rect(1148, 9, 264, 90), new Size(504, 249))),
         };
 
         var log = new StringBuilder();

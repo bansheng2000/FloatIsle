@@ -80,6 +80,17 @@ internal static class Placement
             size.Height);
     }
 
+    /// <summary>
+    /// 展开/收起时摆窗口：<b>上边缘不动、向下长</b>，左右仍围绕原中心；
+    /// 长出去超出工作区才用 <see cref="ClampInto"/> 夹回来（面板比工作区高时贴顶）。
+    /// 旧做法是保持窗口中心，贴顶 6 DIP 时展开会把面板顶出屏幕上沿。
+    /// </summary>
+    internal static Rect GrowDown(Rect work, Rect current, Size target)
+    {
+        double x = current.Left + (current.Width - target.Width) / 2.0;
+        return ClampInto(work, new Point(x, current.Top), target);
+    }
+
     /// <summary>主屏；列表为空时给个 0,0 的假显示器（不该发生，但别让调用方空引用）。</summary>
     internal static MonitorBox Primary(IReadOnlyList<MonitorBox> monitors)
     {

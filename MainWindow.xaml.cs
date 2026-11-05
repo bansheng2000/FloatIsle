@@ -37,6 +37,8 @@ public partial class MainWindow : Window
     private readonly string? _settingsBackupPath;
     private readonly FullscreenWatcher _fullscreen;
     private readonly DispatcherTimer _hoverTimer;
+    // 收起前的二次确认：自己挪窗/改区域会给一次假 MouseLeave，隔 150ms 看光标是不是真的走了
+    private readonly DispatcherTimer _leaveTimer;
 
     private IntPtr _hwnd;
     private HwndSource? _hwndSource;
@@ -54,6 +56,7 @@ public partial class MainWindow : Window
     private UsageSnapshot? _usage;
     private UsageWatcher? _usageWatcher;
     private bool _expanded;
+    private bool _animating; // 展开/收起动画是否在跑（重复的 MouseEnter 不许重启动画，否则岛会上下抽动）
 
     // 任务面板接收端：心跳/事件驱动，空闲时没有轮询（只有一个一次性超时定时器）
     private TasksHub? _tasks;
@@ -133,6 +136,22 @@ public partial class MainWindow : Window
         };
 
         // 悬停展开延迟：0 时直接展开，定时器不启动
+        _leaveTimer = new DispatcherTimer(DispatcherPriority.Normal);
+        _leaveTimer.Interval = TimeSpan.FromMilliseconds(150);
+        _leaveTimer.Tick += (_, _) =>
+        {
+            _leaveTimer.Stop();
+            if (_dragging)
+            {
+                return;
+            }
+            if (CursorOverIsland() || Island.IsMouseOver)
+            {
+                return; // 假离开：光标还在岛上，保持展开
+            }
+            Animate(false);
+        };
+
         _hoverTimer = new DispatcherTimer(DispatcherPriority.Normal);
         _hoverTimer.Tick += (_, _) =>
         {
@@ -232,6 +251,9 @@ public partial class MainWindow : Window
     private bool _glowBreathing;
     private bool _glowSteady;
     private bool _glowPulse;
+    // 脉冲是「独占」状态：期间任何 Changed 都不许重开呼吸（会通过 BeginAnimation 顶掉脉冲），
+    // 这段时间内又完成的任务排一次队，等当前 3 次脉冲放完再放下一组
+    private bool _glowPulseQueued;
 
     private bool HasActiveTasks => TasksConnectedNow && _tasks!.ActiveCount > 0;
 
@@ -262,14 +284,15 @@ public partial class MainWindow : Window
     /// <summary>整圈同步明暗：亮 1 秒 / 暗 1 秒，正弦缓动，只动描边透明度（胶囊本体和文字不动）。</summary>
     private void StartBreath()
     {
-        if (_glowBreathing)
+        // 脉冲期间不许重开呼吸：两者写的是同一个 Opacity 属性，BeginAnimation 会把脉冲顶掉
+        if (_glowBreathing || _glowPulse)
         {
             return;
         }
         _glowBreathing = true;
         Glow.Stroke = _glowBrush;
         Glow.Visibility = Visibility.Visible;
-        var breath = new DoubleAnimation(0.25, 1, TimeSpan.FromMilliseconds(1000))
+        var breath = new DoubleAnimation(0.45, 1, TimeSpan.FromMilliseconds(1000))
         {
             AutoReverse = true,
             RepeatBehavior = RepeatBehavior.Forever,
@@ -297,12 +320,18 @@ public partial class MainWindow : Window
         {
             return;
         }
+        if (_glowPulse)
+        {
+            // 已经在一组 3 次脉冲里：排队，等这组放完再闪下一组（不互相顶掉）
+            _glowPulseQueued = true;
+            return;
+        }
         Glow.Stroke = _glowBrush;
         _glowPulse = true;
         _glowBreathing = false; // 呼吸让位给脉冲
         Glow.Visibility = Visibility.Visible;
         Glow.BeginAnimation(UIElement.OpacityProperty, null);
-        var pulse = new DoubleAnimation(0.25, 1, TimeSpan.FromMilliseconds(100))
+        var pulse = new DoubleAnimation(0.35, 1, TimeSpan.FromMilliseconds(100))
         {
             AutoReverse = true,
             RepeatBehavior = new RepeatBehavior(3)
@@ -312,6 +341,13 @@ public partial class MainWindow : Window
         pulse.Completed += (_, _) =>
         {
             _glowPulse = false;
+            if (_glowPulseQueued)
+            {
+                // 排队的那次完成：紧接着再放一组 3 次脉冲
+                _glowPulseQueued = false;
+                OnTaskCompleted();
+                return;
+            }
             // 闪完：还有活就回呼吸，否则保持「常亮但暗一档」
             if (HasActiveTasks)
             {
@@ -806,8 +842,6 @@ public partial class MainWindow : Window
         }
 
         Rect before = WindowPixelRect();
-        double centerX = before.Left + before.Width / 2.0;
-        double centerY = before.Top + before.Height / 2.0;
 
         Width = width;
         Height = height;
@@ -819,7 +853,12 @@ public partial class MainWindow : Window
         double scale = CurrentScale;
         double px = width * scale;
         double py = height * scale;
-        MoveTo(new Rect(centerX - px / 2.0, centerY - py / 2.0, px, py));
+
+        // 上边缘不动、向下长（胶囊上沿不跳，贴顶展开不会把上部顶出屏幕）；左右仍居中，
+        // 超出当前显示器工作区才由 GrowDown 内部的 ClampInto 夹回来
+        Rect target = Placement.GrowDown(CurrentMonitorBox(Placement.CurrentMonitors()).Work,
+            before, new Size(px, py));
+        MoveTo(target);
         UpdateWindowRegion();
     }
 
@@ -1194,6 +1233,9 @@ public partial class MainWindow : Window
         // 配置里的「默认穿透」等句柄就绪后才真正生效
         SetClickThrough(_settings.ClickThrough);
 
+        // 有了窗口句柄才知道真实 DPI：托盘图标按它选 ico 档位（100% → 16 px，150% → 24 px）
+        _tray?.UpdateIconSize((int)NativeMethods.GetDpiForWindow(_hwnd));
+
         // 收起态窗口贴着胶囊（176×60），先定尺寸再落位，夹紧才算得对
         ApplyWindowSize(CollapsedWidth, CollapsedHeight);
 
@@ -1202,9 +1244,6 @@ public partial class MainWindow : Window
 
         // 形态：贴顶模式在这里挂上钩子并把自己藏起来（胶囊模式什么都不做）
         ApplyMode();
-
-        // 托盘图标按当前缩放挑最合适的那一档（150% 下用 24×24，不要拿 16 放大）
-        _tray?.UpdateIconSize((int)NativeMethods.GetDpiForWindow(_hwnd));
     }
 
     protected override void OnClosed(EventArgs e)
@@ -1241,7 +1280,6 @@ public partial class MainWindow : Window
         {
             // 缩放变了（系统改缩放，或岛被挪到另一块缩放不同的屏）：lParam 是系统给的建议矩形（物理像素）
             NativeMethods.RECT r = Marshal.PtrToStructure<NativeMethods.RECT>(lParam);
-            int newDpi = (int)(wParam.ToInt64() & 0xFFFF);
             _restoringPlacement = true;
             NativeMethods.SetWindowPos(_hwnd, IntPtr.Zero, r.Left, r.Top,
                 r.Right - r.Left, r.Bottom - r.Top,
@@ -1249,6 +1287,8 @@ public partial class MainWindow : Window
             _restoringPlacement = false;
 
             // 区域要等布局按新 DPI 落定后再算，否则仍拿旧 ActualWidth 画圆角
+            // 托盘图标同理：换缩放后要按新 DPI 重新选 ico 档位，否则还是旧档、看着发糊
+            int newDpi = (int)(wParam.ToInt64() & 0xFFFF);
             Dispatcher.BeginInvoke(
                 new Action(() =>
                 {
@@ -1334,6 +1374,7 @@ public partial class MainWindow : Window
         {
             return;
         }
+        _leaveTimer.Stop();
         StartHover();
     }
 
@@ -1359,7 +1400,24 @@ public partial class MainWindow : Window
             return;
         }
         _hoverTimer.Stop();
-        Animate(false);
+
+        // 自己 SetWindowPos / 改区域时系统会补发假 MouseLeave。隔 150ms 再确认一次：
+        // 光标真走了才收起，否则「展开→leave→收起→enter→展开」会一直抖（用户看到的就是岛一直在闪）。
+        _leaveTimer.Stop();
+        _leaveTimer.Start();
+    }
+
+    /// <summary>光标是否真的落在岛上（用屏幕坐标反算，绕开 WPF 在窗口挪动时给的假 MouseLeave）。</summary>
+    private bool CursorOverIsland()
+    {
+        if (_hwnd == IntPtr.Zero || !Island.IsVisible ||
+            !NativeMethods.GetCursorPos(out NativeMethods.POINT pt))
+        {
+            return false;
+        }
+        Point local = Island.PointFromScreen(new Point(pt.X, pt.Y));
+        return local.X >= 0 && local.Y >= 0 &&
+               local.X <= Island.ActualWidth && local.Y <= Island.ActualHeight;
     }
 
     /// <summary>
@@ -1448,6 +1506,14 @@ public partial class MainWindow : Window
 
     private void Animate(bool expand)
     {
+        // 已经在往同一目标动，就别重启：悬停期间 WPF 会因为窗口尺寸变化重复送 MouseEnter，
+        // 每次重启动画都从当前帧重新缓动，肉眼看到的就是「上下来回闪」。
+        if (_animating && expand == _expanded)
+        {
+            return;
+        }
+        _animating = true;
+
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
         // 收起时只留主行：副行和状态行都会把 160×44 撑爆
@@ -1482,6 +1548,7 @@ public partial class MainWindow : Window
         };
         widthAnim.Completed += (_, _) =>
         {
+            _animating = false;
             StopRegionTracking();
             if (!expand && !_dragging)
             {
