@@ -21,8 +21,15 @@
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <!-- 版本号唯一真相源：安装包的 AppVersion 从这里编译进 exe 的版本资源里读（installer/FloatIsle.iss） -->
     <Version>0.2.0</Version>
+    <!-- exe 本体图标（资源管理器/任务栏）；托盘运行时从下面的嵌入资源按 DPI 选档，不依赖 exe 旁边的散文件 -->
+    <ApplicationIcon>assets\floatisle.ico</ApplicationIcon>
     <!-- 默认会把 git 提交号拼进 ProductVersion（0.2.0+<sha>），安装包读到的版本就不干净了，关掉 -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
+
+  <!-- 托盘图标的多尺寸 ico 作为嵌入资源打包：运行时按 DPI 从流里挑档，装到别的目录也不会丢 -->
+  <ItemGroup>
+    <EmbeddedResource Include="assets\floatisle.ico" />
+  </ItemGroup>
 
 </Project>

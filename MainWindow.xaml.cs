@@ -1202,6 +1202,9 @@ public partial class MainWindow : Window
 
         // 形态：贴顶模式在这里挂上钩子并把自己藏起来（胶囊模式什么都不做）
         ApplyMode();
+
+        // 托盘图标按当前缩放挑最合适的那一档（150% 下用 24×24，不要拿 16 放大）
+        _tray?.UpdateIconSize((int)NativeMethods.GetDpiForWindow(_hwnd));
     }
 
     protected override void OnClosed(EventArgs e)
@@ -1238,6 +1241,7 @@ public partial class MainWindow : Window
         {
             // 缩放变了（系统改缩放，或岛被挪到另一块缩放不同的屏）：lParam 是系统给的建议矩形（物理像素）
             NativeMethods.RECT r = Marshal.PtrToStructure<NativeMethods.RECT>(lParam);
+            int newDpi = (int)(wParam.ToInt64() & 0xFFFF);
             _restoringPlacement = true;
             NativeMethods.SetWindowPos(_hwnd, IntPtr.Zero, r.Left, r.Top,
                 r.Right - r.Left, r.Bottom - r.Top,
@@ -1250,6 +1254,7 @@ public partial class MainWindow : Window
                 {
                     UpdateWindowRegion();
                     SavePlacement();
+                    _tray?.UpdateIconSize(newDpi);
                 }),
                 DispatcherPriority.Loaded);
 
