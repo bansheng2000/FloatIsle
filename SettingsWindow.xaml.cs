@@ -2,9 +2,17 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
 // UseWindowsForms 的隐式 using 带进了同名的 WinForms 控件，钉死用 WPF 的
 using Button = System.Windows.Controls.Button;
+using ButtonBase = System.Windows.Controls.Primitives.ButtonBase;
 using CheckBox = System.Windows.Controls.CheckBox;
+using ComboBox = System.Windows.Controls.ComboBox;
+using ScrollBar = System.Windows.Controls.Primitives.ScrollBar;
+using TextBoxBase = System.Windows.Controls.Primitives.TextBoxBase;
+using Thumb = System.Windows.Controls.Primitives.Thumb;
 using Orientation = System.Windows.Controls.Orientation;
 
 namespace FloatIsle;
@@ -79,6 +87,10 @@ public partial class SettingsWindow : Window
         _statusTimer.Tick += (_, _) => UpdateTasksStatus();
         _statusTimer.Start();
         Closed += (_, _) => _statusTimer.Stop();
+
+        // 记忆位置：窗口句柄一出来（还没显示）就把 Left/Top 摆好，用户看不到跳一下
+        SourceInitialized += (_, _) => RestorePosition();
+        Closing += (_, _) => SavePosition();
 
         if (owner.SettingsBackupPath is string backup)
         {
@@ -367,6 +379,88 @@ public partial class SettingsWindow : Window
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    // ---------- 整窗拖动 + 位置记忆 ----------
+
+    /// <summary>
+    /// 整窗可拖：任意空白处（含文字）按住就能拖走；按钮/下拉/滑块/输入框/滚动条上不抢拖动。
+    /// 用 DragMove() 是最省事的：这是普通激活窗口，不受岛上「不抢焦点」那条约束。
+    /// </summary>
+    private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ButtonState != MouseButtonState.Pressed || IsInteractive(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+        try
+        {
+            DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+            // 鼠标已松开或被别处捕获时 DragMove 会抛，忽略即可
+        }
+    }
+
+    /// <summary>点在可交互控件（或其子孙）上就不拖窗口，否则按钮会按不动、滑块会跳。</summary>
+    private static bool IsInteractive(DependencyObject? node)
+    {
+        while (node is not null)
+        {
+            if (node is ButtonBase or TextBoxBase or ComboBox or Slider or ScrollBar or Thumb or PasswordBox)
+            {
+                return true;
+            }
+            node = VisualTreeHelper.GetParent(node);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 回到上次的位置（设备像素存盘，除回 DIP）。记的位置不在任何工作区内（拔了显示器、
+    /// 改了分辨率）就保持 CenterScreen —— 宁可从中间开，也别开到屏幕外找不回来。
+    /// </summary>
+    private void RestorePosition()
+    {
+        if (_owner.Settings.SettingsLeftPx is not double leftPx
+            || _owner.Settings.SettingsTopPx is not double topPx)
+        {
+            return;
+        }
+
+        double scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        if (scale <= 0)
+        {
+            return;
+        }
+
+        // 用标称尺寸做「在不在屏内」判定：SourceInitialized 时 ActualHeight 可能还是 0
+        var probe = new Rect(leftPx, topPx, Math.Max(1, Width * scale), Math.Max(1, 200 * scale));
+        if (!Placement.IsVisibleOnSomeMonitor(Placement.CurrentMonitors(), probe))
+        {
+            return;
+        }
+
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = leftPx / scale;
+        Top = topPx / scale;
+    }
+
+    /// <summary>关窗时记住位置（设备像素），下次打开回到这里。</summary>
+    private void SavePosition()
+    {
+        double scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        if (scale <= 0 || double.IsNaN(Left) || double.IsNaN(Top))
+        {
+            return;
+        }
+
+        _owner.UpdateSettings(s =>
+        {
+            s.SettingsLeftPx = Left * scale;
+            s.SettingsTopPx = Top * scale;
+        });
+    }
 }
 
 

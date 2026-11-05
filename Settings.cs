@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -79,8 +79,19 @@ internal sealed class AppSettings
     /// <summary>鼠标停在岛上多久后展开，0 = 立即。</summary>
     public int HoverDelayMs { get; set; }
 
-    /// <summary>岛上模块的显示开关与顺序（数组顺序就是显示顺序）。</summary>
+    /// <summary>岛上模块的显示开关与顺序（数组顺序就是显示顺序）。内存里顺序的唯一真源。</summary>
     public List<IslandModule> Modules { get; set; } = new();
+
+    /// <summary>
+    /// 工作台卡片的顺序（模块 id 数组）。落盘时由 <see cref="Modules"/> 回写，读盘时只在
+    /// Modules 缺失时用它建列表——两份顺序永远同源，不会各说一套。
+    /// </summary>
+    public List<string>? ModuleOrder { get; set; }
+
+    /// <summary>设置窗口上次的位置（<b>设备像素</b>）；不在任何工作区内时回落居中。</summary>
+    public double? SettingsLeftPx { get; set; }
+
+    public double? SettingsTopPx { get; set; }
 
     /// <summary>收起时主行显示哪一项：media / usage / tasks。</summary>
     public string CollapsedLine { get; set; } = IslandModuleIds.Media;
@@ -109,6 +120,17 @@ internal sealed class AppSettings
         }
         Opacity = Math.Clamp(Opacity, 0.2, 1.0);
         HoverDelayMs = Math.Clamp(HoverDelayMs, 0, 2000);
+
+        // 只写了 ModuleOrder（外部工具/手改）而没有 Modules：先按它建出列表，再由
+        // NormalizeModules 补齐缺的、丢掉不认识的。两份都有时以 Modules 为准。
+        if ((Modules is null || Modules.Count == 0) && ModuleOrder is { Count: > 0 })
+        {
+            Modules = ModuleOrder
+                .Where(IslandModuleIds.IsKnown)
+                .Distinct()
+                .Select(id => new IslandModule { Id = id })
+                .ToList();
+        }
 
         NormalizeModules();
 
@@ -196,6 +218,40 @@ internal sealed class AppSettings
 
         Modules = ordered;
     }
+
+    /// <summary>
+    /// 拖拽换位：按可见卡片的顺序重排；<b>隐藏模块钉在原位置不动</b>（列表里保留位置）。
+    /// 只重排、不增删，不认识的 id 直接忽略（拖拽只在面板内发生，不该带进新 id）。
+    /// </summary>
+    internal void ReorderVisible(IReadOnlyList<string> visibleOrder)
+    {
+        var byId = new Dictionary<string, IslandModule>(StringComparer.Ordinal);
+        foreach (IslandModule module in Modules)
+        {
+            byId[module.Id] = module;
+        }
+        var wanted = new List<IslandModule>(visibleOrder.Count);
+        foreach (string id in visibleOrder)
+        {
+            if (byId.TryGetValue(id, out IslandModule? module) && module.Visible && !wanted.Contains(module))
+            {
+                wanted.Add(module);
+            }
+        }
+
+        var result = new List<IslandModule>(Modules.Count);
+        int next = 0;
+        foreach (IslandModule module in Modules)
+        {
+            if (!module.Visible)
+            {
+                result.Add(module);
+                continue;
+            }
+            result.Add(next < wanted.Count ? wanted[next++] : module);
+        }
+        Modules = result;
+    }
 }
 
 /// <summary>读取结果：坏文件被改名后要把 .bak 路径报给用户/设置面板。</summary>
@@ -256,6 +312,8 @@ internal static class SettingsStore
     {
         try
         {
+            // 顺序真源是 Modules：落盘时同步一份 id 数组，人读文件/外部脚本改顺序都有据可依
+            settings.ModuleOrder = settings.Modules.Select(m => m.Id).ToList();
             Directory.CreateDirectory(FolderPath);
             string tmp = FilePath + ".tmp";
             File.WriteAllText(tmp, JsonSerializer.Serialize(settings, Options));

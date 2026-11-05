@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 // UseWindowsForms 的隐式 using 会带来 System.Drawing.Size/Point，钉死用 WPF 的
 using Brush = System.Windows.Media.Brush;
+using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
 using Size = System.Windows.Size;
 using System.Windows.Interop;
@@ -87,12 +88,20 @@ public partial class MainWindow : Window
     private Rect _dragWindowStart;
 
     // 贴顶工作台：钩子只在光标碰顶时投一条消息，回 UI 线程才建面板
-    private const double TopPanelWidth = 560;
-    private const double TopPanelEdgeMargin = 24;
+    /// <summary>面板宽（DIP）：LayoutTiles 按内容自然宽度 + 工作区宽度算，这里是首次测量前的兜底。</summary>
+    private double _topWidth = 520;
     private TopEdgeHook? _edgeHook;
     private bool _topOpen;
     private double _topHeight;
+    private int _topColumns = 2;
+    private double _topCardWidth = 260;
     private string? _topTilesKey;
+
+    /// <summary>当前面板里卡片的实际顺序（拖拽预览只换这里 + 网格位置，松手才写配置）。</summary>
+    private readonly List<System.Windows.Controls.Border> _tileOrder = new();
+    private System.Windows.Controls.Border? _dragTile;
+    private Point _dragFrom;
+    private bool _draggingTile;
     // 当前已经套用过的形态：设置每改一项都会走 ApplySettings，形态没变就别重摆窗口
     private string? _appliedMode;
 
@@ -536,6 +545,7 @@ public partial class MainWindow : Window
     /// <summary>把工作台面板收干净，不动窗口、不放动画：切形态/全屏让位/异常路径用。</summary>
     private void ResetWorkbench()
     {
+        EndTileDrag();
         _topOpen = false;
         if (_edgeHook is not null)
         {
@@ -640,21 +650,21 @@ public partial class MainWindow : Window
             _edgeHook.Open = true; // 面板开着期间钩子别再投消息
         }
         _expanded = true; // 面板里的文字用展开态
-        RefreshTopTiles();
         RefreshIslandText();
 
         TopPanel.Visibility = Visibility.Visible;
         // 面板接在胶囊下沿（窗口顶部留白 + 胶囊高），不留缝
         TopPanel.Margin = new Thickness(0, CollapsedHeight + WindowPadding * 2, 0, 0);
-        TopTiles.Measure(new Size(TopPanelWidth - 32, double.PositiveInfinity));
-        _topHeight = Math.Max(120, TopTiles.DesiredSize.Height + 32); // 上下各 16 DIP 内边距
+        // relayout:false —— 这次展开自己会摆窗口，别让 RefreshTopTiles 多来一次 SetWindowPos
+        RefreshTopTiles(relayout: false);
+        _topHeight = MeasureWorkbenchHeight();
 
         double scale = CurrentScale;
         Rect before = WindowPixelRect();
         Rect work = CurrentMonitorBox(Placement.CurrentMonitors()).Work;
         // GrowDown = 上沿不动 + 左右居中 + 放不下才夹回工作区，正是贴顶要的语义
         PlaceWindowRect(Placement.GrowDown(work, before, new Size(
-            TopPanelWidth * scale,
+            _topWidth * scale,
             (CollapsedHeight + WindowPadding * 2 + _topHeight) * scale)));
 
         TopPanel.BeginAnimation(HeightProperty, null);
@@ -717,10 +727,10 @@ public partial class MainWindow : Window
     private void TopPanel_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e) => ScheduleCollapse();
 
     /// <summary>
-    /// 贴顶面板的三块卡片：用量 / 任务 / 媒体。数据与胶囊上的文字同源（同一份快照）。
-    /// 两列由 XAML 里 WrapPanel 的 ItemWidth=264 决定（560 - 32 内边距 - 12 间距，除 2）。
+    /// 贴顶面板的卡片：按 <c>Modules</c> 的顺序与显示开关建卡（隐藏的不建卡、不占位）。
+    /// 只建结构 + 铺网格，不量高度——高度要等面板可见后由 <see cref="MeasureWorkbenchHeight"/> 量。
     /// </summary>
-    private void RefreshTopTiles()
+    private void RefreshTopTiles(bool relayout = true)
     {
         if (!IsTopMode || TopTiles is null)
         {
@@ -736,11 +746,14 @@ public partial class MainWindow : Window
             _usage?.FiveHour?.ToString() ?? "-",
             _usage?.Weekly?.ToString() ?? "-",
             _usage?.Monthly?.ToString() ?? "-",
+            (_usage?.Cost ?? -1).ToString("F2"),
             _mediaInfo.Title ?? "",
             _mediaInfo.Artist ?? "",
             _mediaInfo.Status ?? "",
             TasksConnectedNow ? "1" : "0",
             string.Join("\u0002", TaskList.Select(r => $"{r.Sid}:{(int)r.State}:{r.Workspace}")),
+            // 顺序与显示开关也进 key：设置里上移/下移、关掉一个模块、拖拽换位都要重建
+            string.Join(",", _settings.Modules.Select(m => m.Id + (m.Visible ? "+" : "-"))),
         });
         if (key == _topTilesKey)
         {
@@ -748,62 +761,230 @@ public partial class MainWindow : Window
         }
         _topTilesKey = key;
 
+        EndTileDrag();
         TopTiles.Children.Clear();
-        TopTiles.Children.Add(Tile(
-            "今日用量",
-            _usage is null ? "无数据" : UsageLedger.UsageLine(_usage),
-            _usage is null ? "账本里没有今天的数据" : UsageLedger.QuotaLine(_usage)));
+        _tileOrder.Clear();
 
+        foreach (IslandModule module in _settings.Modules)
+        {
+            if (!module.Visible)
+            {
+                continue;
+            }
+            System.Windows.Controls.Border? card = BuildTopTile(module);
+            if (card is null)
+            {
+                continue;
+            }
+            card.Tag = module.Id;
+            card.MouseLeftButtonDown += Tile_MouseLeftButtonDown;
+            _tileOrder.Add(card);
+            TopTiles.Children.Add(card);
+        }
+
+        if (_tileOrder.Count == 0)
+        {
+            // 全关掉了：给一句提示，别留一块空面板
+            System.Windows.Controls.Border empty = Tile("工作台", "没有可显示的模块", "在设置里打开「岛内容」的显示开关");
+            empty.Tag = "";
+            _tileOrder.Add(empty);
+            TopTiles.Children.Add(empty);
+        }
+
+        LayoutTiles();
+        if (relayout)
+        {
+            RelayoutOpenWorkbench();
+        }
+    }
+
+    /// <summary>按内容自然宽度算列数与卡片宽，铺进网格（不量高度：高度等面板可见后再量）。</summary>
+    private void LayoutTiles()
+    {
+        double natural = 0;
+        foreach (System.Windows.Controls.Border card in _tileOrder)
+        {
+            card.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            natural = Math.Max(natural, card.DesiredSize.Width);
+        }
+
+        double workWidthDip = CurrentMonitorBox(Placement.CurrentMonitors()).Work.Width / CurrentScale;
+        var layout = Placement.WorkbenchLayout(workWidthDip, _tileOrder.Count, natural);
+        _topColumns = layout.Columns;
+        _topCardWidth = layout.CardWidth;
+        _topWidth = layout.PanelWidth;
+
+        TopTiles.ColumnDefinitions.Clear();
+        TopTiles.RowDefinitions.Clear();
+        for (int c = 0; c < _topColumns; c++)
+        {
+            TopTiles.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition
+            {
+                Width = new GridLength(_topCardWidth)
+            });
+            if (c < _topColumns - 1)
+            {
+                TopTiles.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition
+                {
+                    Width = new GridLength(Placement.TileGap)
+                });
+            }
+        }
+        int rows = (_tileOrder.Count + _topColumns - 1) / _topColumns;
+        for (int r = 0; r < rows; r++)
+        {
+            TopTiles.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = GridLength.Auto });
+            if (r < rows - 1)
+            {
+                TopTiles.RowDefinitions.Add(new System.Windows.Controls.RowDefinition
+                {
+                    Height = new GridLength(Placement.TileGap)
+                });
+            }
+        }
+
+        foreach (System.Windows.Controls.Border card in _tileOrder)
+        {
+            card.Width = _topCardWidth;
+            card.Margin = new Thickness(0); // 间距由网格的空行/空列给，卡片自己不留边距
+            // 顶对齐：卡片高度 = 内容 + 内边距，同一行里矮的卡不被拉高（拉高就是空气）
+            card.VerticalAlignment = VerticalAlignment.Top;
+        }
+        ApplyTilePositions();
+        TopPanel.Width = _topWidth;
+    }
+
+    /// <summary>按当前顺序把卡片摆进网格（拖拽预览时也调这个：只换位置，不重建卡片）。</summary>
+    private void ApplyTilePositions()
+    {
+        for (int i = 0; i < _tileOrder.Count; i++)
+        {
+            System.Windows.Controls.Grid.SetColumn(_tileOrder[i], 2 * (i % _topColumns));
+            System.Windows.Controls.Grid.SetRow(_tileOrder[i], 2 * (i / _topColumns));
+        }
+    }
+
+    /// <summary>
+    /// 量面板高度：卡片全部 Auto 高，面板高 = 卡片网格高 + 上下内边距。
+    /// 没有固定最小高、没有 MinHeight 撑出来的空气。必须在 TopPanel 可见后调用。
+    /// </summary>
+    private double MeasureWorkbenchHeight()
+    {
+        TopPanel.Width = _topWidth;
+        TopTiles.Measure(new Size(Math.Max(1, _topWidth - (2 * Placement.PanelPadding)), double.PositiveInfinity));
+        // DesiredSize 已经含 TopTiles 自己的 Margin（=PanelPadding，上下各一份），
+        // 再补一次 2*PanelPadding 就是底部多出 32 DIP 的空气——这里只认 DesiredSize。
+        return Math.Max(1, TopTiles.DesiredSize.Height);
+    }
+
+    /// <summary>面板开着时改了顺序/开关/内容：重算高宽，仍然一次 SetWindowPos、上沿不动。</summary>
+    private void RelayoutOpenWorkbench()
+    {
+        if (!_topOpen || TopPanel.Visibility != Visibility.Visible || _hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+        _topHeight = MeasureWorkbenchHeight();
+        TopPanel.BeginAnimation(HeightProperty, null);
+        TopPanel.Height = _topHeight;
+        double scale = CurrentScale;
+        Rect work = CurrentMonitorBox(Placement.CurrentMonitors()).Work;
+        PlaceWindowRect(Placement.GrowDown(work, WindowPixelRect(), new Size(
+            _topWidth * scale,
+            (CollapsedHeight + (WindowPadding * 2) + _topHeight) * scale)));
+    }
+
+    /// <summary>一块卡片的文案：每条信息独立一行（或「字段名：值」），不再用「 · 」串长串。</summary>
+    private System.Windows.Controls.Border? BuildTopTile(IslandModule module)
+    {
+        switch (module.Id)
+        {
+            case IslandModuleIds.Usage:
+                return Tile(
+                    "今日用量",
+                    _usage is null ? "无数据" : UsageLedger.UsageMain(_usage),
+                    _usage is null ? new[] { "账本里没有今天的数据" } : UsageLedger.UsageDetails(_usage).ToArray());
+            case IslandModuleIds.Quota:
+                return Tile(
+                    "余额 / 额度",
+                    _usage is null ? "无数据" : UsageLedger.QuotaMain(_usage),
+                    _usage is null ? new[] { "账本里没有今天的数据" } : UsageLedger.QuotaDetails(_usage).ToArray());
+            case IslandModuleIds.Tasks:
+                return BuildTaskTile();
+            case IslandModuleIds.Media:
+                return Tile(
+                    "媒体",
+                    _settings.MediaEnabled ? mediaTitleLine() : "媒体信息已关闭",
+                    MediaDetails());
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>媒体卡副行：演唱者、状态各占一行（原来是一行里用「 · 」拼起来）。</summary>
+    private string[] MediaDetails()
+    {
+        if (!_settings.MediaEnabled || string.IsNullOrWhiteSpace(_mediaInfo.Title))
+        {
+            return Array.Empty<string>();
+        }
+        return new[] { _mediaInfo.Artist ?? "", _mediaInfo.Status ?? "" }
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToArray();
+    }
+
+    private System.Windows.Controls.Border BuildTaskTile()
+    {
         IReadOnlyList<TaskRow> rows = TaskList;
-        var taskLines = new System.Collections.Generic.List<string>();
+        var details = new List<string>();
         if (!TasksConnectedNow)
         {
-            taskLines.Add(_tasks?.ShortStatus ?? "未连接");
+            details.Add(_tasks?.ShortStatus ?? "未连接");
         }
         else if (rows.Count == 0)
         {
-            taskLines.Add("没有正在运行的会话");
+            details.Add("没有正在运行的会话");
         }
         else
         {
-            foreach (TaskRow row in rows.Take(3))
+            foreach (TaskRow row in rows.Take(4))
             {
                 string workspace = string.IsNullOrWhiteSpace(row.Workspace) ? "未命名工作区" : row.Workspace;
-                taskLines.Add($"{workspace} · {row.StateText}");
+                details.Add($"{workspace}：{row.StateText}");
             }
-            if (rows.Count > 3)
+            if (rows.Count > 4)
             {
-                taskLines.Add($"还有 {rows.Count - 3} 个");
+                details.Add($"还有 {rows.Count - 4} 个");
             }
         }
-        string taskMain = !TasksConnectedNow
-            ? "DSH 未运行"
-            : $"{rows.Count(r => r.State != TaskState.Ended)} 个在跑";
-        TopTiles.Children.Add(Tile("任务", taskMain, taskLines.ToArray()));
-
-        TopTiles.Children.Add(Tile(
-            "媒体",
-            _settings.MediaEnabled ? mediaTitleLine() : "媒体信息已关闭",
-            mediaDetailLine()));
+        string main = !TasksConnectedNow ? "DSH 未运行" : $"{rows.Count(r => r.State != TaskState.Ended)} 个在跑";
+        return Tile("任务", main, details.ToArray());
     }
 
-    /// <summary>一块卡片：标题 + 主行 + 若干副行。宽度由 WrapPanel 的 ItemWidth 决定，间距 12 DIP。</summary>
-    private static System.Windows.Controls.Border Tile(string title, string main, params string[] details)
+    /// <summary>
+    /// 一块卡片：标题 + 主行 + 若干副行。<b>高度完全由内容决定</b>（Height 不设、MinHeight 不设），
+    /// 宽度由 <see cref="LayoutTiles"/> 按列宽设，间距由网格的空行/空列给。
+    /// 改这里别再引入固定高度或 MinHeight——自检会断言这块 Border 的 Height 是 NaN。
+    /// </summary>
+    internal static System.Windows.Controls.Border Tile(string title, string main, params string[] details)
     {
         var stack = new System.Windows.Controls.StackPanel();
         stack.Children.Add(new System.Windows.Controls.TextBlock
         {
             Text = title,
             FontSize = 11,
-            Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+            Foreground = new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)),
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
         });
         stack.Children.Add(new System.Windows.Controls.TextBlock
         {
             Text = main,
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xF2, 0xFF, 0xFF, 0xFF)),
-            TextWrapping = TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(Color.FromArgb(0xF2, 0xFF, 0xFF, 0xFF)),
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
             Margin = new Thickness(0, 3, 0, 0),
         });
         foreach (string detail in details)
@@ -816,22 +997,135 @@ public partial class MainWindow : Window
             {
                 Text = detail,
                 FontSize = 10,
-                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF)),
-                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xBB, 0xFF, 0xFF, 0xFF)),
+                TextWrapping = TextWrapping.NoWrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(0, 2, 0, 0),
             });
         }
 
         return new System.Windows.Controls.Border
         {
-            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
-            BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+            Background = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(10),
-            Margin = new Thickness(0, 0, 12, 12),
             Child = stack,
         };
+    }
+
+    /// <summary>
+    /// 卡片拖拽换位：按下只记状态并捕获鼠标——<b>不碰岛、不收起、不触发任务行跳转</b>。
+    /// 移动超过 4 DIP 才算拖；拖动时被拖的卡半透明、其余卡实时让位，那就是插入位置提示。
+    /// </summary>
+    private void Tile_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Border card || _tileOrder.Count < 2 ||
+            !NativeMethods.GetCursorPos(out NativeMethods.POINT pt))
+        {
+            return;
+        }
+        _dragTile = card;
+        _dragFrom = TopTiles.PointFromScreen(new Point(pt.X, pt.Y));
+        _draggingTile = false;
+        TopTiles.CaptureMouse();
+        e.Handled = true; // 别让按下冒泡出去（岛在另一边，这是双保险）
+    }
+
+    private void TopTiles_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_dragTile is null || !NativeMethods.GetCursorPos(out NativeMethods.POINT pt))
+        {
+            return;
+        }
+        Point p = TopTiles.PointFromScreen(new Point(pt.X, pt.Y));
+        if (!_draggingTile)
+        {
+            if (Math.Abs(p.X - _dragFrom.X) < 4 && Math.Abs(p.Y - _dragFrom.Y) < 4)
+            {
+                return;
+            }
+            _draggingTile = true;
+            _dragTile.Opacity = 0.55;
+            System.Windows.Controls.Panel.SetZIndex(_dragTile, 1);
+        }
+
+        int from = _tileOrder.IndexOf(_dragTile);
+        int to = TileIndexAt(p);
+        if (from >= 0 && to >= 0 && to != from)
+        {
+            (_tileOrder[from], _tileOrder[to]) = (_tileOrder[to], _tileOrder[from]);
+            ApplyTilePositions();
+        }
+        e.Handled = true;
+    }
+
+    private void TopTiles_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        System.Windows.Controls.Border? card = _dragTile;
+        bool moved = _draggingTile;
+        if (card is null)
+        {
+            return;
+        }
+        EndTileDrag();
+        e.Handled = true;
+        if (!moved)
+        {
+            return;
+        }
+        var ids = _tileOrder.Select(c => c.Tag as string ?? "").ToList();
+        UpdateSettings(s => s.ReorderVisible(ids));
+    }
+
+    private void TopTiles_LostMouseCapture(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_dragTile is not null)
+        {
+            EndTileDrag();
+        }
+    }
+
+    /// <summary>收拖拽状态（松手/丢捕获/重建卡片都走这里）：恢复透明度、清标记，不动配置顺序。</summary>
+    private void EndTileDrag()
+    {
+        if (_dragTile is not null)
+        {
+            _dragTile.Opacity = 1;
+            System.Windows.Controls.Panel.SetZIndex(_dragTile, 0);
+        }
+        _dragTile = null;
+        _draggingTile = false;
+        if (TopTiles is not null && TopTiles.IsMouseCaptured)
+        {
+            TopTiles.ReleaseMouseCapture();
+        }
+    }
+
+    /// <summary>光标下是第几张卡；不在任何卡上时取中心最近的一张（拖到空白也落到最近位置）。</summary>
+    private int TileIndexAt(Point p)
+    {
+        int best = -1;
+        double bestScore = double.MaxValue;
+        for (int i = 0; i < _tileOrder.Count; i++)
+        {
+            System.Windows.Controls.Border card = _tileOrder[i];
+            Rect box = card.TransformToAncestor(TopTiles).TransformBounds(new Rect(card.RenderSize));
+            if (box.Contains(p))
+            {
+                return i;
+            }
+            double dx = p.X - (box.Left + (box.Width / 2));
+            double dy = p.Y - (box.Top + (box.Height / 2));
+            double score = (dx * dx) + (dy * dy * 4); // 纵向权重高：跨行时先按行判断
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = i;
+            }
+        }
+        return best;
     }
 
     /// <summary>托盘菜单的「开机自启」不归 JSON 管，真源是注册表。</summary>
@@ -1698,7 +1992,7 @@ public partial class MainWindow : Window
     /// <summary>离开胶囊或工作台：150 ms 后复核光标，真走了才收（自己 SetWindowPos 会补发假 MouseLeave）。</summary>
     private void ScheduleCollapse()
     {
-        if (_dragging)
+        if (_dragging || _draggingTile)
         {
             return;
         }

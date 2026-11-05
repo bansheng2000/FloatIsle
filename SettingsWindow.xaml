@@ -1,11 +1,13 @@
-<Window x:Class="FloatIsle.SettingsWindow"
+﻿<Window x:Class="FloatIsle.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="FloatIsle 设置"
         Width="400" SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize">
-    <!-- 普通窗口：有边框、能拖动、正常获得焦点。别加 WS_EX_NOACTIVATE / 别做穿透 -->
+        ResizeMode="NoResize"
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
+    <!-- 普通窗口：有边框、正常获得焦点、整窗可拖（空白处按住即可，见 Window_MouseLeftButtonDown）。
+         别加 WS_EX_NOACTIVATE / 别做穿透 -->
     <!-- 外面套 ScrollViewer：高缩放/小屏时窗口高度封顶（见 SettingsWindow.xaml.cs），内容进滚动条而不是被裁掉 -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="18,14,18,16">

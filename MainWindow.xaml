@@ -90,20 +90,20 @@
 
         <!-- 贴顶工作台（Mode=top）：胶囊照常显示在窗口上沿，悬停胶囊（或光标贴工作区顶边 4 DIP）
              时向下长出这块卡片面板，上沿不动、只有下边变；离开就滑回去。
-             面板接在胶囊下沿（Margin.Top 由 OpenTopWorkbench 按 WindowPadding 算，不留缝），
-             卡片由 RefreshTopTiles() 生成（用量 / 任务 / 媒体），两列 WrapPanel 自动换行。 -->
+             面板接在胶囊下沿（Margin.Top 由 OpenTopWorkbench 按 WindowPadding 算，不留缝）。
+             卡片由 RefreshTopTiles() 生成：顺序/开关来自设置，列数与宽度按内容自然宽度和
+             工作区宽度自动推导（Placement.WorkbenchLayout，无固定列数）。 -->
         <Border x:Name="TopPanel"
-                Width="560"
                 CornerRadius="16"
                 Background="#F2101216"
                 BorderBrush="#3CFFFFFF" BorderThickness="1"
                 HorizontalAlignment="Left" VerticalAlignment="Top"
-               
                 MouseLeave="TopPanel_MouseLeave">
-            <StackPanel Margin="16">
-                <!-- ItemWidth 264 = (560 - 两侧 16 - 列间距 12) / 2，两块正好一行 -->
-                <WrapPanel x:Name="TopTiles" ItemWidth="264" />
-            </StackPanel>
+            <!-- 内边距固定 16（Placement.PanelPadding）：面板高 = 卡片网格高 + 32，没有固定最小高 -->
+            <Grid x:Name="TopTiles" Margin="16"
+                  MouseMove="TopTiles_MouseMove"
+                  MouseLeftButtonUp="TopTiles_MouseLeftButtonUp"
+                  LostMouseCapture="TopTiles_LostMouseCapture" />
         </Border>
     </Grid>
 </Window>

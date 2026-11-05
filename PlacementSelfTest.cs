@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Media.Animation;
@@ -167,7 +168,99 @@ internal static class PlacementSelfTest
             "{0} 弹簧过冲 ≤ 4 DIP（最大位移 {1} DIP）  期望 ≤4.00  实际 {2:F2}",
             springOk ? "PASS" : "FAIL", maxDelta, overshoot));
 
-        int total = cases.Count + 1;
+        // ---- 本轮新增：模块顺序 / 自动列数 / 卡片高度 / 设置窗位置判定 ----
+        var extra = new List<(string Name, bool Ok, string Expected, string Actual)>();
+
+        // 1. 缺失顺序：按默认顺序补齐（新装用户的路径）
+        var orderMissing = new AppSettings();
+        orderMissing.Normalize();
+        extra.Add(("ModuleOrder 缺失时回落默认顺序", Ids(orderMissing) == string.Join(",", IslandModuleIds.DefaultOrder),
+            string.Join(",", IslandModuleIds.DefaultOrder), Ids(orderMissing)));
+
+        // 2. 只写了 ModuleOrder（没有 Modules）：采用它的顺序
+        var orderOnly = new AppSettings { ModuleOrder = new List<string> { "tasks", "media", "usage", "quota" } };
+        orderOnly.Normalize();
+        extra.Add(("只有 ModuleOrder 时采用它的顺序", Ids(orderOnly) == "tasks,media,usage,quota",
+            "tasks,media,usage,quota", Ids(orderOnly)));
+
+        // 3. 非法 / 重复 id：过滤、去重、补齐，且不抛
+        var badOrder = new AppSettings { ModuleOrder = new List<string> { "tasks", "bogus", "tasks", "quota" } };
+        bool badThrew = false;
+        try
+        {
+            badOrder.Normalize();
+        }
+        catch
+        {
+            badThrew = true;
+        }
+        bool badOk = !badThrew
+                     && badOrder.Modules.Count == IslandModuleIds.DefaultOrder.Length
+                     && badOrder.Modules.Select(m => m.Id).Distinct().Count() == badOrder.Modules.Count
+                     && badOrder.Modules[0].Id == "tasks"
+                     && badOrder.Modules[1].Id == "quota";
+        extra.Add(("非法/重复 id 不抛且顺序有效", badOk, "tasks,quota,usage,media", Ids(badOrder)));
+
+        // 4. 自动列数：宽 → 3 列、中 → 2 列、窄 → 1 列，且面板宽不超过工作区一半
+        var wide = Placement.WorkbenchLayout(2000, 3, 200);
+        var medium = Placement.WorkbenchLayout(1200, 3, 200);
+        var narrow = Placement.WorkbenchLayout(500, 3, 200);
+        extra.Add(("自动列数：宽 2000 → 3 列", wide.Columns == 3, "3", wide.Columns.ToString(CultureInfo.InvariantCulture)));
+        extra.Add(("自动列数：宽 1200 → 2 列", medium.Columns == 2, "2", medium.Columns.ToString(CultureInfo.InvariantCulture)));
+        extra.Add(("自动列数：宽 500 → 1 列", narrow.Columns == 1, "1", narrow.Columns.ToString(CultureInfo.InvariantCulture)));
+        bool halfOk = wide.PanelWidth <= 2000 / 2.0 + 0.5
+                      && medium.PanelWidth <= 1200 / 2.0 + 0.5
+                      && narrow.PanelWidth <= 500 / 2.0 + 0.5;
+        extra.Add(("面板宽 ≤ 工作区一半", halfOk, "≤1000/≤600/≤250",
+            $"{wide.PanelWidth:F0}/{medium.PanelWidth:F0}/{narrow.PanelWidth:F0}"));
+        extra.Add(("1 列时卡片不拉成全宽", narrow.CardWidth <= narrow.PanelWidth - 2 * Placement.PanelPadding,
+            $"≤{narrow.PanelWidth - 2 * Placement.PanelPadding:F0}", $"{narrow.CardWidth:F0}"));
+
+        // 5. 卡片高度必须随内容（Height=NaN、MinHeight=0），不许拿固定高度撑空气
+        System.Windows.Controls.Border tile = MainWindow.Tile("今日用量", "1.2 亿 token", "3 次调用");
+        bool autoHeight = double.IsNaN(tile.Height) && tile.MinHeight == 0;
+        extra.Add(("卡片高度随内容（Height=NaN、MinHeight=0）", autoHeight, "NaN/0",
+            $"{tile.Height}/{tile.MinHeight}"));
+
+        // 6. 设置窗位置：屏内可见、屏外回落（记忆位置在别的显示器上时不能开在屏幕外）
+        var monitors = new List<MonitorBox>
+        {
+            new(@"\\.\DISPLAY1", new Rect(0, 0, 2560, 1600), new Rect(0, 0, 2560, 1552), true)
+        };
+        bool onScreen = Placement.IsVisibleOnSomeMonitor(monitors, new Rect(200, 200, 400, 200));
+        bool offScreen = Placement.IsVisibleOnSomeMonitor(monitors, new Rect(4000, 200, 400, 200));
+        extra.Add(("设置窗记忆位置：屏内保留", onScreen, "True", onScreen.ToString()));
+        extra.Add(("设置窗记忆位置：屏外回落居中", !offScreen, "False", offScreen.ToString()));
+
+        // 7. 拖拽换序：可见顺序 = 给定顺序，隐藏模块留在原位
+        var drag = new AppSettings
+        {
+            Modules = new List<IslandModule>
+            {
+                new() { Id = "usage" },
+                new() { Id = "quota", Visible = false },
+                new() { Id = "media" },
+                new() { Id = "tasks" }
+            }
+        };
+        drag.Normalize();
+        drag.ReorderVisible(new[] { "tasks", "media", "usage" });
+        string visibleOrder = string.Join(",", drag.Modules.Where(m => m.Visible).Select(m => m.Id));
+        extra.Add(("拖拽换序后可见顺序 = 给定顺序", visibleOrder == "tasks,media,usage", "tasks,media,usage", visibleOrder));
+        extra.Add(("拖拽换序后隐藏模块位置不变", drag.Modules[1].Id == "quota" && !drag.Modules[1].Visible,
+            "quota@1(隐藏)", $"{drag.Modules[1].Id}@1"));
+
+        foreach ((string name, bool ok, string expected, string actual) in extra)
+        {
+            if (!ok)
+            {
+                failed++;
+            }
+            log.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "{0} {1}  期望 {2}  实际 {3}", ok ? "PASS" : "FAIL", name, expected, actual));
+        }
+
+        int total = cases.Count + 1 + extra.Count;
         log.AppendLine(failed == 0 ? $"ALL PASS ({total})" : $"FAILED {failed}/{total}");
 
         try
@@ -180,6 +273,11 @@ internal static class PlacementSelfTest
         }
         return failed == 0 ? 0 : 1;
     }
+
+
+    /// <summary>把模块顺序压成一行，报告里好比对。</summary>
+    private static string Ids(AppSettings settings) =>
+        string.Join(",", settings.Modules.Select(m => m.Id));
 
     /// <summary>把 BackEase 的最大值找出来，换算成"在这段位移上过冲了几个 DIP"。</summary>
     private static double SpringOvershoot(double delta)

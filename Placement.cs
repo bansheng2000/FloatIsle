@@ -119,4 +119,72 @@ internal static class Placement
         }
         return monitors.Count > 0 ? monitors[0] : new MonitorBox(@"\\.\DISPLAY1", new Rect(0, 0, 1920, 1080), new Rect(0, 0, 1920, 1040), true);
     }
+
+    // ---------- 工作台卡片布局（DIP） ----------
+
+    /// <summary>卡片最小/最大宽度：1 列时也不会被拉成全宽（≤ <see cref="TileMaxWidth"/>）。</summary>
+    internal const double TileMinWidth = 180;
+
+    internal const double TileMaxWidth = 420;
+
+    /// <summary>卡片之间的横竖间距。</summary>
+    internal const double TileGap = 12;
+
+    /// <summary>面板四周内边距（上下各一份进面板高度）。</summary>
+    internal const double PanelPadding = 16;
+
+    /// <summary>
+    /// 自动列数：可用宽度够 3 列就 3，不够 2，再不够 1——没有固定列数设置项。
+    /// 卡片宽按内容自然宽度定，夹在 [TileMinWidth, TileMaxWidth] 之间；
+    /// 面板宽 = 列宽和 + 间距 + 两侧内边距，且不超过工作区宽的一半。
+    /// 只剩最后一行一张卡时退一列（4 张 3 列 = 3+1，右边空一大块）。
+    /// </summary>
+    internal static (int Columns, double CardWidth, double PanelWidth) WorkbenchLayout(
+        double workWidth, int cardCount, double naturalCardWidth)
+    {
+        double half = Math.Max(TileMinWidth + PanelPadding * 2, workWidth / 2.0);
+        double available = half - PanelPadding * 2;
+        double card = Math.Clamp(Math.Ceiling(naturalCardWidth), TileMinWidth, TileMaxWidth);
+        card = Math.Min(card, available); // 屏窄到放不下最小宽时跟着窄，别越出工作区
+
+        int maxCols = Math.Clamp(cardCount, 1, 3);
+        int cols = 1;
+        for (int n = 2; n <= maxCols; n++)
+        {
+            if (n * card + (n - 1) * TileGap <= available + 0.5)
+            {
+                cols = n;
+            }
+            else
+            {
+                break;
+            }
+        }
+        // 3 列排成 3+1 时最后一张孤零零、右边空一大块，退成 2 列（2+2）；
+        // 2 列排成 2+1 是正常收口，不要为了「最后一行满」退回 1 列（那样更高）
+        if (cols > 2 && cardCount % cols == 1)
+        {
+            cols--;
+        }
+
+        double panel = cols * card + (cols - 1) * TileGap + PanelPadding * 2;
+        return (cols, card, panel);
+    }
+
+    /// <summary>
+    /// 存过的设置窗位置还能不能用：窗口至少和某块屏的工作区有 40×20 像素交集，
+    /// 否则（换了屏/分辨率、窗口被拖到屏外）回落居中。
+    /// </summary>
+    internal static bool IsVisibleOnSomeMonitor(IReadOnlyList<MonitorBox> monitors, Rect window)
+    {
+        foreach (MonitorBox m in monitors)
+        {
+            Rect hit = Rect.Intersect(m.Work, window);
+            if (!hit.IsEmpty && hit.Width >= 40 && hit.Height >= 20)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 }

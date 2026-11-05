@@ -133,6 +133,42 @@ internal static class UsageLedger
     }
 
     /// <summary>
+    /// 工作台卡片主行：今日 token（不再把「/ N 次 · ¥x」串在后面，卡片每条信息一行）。
+    /// </summary>
+    internal static string UsageMain(UsageSnapshot s) => $"{FormatTokens(s.Tokens)} token";
+
+    /// <summary>工作台卡片副行：调用次数、费用各一行。</summary>
+    internal static System.Collections.Generic.IEnumerable<string> UsageDetails(UsageSnapshot s)
+    {
+        yield return $"{s.Calls} 次调用";
+        if (s.HasCost)
+        {
+            yield return $"约 {Symbol(s.Currency)}{s.Cost:F2}";
+        }
+    }
+
+    /// <summary>工作台卡片主行：余额（没有余额数据时说明白，别留空行）。</summary>
+    internal static string QuotaMain(UsageSnapshot s) =>
+        s.Balance is double balance ? $"余额 {Symbol(s.Currency)}{balance:F2}" : "余额未知";
+
+    /// <summary>工作台卡片副行：5 小时 / 周 / 月 各一行，有哪项给哪项。</summary>
+    internal static System.Collections.Generic.IEnumerable<string> QuotaDetails(UsageSnapshot s)
+    {
+        if (s.FiveHour is int five)
+        {
+            yield return $"5 小时 {five}%";
+        }
+        if (s.Weekly is int week)
+        {
+            yield return $"本周 {week}%";
+        }
+        if (s.Monthly is int month)
+        {
+            yield return $"本月 {month}%";
+        }
+    }
+
+    /// <summary>
     /// 收起态胶囊只有 160 DIP（边框内 158），完整 UsageLine 实测 184 DIP，会被
     /// CharacterEllipsis 截掉「次」和数字（用户全屏截图里就是「今日 2.7 亿 token / 1…」），
     /// 所以收起态只留最关键的一个数；调用次数留给展开态（可用宽度 280 DIP）。
