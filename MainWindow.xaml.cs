@@ -144,13 +144,7 @@ public partial class MainWindow : Window
         // 布局算完之后把窗口裁成胶囊形状，形状外一律穿透
         Loaded += (_, _) =>
         {
-            if (IsTopMode)
-            {
-                // 贴顶模式平时不该有窗口露在屏幕上：启动时已经挪到屏幕外，这里直接藏掉。
-                // 也绝不把当前（屏幕外/面板）坐标写进配置——那是胶囊的位置。
-                Hide();
-                return;
-            }
+            // 两种形态胶囊都露在屏幕上（贴顶模式也一样），所以这里只算区域、记位置
             UpdateWindowRegion();
             // 句柄就绪后才知道自己在哪个显示器上，这时把屏幕名补进配置
             SavePlacement();
@@ -170,15 +164,33 @@ public partial class MainWindow : Window
             {
                 return; // 假离开：光标还在岛上，保持展开
             }
+            if (IsTopMode && CursorOverTopPanel())
+            {
+                return; // 贴顶：光标已经移到下面的工作台面板上
+            }
             Island.BorderBrush = _idleBorderBrush; // 确认走了才收回悬停强调（避免假 MouseLeave 让边框闪）
-            Animate(false);
+            if (IsTopMode)
+            {
+                CloseTopWorkbench();
+            }
+            else
+            {
+                Animate(false);
+            }
         };
 
         _hoverTimer = new DispatcherTimer(DispatcherPriority.Normal);
         _hoverTimer.Tick += (_, _) =>
         {
             _hoverTimer.Stop();
-            Animate(true);
+            if (IsTopMode)
+            {
+                OpenTopWorkbench(); // 贴顶：向下长出工作台，不走胶囊的对称展开
+            }
+            else
+            {
+                Animate(true);
+            }
         };
 
         // 托盘图标 + 菜单（显示/隐藏、穿透、自启、设置、退出）
@@ -199,13 +211,6 @@ public partial class MainWindow : Window
         _tasks.Completed += OnTaskCompleted;
 
         Island.Opacity = _settings.Opacity;
-
-        // 贴顶模式启动时窗口会被第一帧的 Show() 摆出来：先挪到屏幕外，Loaded 里再藏（否则顶部会闪一下）
-        if (IsTopMode)
-        {
-            Left = -10000;
-            Top = -10000;
-        }
 
         ApplySettings();
 
@@ -473,9 +478,8 @@ public partial class MainWindow : Window
     private bool IsTopMode => _settings.Mode == AppSettings.ModeTop;
 
     /// <summary>
-    /// 形态切换立即生效，不用重启：
-    /// 贴顶 → 胶囊：摘下钩子、藏掉面板、把胶囊按存好的像素位置放回来；
-    /// 胶囊 → 贴顶：藏掉胶囊，挂上 WH_MOUSE_LL，等光标碰顶。
+    /// 形态切换立即生效，不用重启。两种形态**胶囊都常驻**，只换展开方式与展开后的内容：
+    /// 胶囊模式 = 悬停四向/向下展开紧凑列表；贴顶模式 = 胶囊待在顶上，悬停向下长出卡片工作台。
     /// 形态没变时直接返回（否则每改一下透明度都会重摆一次窗口）。
     /// </summary>
     private void ApplyMode()
@@ -486,31 +490,37 @@ public partial class MainWindow : Window
         }
         _appliedMode = _settings.Mode;
 
-        Island.Visibility = IsTopMode ? Visibility.Collapsed : Visibility.Visible;
+        // 胶囊在两种形态下都可见：以前贴顶模式是 Island.Visibility = Collapsed，靠碰顶叫出面板，
+        // 用户要的是「默认也显示胶囊，只是展开方式不同」。
+        Island.Visibility = Visibility.Visible;
+        Island.Margin = new Thickness(WindowPadding);
 
         if (IsTopMode)
         {
+            // 贴顶：胶囊贴窗口上沿，展开时向下长
+            Island.VerticalAlignment = VerticalAlignment.Top;
             if (_edgeHook is null)
             {
                 _edgeHook = new TopEdgeHook(_hwnd);
-                _edgeHook.Start();
             }
-            else
-            {
-                _edgeHook.Start(); // 幂等：从胶囊切回来时重新挂上
-            }
+            _edgeHook.Start(); // 幂等：从胶囊切回来时重新挂上
             UpdateTopThreshold();
-            if (IsVisible && !_topOpen)
+            ResetWorkbench();
+            ApplyWindowSize(CollapsedWidth, CollapsedHeight); // 收起尺寸与胶囊模式完全一致（176×60）
+            if (!IsVisible && !_hiddenByFullscreen)
             {
-                Hide();
+                Show();
+                Island.BeginAnimation(OpacityProperty, null);
+                Island.Opacity = _settings.Opacity;
+                RestorePlacementPixels();
             }
+            UpdateWindowRegion();
             return;
         }
 
+        Island.VerticalAlignment = VerticalAlignment.Center;
         _edgeHook?.Stop();
-        _topOpen = false;
-        TopPanel.Visibility = Visibility.Collapsed;
-        TopPanel.BeginAnimation(HeightProperty, null);
+        ResetWorkbench();
         ApplyWindowSize(_expanded ? ExpandedWidth : CollapsedWidth,
             _expanded ? ExpandedHeight : CollapsedHeight);
         if (!IsVisible && !_hiddenByFullscreen)
@@ -521,6 +531,19 @@ public partial class MainWindow : Window
             RestorePlacementPixels();
             UpdateWindowRegion();
         }
+    }
+
+    /// <summary>把工作台面板收干净，不动窗口、不放动画：切形态/全屏让位/异常路径用。</summary>
+    private void ResetWorkbench()
+    {
+        _topOpen = false;
+        if (_edgeHook is not null)
+        {
+            _edgeHook.Open = false;
+        }
+        TopPanel.BeginAnimation(HeightProperty, null);
+        TopPanel.Height = double.NaN;
+        TopPanel.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>
@@ -572,7 +595,11 @@ public partial class MainWindow : Window
         return Placement.Primary(monitors);
     }
 
-    /// <summary>钩子投来 WM_TOPWAKE 后的真正处理：复核阈值 → 按光标 X 摆面板 → 下滑展开。</summary>
+    /// <summary>
+    /// 钩子投来 WM_TOPWAKE 后的真正处理：只在光标真的贴到工作区顶边（4 DIP）时展开。
+    /// 胶囊本身就在顶上，所以这条和悬停胶囊走的是**同一个** OpenTopWorkbench（有 _topOpen 闸门），
+    /// 不会出现两套动画互相打架。
+    /// </summary>
     private void OnTopWake()
     {
         if (!IsTopMode || _topOpen || _hiddenByFullscreen || _hwnd == IntPtr.Zero)
@@ -594,42 +621,44 @@ public partial class MainWindow : Window
             return;
         }
 
-        ShowTopPanel(monitor, scale, cursor.X);
+        OpenTopWorkbench();
     }
 
-    /// <summary>把面板按光标 X 摆好（左右各留 24 DIP），然后从高度 0 滑到内容高度。</summary>
-    private void ShowTopPanel(MonitorBox monitor, double scale, int cursorX)
+    /// <summary>
+    /// 贴顶工作台展开：**上沿不动、只向下长**（宽度按胶囊中心居中），一次 SetWindowPos 落地，
+    /// 然后面板高度从 0 滑到内容高度；区域每帧按「胶囊 ∪ 面板」重算。
+    /// </summary>
+    private void OpenTopWorkbench()
     {
+        if (!IsTopMode || _topOpen || _hiddenByFullscreen || _hwnd == IntPtr.Zero)
+        {
+            return;
+        }
         _topOpen = true;
         if (_edgeHook is not null)
         {
             _edgeHook.Open = true; // 面板开着期间钩子别再投消息
         }
-        _expanded = true;      // 面板里的文字用展开态（完整行，不用收起态的紧凑文案）
+        _expanded = true; // 面板里的文字用展开态
         RefreshTopTiles();
         RefreshIslandText();
 
         TopPanel.Visibility = Visibility.Visible;
+        // 面板接在胶囊下沿（窗口顶部留白 + 胶囊高），不留缝
+        TopPanel.Margin = new Thickness(0, CollapsedHeight + WindowPadding * 2, 0, 0);
         TopTiles.Measure(new Size(TopPanelWidth - 32, double.PositiveInfinity));
         _topHeight = Math.Max(120, TopTiles.DesiredSize.Height + 32); // 上下各 16 DIP 内边距
 
-        Width = TopPanelWidth;
-        Height = _topHeight;
+        double scale = CurrentScale;
+        Rect before = WindowPixelRect();
+        Rect work = CurrentMonitorBox(Placement.CurrentMonitors()).Work;
+        // GrowDown = 上沿不动 + 左右居中 + 放不下才夹回工作区，正是贴顶要的语义
+        PlaceWindowRect(Placement.GrowDown(work, before, new Size(
+            TopPanelWidth * scale,
+            (CollapsedHeight + WindowPadding * 2 + _topHeight) * scale)));
+
         TopPanel.BeginAnimation(HeightProperty, null);
         TopPanel.Height = 0;
-
-        double panelPx = TopPanelWidth * scale;
-        double heightPx = _topHeight * scale;
-        double margin = TopPanelEdgeMargin * scale;
-        Rect work = monitor.Work;
-        double maxLeft = Math.Max(work.Left + margin, work.Right - panelPx - margin);
-        double left = Math.Clamp(cursorX - panelPx / 2, work.Left + margin, maxLeft);
-
-        MoveTo(new Rect(left, work.Top, panelPx, heightPx));
-        Show();
-        Island.BeginAnimation(OpacityProperty, null); // 清掉上次淡出动画的残留
-        UpdateWindowRegion();
-
         var slide = new DoubleAnimation(0, _topHeight, AnimDuration)
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
@@ -638,8 +667,8 @@ public partial class MainWindow : Window
         StartRegionTracking();
     }
 
-    /// <summary>鼠标离开面板：向上滑回 0 再隐藏窗口；钩子重新允许唤醒。</summary>
-    private void HideTopPanel()
+    /// <summary>光标离开（胶囊和面板都算）→ 面板高度滑回 0，滑完才缩窗。</summary>
+    private void CloseTopWorkbench()
     {
         if (!_topOpen)
         {
@@ -654,7 +683,7 @@ public partial class MainWindow : Window
         double from = TopPanel.ActualHeight;
         if (from <= 0.5 || !IsVisible)
         {
-            FinishHideTopPanel();
+            FinishCloseTopWorkbench();
             return;
         }
 
@@ -662,24 +691,30 @@ public partial class MainWindow : Window
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
         };
-        slide.Completed += (_, _) => FinishHideTopPanel();
+        slide.Completed += (_, _) => FinishCloseTopWorkbench();
         TopPanel.BeginAnimation(HeightProperty, slide);
         StartRegionTracking();
     }
 
-    private void FinishHideTopPanel()
+    private void FinishCloseTopWorkbench()
     {
         TopPanel.BeginAnimation(HeightProperty, null);
         TopPanel.Height = double.NaN;
         TopPanel.Visibility = Visibility.Collapsed;
-        StopRegionTracking();
-        if (IsTopMode)
+        _expanded = false;
+        // 收起时才缩窗：动画期间窗口保持大尺寸，面板不会被提前裁掉
+        if (IsTopMode && _hwnd != IntPtr.Zero && IsVisible)
         {
-            Hide();
+            double scale = CurrentScale;
+            Rect work = CurrentMonitorBox(Placement.CurrentMonitors()).Work;
+            PlaceWindowRect(Placement.GrowDown(work, WindowPixelRect(), new Size(
+                (CollapsedWidth + WindowPadding * 2) * scale,
+                (CollapsedHeight + WindowPadding * 2) * scale)));
         }
+        StopRegionTracking();
     }
 
-    private void TopPanel_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e) => HideTopPanel();
+    private void TopPanel_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e) => ScheduleCollapse();
 
     /// <summary>
     /// 贴顶面板的三块卡片：用量 / 任务 / 媒体。数据与胶囊上的文字同源（同一份快照）。
@@ -984,6 +1019,28 @@ public partial class MainWindow : Window
         UpdateWindowRegion();
     }
 
+    /// <summary>像素矩形一次性落位：位置与尺寸必须在同一次 SetWindowPos 里，然后同步 WPF 侧（否则会二次挪动）。</summary>
+    private void PlaceWindowRect(Rect target)
+    {
+        if (_hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _restoringPlacement = true;
+        NativeMethods.SetWindowPos(_hwnd, IntPtr.Zero,
+            (int)Math.Round(target.Left), (int)Math.Round(target.Top),
+            (int)Math.Round(target.Width), (int)Math.Round(target.Height),
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+        double scale = CurrentScale;
+        Left = target.Left / scale;
+        Top = target.Top / scale;
+        Width = target.Width / scale;
+        Height = target.Height / scale;
+        _restoringPlacement = false;
+        UpdateWindowRegion();
+    }
+
     /// <summary>按像素矩形落位。带 SWP_NOACTIVATE——岛任何时候都不许抢焦点。</summary>
     private void MoveTo(Rect rect)
     {
@@ -1053,7 +1110,7 @@ public partial class MainWindow : Window
     {
         // 拖动中每帧都会触发 LocationChanged，别每帧写一次文件
         // 贴顶模式下的窗口坐标是面板位置，不是胶囊位置，绝不能覆盖 LeftPx/TopPx
-        if (_restoringPlacement || _dragging || IsTopMode)
+        if (_restoringPlacement || _dragging || _topOpen)
         {
             return;
         }
@@ -1094,14 +1151,18 @@ public partial class MainWindow : Window
             _edgeHook.Suppressed = suppress;
         }
 
-        if (IsTopMode)
+        if (IsTopMode && suppress)
         {
-            // 贴顶模式本来就没有常驻窗口：只需把已经弹出的面板收掉；退出全屏不自动弹（等用户再碰顶边）
-            if (suppress && _topOpen)
+            // 贴顶模式胶囊也常驻：全屏时先把工作台收掉，再走下面统一的淡出隐藏
+            ResetWorkbench();
+            if (IsVisible && !_hwnd.Equals(IntPtr.Zero))
             {
-                HideTopPanel();
+                PlaceWindowRect(Placement.GrowDown(
+                    CurrentMonitorBox(Placement.CurrentMonitors()).Work,
+                    WindowPixelRect(),
+                    new Size((CollapsedWidth + WindowPadding * 2) * CurrentScale,
+                             (CollapsedHeight + WindowPadding * 2) * CurrentScale)));
             }
-            return;
         }
 
         if (suppress)
@@ -1169,8 +1230,17 @@ public partial class MainWindow : Window
     /// 按「岛内容」里的顺序和开关排岛上两行。
     /// 收起时主行用设置里选定那一项；展开时主行是顺序里第一个可见模块，其余合并进副行。
     /// </summary>
+    /// <summary>
+    /// 岛本体（胶囊里那几行）算不算展开：贴顶模式下胶囊尺寸固定，永远只显示收起行，
+    /// 完整内容在工作台卡片里。不这么判，展开态那 4 行会挤进 44 DIP 的胶囊、顶到窗口外面。
+    /// </summary>
+    private bool IslandExpanded => _expanded && !IsTopMode;
+
     private void RefreshIslandText()
     {
+        // 贴顶模式下胶囊尺寸固定（永远 160×44），只显示收起行：完整内容在工作台卡片里。
+        // 不这么判，展开态那 4 行会挤进 44 DIP 的胶囊，文字顶到窗口上沿外面（实测 y=-3）。
+        bool expanded = IslandExpanded;
         var ids = _settings.Modules.Where(m => m.Visible).Select(m => m.Id).ToList();
         // 任务面板没连上（25 秒内无心跳）或一个会话都没有时整体隐藏，不留「任务 0 个在跑」这种空壳
         bool hasTasks = TasksConnectedNow && _tasks!.Snapshot().Count > 0;
@@ -1186,11 +1256,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        string primary = _expanded
+        string primary = expanded
             ? ids[0]
             : ids.Contains(_settings.CollapsedLine) ? _settings.CollapsedLine : ids[0];
 
-        Line1.Text = ModuleTitle(primary, compact: !_expanded);
+        Line1.Text = ModuleTitle(primary, compact: !expanded);
 
         string mediaDetail = mediaDetailLine();
         var parts = new System.Collections.Generic.List<string>(3);
@@ -1209,7 +1279,7 @@ public partial class MainWindow : Window
 
         Line2.Text = FitSecondaryLine(parts);
         // 没有副行内容时别留一条空行（比如只开今日用量、又没在放歌）
-        Line2.Visibility = _expanded && parts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        Line2.Visibility = IslandExpanded && parts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateNoticeText();
     }
 
@@ -1222,7 +1292,7 @@ public partial class MainWindow : Window
         // 本地提示（跳转失败）优先：那是用户刚点的动作，反馈必须立刻看得见；插件 notice 4 秒后自动回来
         string notice = _localNotice.Length > 0 ? _localNotice : (_tasks?.Notice ?? "");
         NoticeText.Text = notice;
-        NoticeText.Visibility = _expanded && notice.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        NoticeText.Visibility = IslandExpanded && notice.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -1231,7 +1301,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void RefreshTaskRows()
     {
-        IReadOnlyList<TaskRow> rows = _expanded && TasksConnectedNow ? TaskList : Array.Empty<TaskRow>();
+        IReadOnlyList<TaskRow> rows = IslandExpanded && TasksConnectedNow ? TaskList : Array.Empty<TaskRow>();
         // 心跳每 10 秒来一次、内容多数没变：签名相同就别重建控件（重建一轮 WPF 布局要几十毫秒）
         string key = string.Join("\u0001", rows.Select(r => $"{r.Sid}\u0002{(int)r.State}\u0002{r.Workspace}\u0002{r.Detail}"));
         if (key == _taskRowsKey)
@@ -1594,7 +1664,14 @@ public partial class MainWindow : Window
     {
         if (_settings.HoverDelayMs <= 0)
         {
-            Animate(true);
+            if (IsTopMode)
+            {
+                OpenTopWorkbench(); // 贴顶：向下长出工作台
+            }
+            else
+            {
+                Animate(true);
+            }
             return;
         }
 
@@ -1614,11 +1691,34 @@ public partial class MainWindow : Window
 
         // 自己 SetWindowPos / 改区域时系统会补发假 MouseLeave。隔 150ms 再确认一次：
         // 光标真走了才收起，否则「展开→leave→收起→enter→展开」会一直抖（用户看到的就是岛一直在闪）。
+        ScheduleCollapse();
+    }
+
+    /// <summary>光标是否真的落在岛上（用屏幕坐标反算，绕开 WPF 在窗口挪动时给的假 MouseLeave）。</summary>
+    /// <summary>离开胶囊或工作台：150 ms 后复核光标，真走了才收（自己 SetWindowPos 会补发假 MouseLeave）。</summary>
+    private void ScheduleCollapse()
+    {
+        if (_dragging)
+        {
+            return;
+        }
+        _hoverTimer.Stop();
         _leaveTimer.Stop();
         _leaveTimer.Start();
     }
 
-    /// <summary>光标是否真的落在岛上（用屏幕坐标反算，绕开 WPF 在窗口挪动时给的假 MouseLeave）。</summary>
+    private bool CursorOverTopPanel()
+    {
+        if (TopPanel.Visibility != Visibility.Visible || _hwnd == IntPtr.Zero ||
+            !NativeMethods.GetCursorPos(out NativeMethods.POINT pt))
+        {
+            return false;
+        }
+        Point local = TopPanel.PointFromScreen(new Point(pt.X, pt.Y));
+        return local.X >= 0 && local.Y >= 0 &&
+               local.X <= TopPanel.ActualWidth && local.Y <= TopPanel.ActualHeight;
+    }
+
     private bool CursorOverIsland()
     {
         if (_hwnd == IntPtr.Zero || !Island.IsVisible ||
@@ -1843,42 +1943,66 @@ public partial class MainWindow : Window
             return;
         }
 
-        // 两种形态各裁各的：胶囊在窗口里居中，贴顶面板贴左上角
-        System.Windows.Controls.Border shape = IsTopMode ? TopPanel : Island;
-        if (shape.Visibility != Visibility.Visible)
+        // 贴顶模式：胶囊常驻在顶上，展开时下面接一块卡片面板，两块不是一个矩形 → 求并
+        IntPtr rgn;
+        if (IsTopMode)
         {
-            return;
+            rgn = RoundRectRegion(Island);
+            if (rgn == IntPtr.Zero)
+            {
+                return;
+            }
+            if (TopPanel.Visibility == Visibility.Visible && TopPanel.ActualHeight > 0.5)
+            {
+                IntPtr panel = RoundRectRegion(TopPanel);
+                if (panel != IntPtr.Zero)
+                {
+                    // 合并失败（返回值 0 = ERROR）就退回只裁胶囊，绝不留整窗矩形
+                    NativeMethods.CombineRgn(rgn, rgn, panel, NativeMethods.RGN_OR);
+                    NativeMethods.DeleteObject(panel);
+                }
+            }
+        }
+        else
+        {
+            rgn = RoundRectRegion(Island);
+            if (rgn == IntPtr.Zero)
+            {
+                return;
+            }
         }
 
-        double shapeW = shape.ActualWidth;
-        double shapeH = shape.ActualHeight;
-        if (shapeW <= 0 || shapeH <= 0)
-        {
-            return;
-        }
-
-        // 形状在窗口里的位置用变换算：居中/贴边都由布局决定，这里不重复一遍对齐逻辑
-        DpiScale dpi = VisualTreeHelper.GetDpi(this);
-        Point offset = shape.TransformToAncestor(this).Transform(new Point(0, 0));
-        double radius = shape.CornerRadius.TopLeft; // 圆角半径（DIP），区域里要的是直径
-
-        int x1 = (int)Math.Round(offset.X * dpi.DpiScaleX);
-        int y1 = (int)Math.Round(offset.Y * dpi.DpiScaleY);
-        int x2 = (int)Math.Round((offset.X + shapeW) * dpi.DpiScaleX);
-        int y2 = (int)Math.Round((offset.Y + shapeH) * dpi.DpiScaleY);
-        int ellipseW = (int)Math.Round(radius * 2 * dpi.DpiScaleX);
-        int ellipseH = (int)Math.Round(radius * 2 * dpi.DpiScaleY);
-
-        IntPtr rgn = NativeMethods.CreateRoundRectRgn(x1, y1, x2, y2, ellipseW, ellipseH);
-        if (rgn == IntPtr.Zero)
-        {
-            return;
-        }
         if (NativeMethods.SetWindowRgn(_hwnd, rgn, true) == 0)
         {
             // 设置失败时区域仍归我们所有，必须自己释放
             NativeMethods.DeleteObject(rgn);
         }
+    }
+
+    /// <summary>把一个 Border 换算成窗口客户区坐标里的圆角矩形区域；不可见或尺寸为 0 返回 Zero。</summary>
+    private IntPtr RoundRectRegion(System.Windows.Controls.Border shape)
+    {
+        if (shape.Visibility != Visibility.Visible)
+        {
+            return IntPtr.Zero;
+        }
+        double w = shape.ActualWidth;
+        double h = shape.ActualHeight;
+        if (w <= 0 || h <= 0)
+        {
+            return IntPtr.Zero;
+        }
+        // 形状在窗口里的位置用变换算：居中/贴边都由布局决定，这里不重复一遍对齐逻辑
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        Point offset = shape.TransformToAncestor(this).Transform(new Point(0, 0));
+        double radius = shape.CornerRadius.TopLeft; // 圆角半径（DIP），区域里要的是直径
+        return NativeMethods.CreateRoundRectRgn(
+            (int)Math.Round(offset.X * dpi.DpiScaleX),
+            (int)Math.Round(offset.Y * dpi.DpiScaleY),
+            (int)Math.Round((offset.X + w) * dpi.DpiScaleX),
+            (int)Math.Round((offset.Y + h) * dpi.DpiScaleY),
+            (int)Math.Round(radius * 2 * dpi.DpiScaleX),
+            (int)Math.Round(radius * 2 * dpi.DpiScaleY));
     }
 }
 

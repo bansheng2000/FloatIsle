@@ -194,7 +194,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | `CollapsedLine` | 收起态主行显示哪一项：`media`（默认）/ `usage` / `tasks` |
 | `TasksEndpoint` | 任务面板心跳地址，默认 `127.0.0.1:47821`（空或超过 64 字回默认） |
 | `TasksJumpEndpoint` | 点任务行时把 `sid` POST 过去的跳转地址，默认 `127.0.0.1:47822`（同上限） |
-| `Mode` | 形态：`capsule`（默认，顶部胶囊 + 悬停展开）/ `top`（贴顶工作台，光标碰屏顶才展开）。改这一项立即生效，不用重启 |
+| `Mode` | 形态：`capsule`（默认，顶部胶囊 + 悬停向四周对称展开）/ `top`（贴顶工作台：胶囊常驻顶部、悬停向下长出工作台面板）。改这一项立即生效，不用重启 |
 | `GlowColor` | **「在跑」状态的呼吸辉光颜色** `#RRGGBB`，默认 `#4DA3FF`；非法值回默认，设置面板会标出来。改这一项立即生效。琥珀（等你）与绿（完成）是代码常量，不在此项内 |
 
 - **开机自启不在这里**：真源是注册表，设置面板只读回显，避免两份真相。
@@ -233,25 +233,30 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | 重启 | `RECT=1290,156,1670,336`（原位） |
 | 拖出屏幕 | 拖到 (2555,1595) → 松手夹回 `2180,1372,2560,1552`，正好贴右/下边，无半截在屏外 |
 
-**贴顶工作台**（`Mode=top`）：空闲时**没有任何可见常驻窗口**。`WH_MOUSE_LL` 光标钩子常驻，光标进入屏幕顶 4 DIP（按该屏缩放折算成物理像素）才 `PostMessage` 叫醒 UI 线程，面板从顶边 180ms 滑下，宽 560 DIP、圆角 16，按唤醒时光标 X 居中并夹进工作区（左右各留 24 DIP）；鼠标离开面板后滑回并隐藏。
+**贴顶工作台**（`Mode=top`）：胶囊**常驻**在屏幕顶部（默认居中，尺寸与胶囊模式完全一致 176×60 窗口 / 159×43 区域，显示同一行收起文案，辉光/呼吸/三态换色/完成闪烁照旧）。光标进到胶囊上 → **上沿不动、只向下**长出工作台面板（宽 560 DIP、圆角 16，一次 `SetWindowPos` 落位，不再四向对称）；面板顶部紧接胶囊下沿、不留缝；鼠标离开面板与胶囊 150 ms 后收回并逐像素复原。顶边 4 DIP 的 `WH_MOUSE_LL` 唤醒保留，但和悬停走同一个入口 `OpenTopWorkbench()`，由 `_topOpen` 闸门防重复起动画（`HoverDelayMs=0` 时也不会跑成胶囊展开）。
 
-钩子装在一个**独立后台线程**上（低级钩子的回调只在该线程被调用，且它必须自己泵消息：`WaitMessage` + `PeekMessage`）。回调里只有「判 `nCode`/`y` → `PostMessage`」，不建控件、不读文件、不写日志。另有两个实用点：`SetCursorPos` **不会**产生输入事件，低层钩子收不到，测唤醒必须用 `mouse_event`/`SendInput` 注入；面板开着时钩子置 `Open`，避免鼠标停在顶边时消息洪水。
+两套排版分开渲染：胶囊模式用紧凑列表（主行/副行/任务行/提示行），贴顶工作台用卡片 `WrapPanel`（今日用量 / 任务 / 媒体三块，每块标题 + 内容）。贴顶模式下胶囊**永远只显示收起行**（`IslandExpanded => _expanded && !IsTopMode`），否则展开态四行会挤进 44 DIP 的胶囊里溢出。
 
-实测（100% 档，100% 缩放、单屏）：
+钩子仍装在**独立后台线程**上（低级钩子的回调只在该线程被调用，且它必须自己泵消息：`WaitMessage` + `PeekMessage`）。回调里只有「判 `nCode`/`y` → `PostMessage`」，不建控件、不读文件、不写日志。`SetCursorPos` **不会**产生输入事件，低层钩子收不到，测唤醒必须用 `mouse_event`/`SendInput` 注入。
+
+区域是**并集**：`UpdateWindowRegion()` 在贴顶模式把胶囊与面板两块圆角区域用 `CombineRgn(..., RGN_OR)` 合起来，中间帧不会出现「区域是展开的、窗口还是收起的」；胶囊左侧的空白仍然穿透。
+
+实测（100% 档、100% 缩放、单屏 2560×1552、端口 47831 推 heartbeat＝2 个 running）：
 
 | 检查 | 读数 |
 | --- | --- |
-| 面板切到贴顶（不重启） | `settings.json` `Mode=top`；岛窗口立刻 `IsWindowVisible=False`，无可见常驻窗 |
-| 唤醒延迟 | 22 / 41 / 60 ms（轮询粒度 4 ms + 180 ms 下滑动画不计入可见时刻） |
-| 唤醒位置（夹紧） | X=200 → `RECT_L=24`（工作区左+24）；X=1280 → `1000`（居中）；X=2500 → `1976`（右-560-24） |
-| 面板尺寸与区域 | `RECT=1000,0,1560,184`，`REGION type=3 box=0,0,559,184 → 559x184`（三卡） |
-| 面板内容（UIA 读回） | `用量 | 今日 3.8 亿 token / 1752 次 | 余额 ¥37.56 · 5时 7% · 周 29% · 月 63% | 任务 | 1 个在跑 | 未命名工作区 · 在跑 | 媒体 | 无媒体` |
-| 鼠标离开面板 | 滑回耗时 **197–216 ms**（动画 180 ms + 轮询），随后 `IsWindowVisible=False` |
-| 钩子空闲 30 s | **31.2 ms / 2 个时间片**（15.625 ms 一片） |
-| 5 秒内 313 次注入移动 | **0 ms / 0 个时间片** |
-| 内存（uptime 104 s） | Private **82.64 MB**、WS 153.01 MB、25 线程、1275 句柄 |
+| 贴顶启动（收起） | `RECT=1228,0,176x60`（= 胶囊模式收起态），`REGION type=3 box=8,8,167,51 → 159x43`；UIA 只有一行 `2.3 亿 tok · 余0.95`（1256,21 120x18） |
+| 悬停展开 | `RECT=1036,0,560x263`；20 帧采样 `TOPSET=0`（上沿恒 0）、`BOTMIN=60 BOTMAX=263`（只有下边变） |
+| 展开区域 | `REGION type=3 box=0,8,559,262 → 559x254`（并集包围盒） |
+| 展开内容（UIA） | 胶囊仍是 `2.3 亿 tok · 余0.95`（单行不溢）；面板内 `今日用量`、`今日 2.3 亿 token / 1382 次 / 约0.95 CNY`、`任务`、`2 个在跑`、`Chief · 在跑`、`FloatIsle · 在跑`、`媒体`、`未播放` |
+| 命中（`WindowFromPoint` 比 PID） | 胶囊中心 (1316,30) ✓本进程；胶囊左侧空白 (1046,30) → 别的进程（穿透）；面板内 (1316,120) ✓；面板圆角外 (1039,63) → 别的进程 |
+| 离开后收回 | `RECT=1228,0,176x60`（与展开前逐像素相同） |
+| 胶囊模式对照 | 收起 176×60、展开 `1148,0,336x166`，行为未变 |
+| CPU（3 任务、光标在岛外、只推一次心跳） | 30 s 两轮 **12.00 / 2.00 个时间片**（15.625 ms 一片）；第二轮 2 片是 25 s 心跳超时后呼吸已停，与胶囊模式基线（中位 12–17 片）同档，**没有新增常驻定时器** |
 
-**未实测**：150% 档的贴顶面板（本机无法程序化改缩放，要用户手动切）；真双屏下的跨屏唤醒与夹紧（只有一块屏，位置逻辑走的是 `Placement` 纯函数单测）。
+截图（只存盘、未读）：`C:\Users\12576\AppData\Local\Temp\floatisle-j\top-mode-collapsed.png`、`top-mode-expanded.png`、`capsule-mode-collapsed.png`、`capsule-mode-expanded.png`。
+
+**未实测**：150% 档的贴顶工作台（自检里那条 150% 是 `×1.5` 构造用例，用例名已标注「未实机」）；真双屏下贴顶模式的展开落位；物理鼠标（只有注入事件）。
 
 ## 毛玻璃（系统 Acrylic 判不可用 → 自绘假磨砂）
 
@@ -464,7 +469,7 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 11. **用量/额度**：`UsageLedger.cs`（`Utf8JsonReader` 流式挑 `days`/`balanceRef`/`planSamples.go`，失败返回 null）、`UsageWatcher.cs`（`FileSystemWatcher` + 2 秒去抖，事件切回 UI 线程）、`MainWindow.RefreshIslandText()`（按 `Modules` 顺序拼三行文案）、`SettingsWindow` 的「岛内容」行（开关 + 上移/下移）。
 12. **任务面板**：`TasksHub.cs`（`TcpListener` 只绑回环 + 手写最小 HTTP/1.1 + 会话表 + 两个一次性 `DispatcherTimer`：25 秒心跳超时、5 秒「刚结束」淡出），`MainWindow.RefreshTaskRows()`（最多 4 行 + 签名缓存，内容没变不重建控件）、`TaskRow_Click` → `TasksHub.Jump`。
 13. **拖动**：`MainWindow.Island_MouseLeftButtonDown/MouseMove/MouseLeftButtonUp` → `MoveTo`（`SetWindowPos`，带 `SWP_NOACTIVATE`）→ `EndDrag` 里 `Placement.ClampInto` + `SavePlacement`；`_dragging` 优先级高于悬停定时器，`Island.IsMouseOver` 才重新起悬停。
-14. **贴顶工作台**：`TopEdgeHook.cs`（独立后台线程装 `WH_MOUSE_LL`，`WaitMessage`+`PeekMessage` 泵消息，回调只 `PostMessage`）、`MainWindow.ApplyMode/OnTopWake/ShowTopPanel/HideTopPanel/RefreshTopTiles`，面板卡片是 `WrapPanel` 两列 + `Tile()` 现拼；`UpdateWindowRegion()` 按当前形状（岛或面板）取圆角重设区域。
+14. **贴顶工作台**：`TopEdgeHook.cs`（独立后台线程装 `WH_MOUSE_LL`，`WaitMessage`+`PeekMessage` 泵消息，回调只 `PostMessage`）、`MainWindow.ApplyMode/OnTopWake/OpenTopWorkbench/CloseTopWorkbench/RefreshTopTiles`（旧 `ShowTopPanel/HideTopPanel` 已删除），面板卡片是 `WrapPanel` 两列 + `Tile()` 现拼；`UpdateWindowRegion()` 在贴顶模式把胶囊与面板两块圆角区域用 `CombineRgn(RGN_OR)` 合起来，胶囊模式只取岛。
 
 ## 已知限制（有意的取舍）
 
@@ -483,7 +488,8 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 - 账本刷新是 2 秒去抖的事件驱动，**刻意不用定时器轮询**：轮询会把空闲 CPU 从 0 抬起来，这条是硬约束。
 - 输出目录 25 MB，主要来自 24.8 MB 的投影 DLL；要减小体积得裁剪 CsWinRT 投影，v0.2 不做。
 - 托盘图标用仓库里 `assets/floatisle.ico`（九档 16/20/24/32/40/48/64/128/256），按 `GetDpiForWindow` 选档（`16×dpi/96`，100% → 16 px、150% → 24 px），同时作为 exe 的 `ApplicationIcon` 与嵌入资源，不依赖 exe 旁的散文件。
-- **拖动只在胶囊模式**：贴顶模式没有常驻窗口可拖，面板位置跟唤醒时的光标 X 走；拖岛时穿过窗口的鼠标事件需要穿透关闭（`Ctrl+Alt+I`）。
+- **拖动只在胶囊模式**：贴顶模式下胶囊常驻但不可拖（位置由工作台的贴顶规则决定），面板横向位置跟胶囊走；拖岛时穿过窗口的鼠标事件需要穿透关闭（`Ctrl+Alt+I`）。
+- **贴顶模式没有单实例互斥**：`grep Mutex` 在源码里 0 命中，两个 FloatIsle 可以同时跑并共享 `%APPDATA%\FloatIsle\settings.json`。调试时同时起了安装版与自测副本，后者在老版本 `Mode=top` 下窗口隐藏、`MainWindowHandle=0`，会让按窗口找句柄的测试脚本挑错对象。是否加互斥待定，本轮未改。
 - **贴顶模式的唤醒阈值是 4 DIP**，实测靠**注入输入事件**（`mouse_event`）验证，`SetCursorPos` 不产生输入、钩子收不到；真实手指/鼠标路径与注入事件走的是同一套 `WH_MOUSE_LL`，但没有物理鼠标的实测记录。
 - **琥珀 / 绿两态只在 100% 下测过**：三态色值与切换时序都是 100%、单屏 2560×1552 的读数；150% 下只验过蓝色呼吸（描边不越界、区域外 0），琥珀与绿的 150% 读数未测。
 - **呼吸辉光在 150% 下只验到「描边不越界 + 呼吸不灭」**：描边四边内缩 4/2/4/2 px、区域外蓝像素 0、振幅 44.2→201.6；150% 的完成闪 3 连峰时序**没有**与 100% 同套采样（150% 只跑了修前那组），上面修后序列是 100% 档读数。

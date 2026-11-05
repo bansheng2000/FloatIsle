@@ -122,6 +122,19 @@ internal static class PlacementSelfTest
             ("贴顶时对称展开放不下，退回向下长", new Rect(1148, 0, 336, 166),
                 Placement.ExpandSymmetric(single[0].Work, new Rect(1228, 0, 176, 60), new Size(336, 166))
                 ?? Placement.GrowDown(single[0].Work, new Rect(1228, 0, 176, 60), new Size(336, 166))),
+
+            // 贴顶工作台：收起态与胶囊模式同尺寸、同位置（GrowDown 用同一尺寸是恒等变换）
+            ("贴顶模式收起态与胶囊模式一致（176×60）", new Rect(1228, 0, 176, 60),
+                Placement.GrowDown(single[0].Work, new Rect(1228, 0, 176, 60), Collapsed)),
+
+            // 贴顶工作台展开（100% 实测）：窗口 560×263、上沿 0 不动、x 按胶囊中心居中 → 1036
+            ("贴顶工作台展开只向下长（100%，实测 1036,0,560x263）", new Rect(1036, 0, 560, 263),
+                Placement.GrowDown(single[0].Work, new Rect(1228, 0, 176, 60), new Size(560, 263))),
+
+            // 150% 同一条：工作区 2560×1528、收起 264×90、目标 840×394.5（面板高 203 → (60+203)×1.5）。
+            // 这条是按 1.5 缩放构造的，未在 150% 会话实机跑过 —— 读数出来就换成本机实测值。
+            ("贴顶工作台展开只向下长（150%，按 1.5 构造，未实机）", new Rect(860, 9, 840, 394.5),
+                Placement.GrowDown(new Rect(0, 0, 2560, 1528), new Rect(1148, 9, 264, 90), new Size(840, 394.5))),
         };
 
         var log = new StringBuilder();

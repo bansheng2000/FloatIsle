@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -58,7 +58,7 @@ public partial class SettingsWindow : Window
 
         // 形态下拉：value 存 Tag（capsule/top），显示名给人看
         ModeCombo.Items.Add(new ComboBoxItem { Content = "胶囊（顶部居中，悬停展开）", Tag = AppSettings.ModeCapsule });
-        ModeCombo.Items.Add(new ComboBoxItem { Content = "贴顶工作台（光标碰顶才展开）", Tag = AppSettings.ModeTop });
+        ModeCombo.Items.Add(new ComboBoxItem { Content = "贴顶工作台（胶囊常驻，悬停向下展开）", Tag = AppSettings.ModeTop });
         ModeCombo.SelectedIndex = s.Mode == AppSettings.ModeTop ? 1 : 0;
 
         // 控件都建好、值也灌完了，从这里开始用户操作才算数

@@ -88,7 +88,9 @@
             </Grid>
         </Border>
 
-        <!-- 贴顶工作台（Mode=top）：平时整窗隐藏，光标碰到屏幕顶边才从顶上滑下来。
+        <!-- 贴顶工作台（Mode=top）：胶囊照常显示在窗口上沿，悬停胶囊（或光标贴工作区顶边 4 DIP）
+             时向下长出这块卡片面板，上沿不动、只有下边变；离开就滑回去。
+             面板接在胶囊下沿（Margin.Top 由 OpenTopWorkbench 按 WindowPadding 算，不留缝），
              卡片由 RefreshTopTiles() 生成（用量 / 任务 / 媒体），两列 WrapPanel 自动换行。 -->
         <Border x:Name="TopPanel"
                 Width="560"

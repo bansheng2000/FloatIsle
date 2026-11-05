@@ -1,4 +1,4 @@
-﻿<Window x:Class="FloatIsle.SettingsWindow"
+<Window x:Class="FloatIsle.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="FloatIsle 设置"
@@ -13,7 +13,7 @@
         <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
             <ComboBox x:Name="ModeCombo" Width="220" SelectionChanged="Mode_Changed" />
         </StackPanel>
-        <TextBlock Text="胶囊：顶部居中，悬停展开；贴顶工作台：平时不占屏幕，鼠标碰到屏幕顶边才下滑展开。切换立即生效。"
+        <TextBlock Text="胶囊：顶部居中，悬停向四周对称展开；贴顶工作台：胶囊常驻顶部，悬停向下长出卡片面板（光标贴屏幕顶边 4 DIP 也能叫出）。切换立即生效。"
                    FontSize="12" Foreground="#666666" TextWrapping="Wrap" Margin="0,0,0,12" />
 
         <TextBlock Text="透明度" FontWeight="SemiBold" />

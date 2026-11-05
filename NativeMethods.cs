@@ -101,6 +101,13 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
 
+    // 两个区域求并（贴顶工作台 = 胶囊 + 下方卡片面板，两块不是一个矩形）
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern int CombineRgn(IntPtr dest, IntPtr src1, IntPtr src2, int mode);
+
+    /// <summary>CombineRgn 的并集模式。</summary>
+    internal const int RGN_OR = 2;
+
     // 只有 SetWindowRgn 失败时才需要我们释放区域；成功后 region 归系统所有
     [DllImport("gdi32.dll", SetLastError = true)]
     internal static extern bool DeleteObject(IntPtr hObject);
