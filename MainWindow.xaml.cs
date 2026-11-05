@@ -270,6 +270,19 @@ public partial class MainWindow : Window
     private readonly SolidColorBrush _glowBrush =
         new(System.Windows.Media.Color.FromRgb(0x4D, 0xA3, 0xFF));
 
+    // 「等你回答/等你批准」与「完成」用固定色（设置面板只允许改「在跑」色，见 README）
+    private static readonly System.Windows.Media.Color WaitingColor =
+        System.Windows.Media.Color.FromRgb(0xF5, 0xA6, 0x23);
+
+    private static readonly System.Windows.Media.Color DoneColor =
+        System.Windows.Media.Color.FromRgb(0x3D, 0xBE, 0x6B);
+
+    private readonly SolidColorBrush _waitBrush = new(WaitingColor);
+    private readonly SolidColorBrush _doneBrush = new(DoneColor);
+
+    /// <summary>当前呼吸的状态键："" 未呼吸 / "running" / "waiting"；换键就重启动画（换色换周期）。</summary>
+    private string _breathKind = "";
+
     private bool _glowBreathing;
     private bool _glowSteady;
     private bool _glowPulse;
@@ -286,8 +299,15 @@ public partial class MainWindow : Window
         {
             _glowBrush.Color = color;
         }
-        Glow.Stroke = _glowBrush;
-        GlowOuter.Stroke = _glowBrush;
+        PaintGlow(_glowSteady ? _doneBrush
+                  : _breathKind == "waiting" ? _waitBrush
+                  : _glowBrush);
+    }
+
+    private void PaintGlow(SolidColorBrush brush)
+    {
+        Glow.Stroke = brush;
+        GlowOuter.Stroke = brush;
     }
 
     /// <summary>有任务在跑 → 边框呼吸；任务清空 → 立刻停（除非正显示「已完成」常亮）。</summary>
@@ -308,25 +328,33 @@ public partial class MainWindow : Window
     private void StartBreath()
     {
         // 脉冲期间不许重开呼吸：两者写的是同一个 Opacity 属性，BeginAnimation 会把脉冲顶掉
-        if (_glowBreathing || _glowPulse)
+        if (_glowPulse)
         {
             return;
         }
+        // 优先级：等你（琥珀，1.2 s 更急）> 在跑（GlowColor，1.6 s）
+        bool waiting = _tasks?.IsWaitingOnUser == true;
+        string kind = waiting ? "waiting" : "running";
+        if (_glowBreathing && _breathKind == kind)
+        {
+            return; // 同状态同周期：不重启动画，否则每次 Changed 都把呼吸从当前帧打回去
+        }
         _glowBreathing = true;
-        Glow.Stroke = _glowBrush;
-        GlowOuter.Stroke = _glowBrush;
+        _breathKind = kind;
+        PaintGlow(waiting ? _waitBrush : _glowBrush);
         Glow.Visibility = Visibility.Visible;
         GlowOuter.Visibility = Visibility.Visible;
-        // 1.6 s 一个来回：芯 0.85↔1.0、晕 0.12↔0.55（慢 + 大反差 =「一圈光在呼吸」而不是一条线在闪）
+        int halfMs = waiting ? 600 : 800;
         Glow.BeginAnimation(UIElement.OpacityProperty,
-            BreathAnimation(0.28, 1.0));
+            BreathAnimation(0.28, 1.0, halfMs));
         GlowOuter.BeginAnimation(UIElement.OpacityProperty,
-            BreathAnimation(0.02, 0.60));
+            BreathAnimation(0.02, 0.60, halfMs));
     }
 
     private void StopBreath()
     {
         _glowBreathing = false;
+        _breathKind = "";
         Glow.BeginAnimation(UIElement.OpacityProperty, null);
         GlowOuter.BeginAnimation(UIElement.OpacityProperty, null);
         if (!_glowSteady && !_glowPulse)
@@ -339,9 +367,9 @@ public partial class MainWindow : Window
     }
 
     /// <summary>一次呼吸半程的动画（AutoReverse 后整周期 1.6 s），缓入缓出。</summary>
-    private static DoubleAnimation BreathAnimation(double from, double to)
+    private static DoubleAnimation BreathAnimation(double from, double to, int halfMs)
     {
-        var anim = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(800))
+        var anim = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(halfMs))
         {
             AutoReverse = true,
             RepeatBehavior = RepeatBehavior.Forever,
@@ -358,14 +386,21 @@ public partial class MainWindow : Window
         {
             return;
         }
+        if (HasActiveTasks)
+        {
+            // 优先级：等你 > 在跑 > 完成。还有活在跑/在等你时不出绿，直接回到对应呼吸
+            _glowBreathing = false;
+            StartBreath();
+            return;
+        }
         if (_glowPulse)
         {
             // 已经在一组 3 次脉冲里：排队，等这组放完再闪下一组（不互相顶掉）
             _glowPulseQueued = true;
             return;
         }
-        Glow.Stroke = _glowBrush;
-        GlowOuter.Stroke = _glowBrush;
+        _breathKind = "";
+        PaintGlow(_doneBrush);
         _glowPulse = true;
         _glowBreathing = false; // 呼吸让位给脉冲
         Glow.Visibility = Visibility.Visible;

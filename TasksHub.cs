@@ -173,6 +173,9 @@ internal sealed class TasksHub : IDisposable
         .ThenBy(r => r.Workspace, StringComparer.OrdinalIgnoreCase)
         .ToList();
 
+    /// <summary>有会话在等用户（等你回答 / 等你批准）——辉光切琥珀就靠这个。</summary>
+    internal bool IsWaitingOnUser => _rows.Values.Any(r => r.State is TaskState.Question or TaskState.Approval);
+
     /// <summary>在跑的会话数（「刚结束」不算，收起态就显示这个数）。</summary>
     internal int ActiveCount => _rows.Values.Count(r => r.State != TaskState.Ended);
 
