@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace FloatIsle;
@@ -62,8 +62,6 @@ internal static class NativeMethods
     internal static extern bool UnhookWinEvent(IntPtr hWinEventHook);
 
     // ---- 前台窗口几何（用来复核"全屏应用"是否真存在）----
-    internal const uint MONITOR_DEFAULTTONEAREST = 0x00000002; // MonitorFromWindow：窗口不在任何显示器上时取最近的
-
     [StructLayout(LayoutKind.Sequential)]
     internal struct RECT
     {
@@ -87,6 +85,9 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     internal static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+    // MonitorFromWindow / MonitorFromPoint 的 flags：取最近的显示器
+    internal const uint MONITOR_DEFAULTTONEAREST = 2;
 
     [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", SetLastError = true)]
     internal static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO info);
@@ -152,79 +153,4 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern bool GetCursorPos(out POINT pt);
 
-    // ---- 贴顶模式：全局低级鼠标钩子 ----
-    internal const int WH_MOUSE_LL = 14;      // 低级鼠标钩子（不需要 DLL，回调在本进程）
-    internal const int WM_MOUSEMOVE = 0x0200; // 钩子里的鼠标移动
-    internal const int WM_TOPWAKE = 0x8001;   // WM_APP + 1：钩子叫 UI 线程"该开面板了"
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct MSLLHOOKSTRUCT
-    {
-        public POINT pt;           // 屏幕坐标（物理像素）
-        public uint mouseData;
-        public uint flags;
-        public uint time;
-        public IntPtr dwExtraInfo;
-    }
-
-    internal delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-    // hMod 传自己模块的句柄（低级钩子不需要注入别的进程，但文档要求非零更稳）
-    [DllImport("user32.dll", SetLastError = true)]
-    internal static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    internal static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-    [DllImport("user32.dll")]
-    internal static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-    // ---- 钩子专用消息泵（低级钩子必须在装了钩子的那个线程上泵消息）----
-    internal const int WM_QUIT = 0x0012;
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct MSG
-    {
-        public IntPtr hwnd;
-        public uint message;
-        public IntPtr wParam;
-        public IntPtr lParam;
-        public uint time;
-        public POINT pt;
-    }
-
-    [DllImport("user32.dll")]
-    internal static extern bool TranslateMessage(ref MSG lpMsg);
-
-    [DllImport("user32.dll")]
-    internal static extern IntPtr DispatchMessage(ref MSG lpMsg);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    internal static extern bool PostThreadMessage(uint idThread, uint msg, IntPtr wParam, IntPtr lParam);
-
-    internal const uint PM_REMOVE = 0x0001;
-
-    [DllImport("user32.dll")]
-    internal static extern bool PeekMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    internal static extern bool WaitMessage();
-
-    [DllImport("kernel32.dll")]
-    internal static extern uint GetCurrentThreadId();
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    internal static extern IntPtr GetModuleHandle(string? lpModuleName);
-
-    // 钩子回调里不能直接动界面（会卡住全系统鼠标输入），只投递一条消息回 UI 线程
-    [DllImport("user32.dll", SetLastError = true)]
-    internal static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
-
-    // ---- 贴顶模式：光标在哪块屏、那块屏的缩放 ----
-    [DllImport("user32.dll")]
-    internal static extern IntPtr MonitorFromPoint(POINT pt, uint flags);
-
-    // Shcore.GetDpiForMonitor 的第二个参数：0 = MDT_EFFECTIVE_DPI（生效缩放，不是系统建议值）
-    [DllImport("Shcore.dll")]
-    internal static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 }

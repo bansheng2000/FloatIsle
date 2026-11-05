@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -87,10 +87,8 @@ public partial class MainWindow : Window
     private NativeMethods.POINT _dragCursorStart;
     private Rect _dragWindowStart;
 
-    // 贴顶工作台：钩子只在光标碰顶时投一条消息，回 UI 线程才建面板
     /// <summary>面板宽（DIP）：LayoutTiles 按内容自然宽度 + 工作区宽度算，这里是首次测量前的兜底。</summary>
     private double _topWidth = 520;
-    private TopEdgeHook? _edgeHook;
     private bool _topOpen;
     private double _topHeight;
     private int _topColumns = 2;
@@ -508,12 +506,6 @@ public partial class MainWindow : Window
         {
             // 贴顶：胶囊贴窗口上沿，展开时向下长
             Island.VerticalAlignment = VerticalAlignment.Top;
-            if (_edgeHook is null)
-            {
-                _edgeHook = new TopEdgeHook(_hwnd);
-            }
-            _edgeHook.Start(); // 幂等：从胶囊切回来时重新挂上
-            UpdateTopThreshold();
             ResetWorkbench();
             ApplyWindowSize(CollapsedWidth, CollapsedHeight); // 收起尺寸与胶囊模式完全一致（176×60）
             if (!IsVisible && !_hiddenByFullscreen)
@@ -528,7 +520,6 @@ public partial class MainWindow : Window
         }
 
         Island.VerticalAlignment = VerticalAlignment.Center;
-        _edgeHook?.Stop();
         ResetWorkbench();
         ApplyWindowSize(_expanded ? ExpandedWidth : CollapsedWidth,
             _expanded ? ExpandedHeight : CollapsedHeight);
@@ -547,91 +538,9 @@ public partial class MainWindow : Window
     {
         EndTileDrag();
         _topOpen = false;
-        if (_edgeHook is not null)
-        {
-            _edgeHook.Open = false;
-        }
         TopPanel.BeginAnimation(HeightProperty, null);
         TopPanel.Height = double.NaN;
         TopPanel.Visibility = Visibility.Collapsed;
-    }
-
-    /// <summary>
-    /// 贴顶模式的唤醒阈值：4 DIP 按缩放折算成物理像素。
-    /// 钩子里只拿这个最大阈值做粗判（少算几次 DPI），真正的精确判定在 OnTopWake 里按光标所在屏复核。
-    /// </summary>
-    private void UpdateTopThreshold()
-    {
-        if (_edgeHook is null)
-        {
-            return;
-        }
-        double maxScale = 1;
-        foreach (MonitorBox monitor in Placement.CurrentMonitors())
-        {
-            maxScale = Math.Max(maxScale, MonitorScale(monitor));
-        }
-        _edgeHook.ThresholdPx = (int)Math.Ceiling(4 * maxScale);
-    }
-
-    /// <summary>某块显示器的缩放（1.0 = 96 DPI）。取显示器中心点问 Shcore，问不到退回当前窗口的缩放。</summary>
-    private double MonitorScale(MonitorBox monitor)
-    {
-        var center = new NativeMethods.POINT
-        {
-            X = (int)Math.Round(monitor.Bounds.Left + monitor.Bounds.Width / 2),
-            Y = (int)Math.Round(monitor.Bounds.Top + monitor.Bounds.Height / 2)
-        };
-        IntPtr hmon = NativeMethods.MonitorFromPoint(center, NativeMethods.MONITOR_DEFAULTTONEAREST);
-        if (hmon != IntPtr.Zero
-            && NativeMethods.GetDpiForMonitor(hmon, 0, out uint dpiX, out _) == 0
-            && dpiX > 0)
-        {
-            return dpiX / 96.0;
-        }
-        return CurrentScale;
-    }
-
-    /// <summary>光标在哪块显示器上（不在任何一块里时取主屏）。</summary>
-    private static MonitorBox MonitorAt(IReadOnlyList<MonitorBox> monitors, NativeMethods.POINT cursor)
-    {
-        foreach (MonitorBox monitor in monitors)
-        {
-            if (monitor.Bounds.Contains(cursor.X, cursor.Y))
-            {
-                return monitor;
-            }
-        }
-        return Placement.Primary(monitors);
-    }
-
-    /// <summary>
-    /// 钩子投来 WM_TOPWAKE 后的真正处理：只在光标真的贴到工作区顶边（4 DIP）时展开。
-    /// 胶囊本身就在顶上，所以这条和悬停胶囊走的是**同一个** OpenTopWorkbench（有 _topOpen 闸门），
-    /// 不会出现两套动画互相打架。
-    /// </summary>
-    private void OnTopWake()
-    {
-        if (!IsTopMode || _topOpen || _hiddenByFullscreen || _hwnd == IntPtr.Zero)
-        {
-            return;
-        }
-        if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor))
-        {
-            return;
-        }
-
-        IReadOnlyList<MonitorBox> monitors = Placement.CurrentMonitors();
-        MonitorBox monitor = MonitorAt(monitors, cursor);
-        double scale = MonitorScale(monitor);
-
-        // 钩子是按"最大阈值"粗判的，这里按光标所在屏的缩放精确复核一次 4 DIP
-        if (cursor.Y - monitor.Bounds.Top > 4 * scale)
-        {
-            return;
-        }
-
-        OpenTopWorkbench();
     }
 
     /// <summary>
@@ -645,10 +554,6 @@ public partial class MainWindow : Window
             return;
         }
         _topOpen = true;
-        if (_edgeHook is not null)
-        {
-            _edgeHook.Open = true; // 面板开着期间钩子别再投消息
-        }
         _expanded = true; // 面板里的文字用展开态
         RefreshIslandText();
 
@@ -685,10 +590,6 @@ public partial class MainWindow : Window
             return;
         }
         _topOpen = false;
-        if (_edgeHook is not null)
-        {
-            _edgeHook.Open = false;
-        }
 
         double from = TopPanel.ActualHeight;
         if (from <= 0.5 || !IsVisible)
@@ -1439,12 +1340,6 @@ public partial class MainWindow : Window
     /// <summary>全屏/锁屏时让位；退出全屏后恢复（淡入 160ms，远小于 1s 要求）。</summary>
     private void OnFullscreenChanged(bool suppress)
     {
-        // 钩子也要知道：全屏/锁屏期间不许把贴顶面板叫出来
-        if (_edgeHook is not null)
-        {
-            _edgeHook.Suppressed = suppress;
-        }
-
         if (IsTopMode && suppress)
         {
             // 贴顶模式胶囊也常驻：全屏时先把工作台收掉，再走下面统一的淡出隐藏
@@ -1831,7 +1726,6 @@ public partial class MainWindow : Window
         _media?.Dispose();
         _usageWatcher?.Dispose();
         _tasks?.Dispose();
-        _edgeHook?.Dispose();
         _fullscreen.Dispose();
         base.OnClosed(e);
     }
@@ -1841,12 +1735,6 @@ public partial class MainWindow : Window
         if (msg == NativeMethods.WM_HOTKEY && wParam.ToInt32() == HotKeyId)
         {
             SetClickThrough(!_clickThrough);
-            handled = true;
-        }
-        else if (msg == NativeMethods.WM_TOPWAKE)
-        {
-            // 钩子只在"光标碰顶且面板关着"时投这条；真正建面板在这里（UI 线程）做
-            OnTopWake();
             handled = true;
         }
         else if (msg == NativeMethods.WM_DPICHANGED)

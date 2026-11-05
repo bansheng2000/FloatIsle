@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Windows;
 using System.Windows.Media.Animation;
@@ -249,6 +250,14 @@ internal static class PlacementSelfTest
         extra.Add(("拖拽换序后可见顺序 = 给定顺序", visibleOrder == "tasks,media,usage", "tasks,media,usage", visibleOrder));
         extra.Add(("拖拽换序后隐藏模块位置不变", drag.Modules[1].Id == "quota" && !drag.Modules[1].Visible,
             "quota@1(隐藏)", $"{drag.Modules[1].Id}@1"));
+
+        // 用户报过「鼠标没碰到胶囊就把工作台打开了」：碰顶唤醒那条链已整条删除，
+        // 这里钉住它不许回来——没有 OnTopWake 方法、也没有 TopEdgeHook 类型。
+        bool noWakeMethod = typeof(MainWindow).GetMethod("OnTopWake",
+            BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic) is null;
+        bool noHookType = typeof(MainWindow).Assembly.GetType("FloatIsle.TopEdgeHook") is null;
+        extra.Add(("贴顶展开不靠碰顶唤醒（无 OnTopWake）", noWakeMethod, "不存在", noWakeMethod ? "不存在" : "仍存在"));
+        extra.Add(("贴顶展开不靠碰顶唤醒（无 TopEdgeHook）", noHookType, "不存在", noHookType ? "不存在" : "仍存在"));
 
         foreach ((string name, bool ok, string expected, string actual) in extra)
         {

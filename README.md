@@ -1,4 +1,4 @@
-# FloatIsle
+﻿# FloatIsle
 
 Windows 桌面「灵动岛」外壳（v0.2）：透明、无边框、置顶、**不抢焦点**的胶囊窗口。鼠标悬停展开，**只有胶囊形状本身可点，形状外一律穿透**；展开后显示当前 SMTC 媒体的标题/艺人/播放状态；**全屏应用或锁屏时自动让位**；托盘菜单管显示、穿透、自启、设置、退出；配置持久化在 `%APPDATA%\FloatIsle\settings.json`。
 
@@ -233,11 +233,9 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | 重启 | `RECT=1290,156,1670,336`（原位） |
 | 拖出屏幕 | 拖到 (2555,1595) → 松手夹回 `2180,1372,2560,1552`，正好贴右/下边，无半截在屏外 |
 
-**贴顶工作台**（`Mode=top`）：胶囊**常驻**在屏幕顶部（默认居中，尺寸与胶囊模式完全一致 176×60 窗口 / 159×43 区域，显示同一行收起文案，辉光/呼吸/三态换色/完成闪烁照旧）。光标进到胶囊上 → **上沿不动、只向下**长出工作台面板（宽度按卡片内容自适应、上限是工作区宽的一半，圆角 16，一次 `SetWindowPos` 落位，不再四向对称）；面板顶部紧接胶囊下沿、不留缝；鼠标离开面板与胶囊 150 ms 后收回并逐像素复原。顶边 4 DIP 的 `WH_MOUSE_LL` 唤醒保留，但和悬停走同一个入口 `OpenTopWorkbench()`，由 `_topOpen` 闸门防重复起动画（`HoverDelayMs=0` 时也不会跑成胶囊展开）。
+**贴顶工作台**（`Mode=top`）：胶囊**常驻**在屏幕顶部（默认居中，尺寸与胶囊模式完全一致 176×60 窗口 / 159×43 区域，显示同一行收起文案，辉光/呼吸/三态换色/完成闪烁照旧）。光标进到胶囊上 → **上沿不动、只向下**长出工作台面板（宽度按卡片内容自适应、上限是工作区宽的一半，圆角 16，一次 `SetWindowPos` 落位，不再四向对称）；面板顶部紧接胶囊下沿、不留缝；鼠标离开面板与胶囊 150 ms 后收回并逐像素复原。展开只有两条入口：悬停胶囊（`Island_MouseEnter` → `_hoverTimer` → `OpenTopWorkbench()`）、以及已展开时在面板内移动；`_topOpen` 闸门防重复起动画（`HoverDelayMs=0` 时也不会跑成胶囊展开）。**碰顶唤醒那条链已整条删除**：用户报「鼠标都没碰到胶囊就把工作台打开了」，根因是 `WH_MOUSE_LL` 钩子只看 `y ≤ 4 DIP`、完全不判 x。
 
 两套排版分开渲染：胶囊模式用紧凑列表（主行/副行/任务行/提示行），贴顶工作台用卡片网格（今日用量 / 余额额度 / 任务 / 媒体四块，每块标题 + 主行 + 若干明细行，每行一条信息，不再用 ` · ` 串长串）。卡片高度一律 `Auto`（不设 `Height`/`MinHeight`，自检会断言 `Height` 是 `NaN`），面板高 = 各卡高 + 行间距 + 上下内边距；隐藏模块直接不建卡、不占位。列数不设档位：按可用宽度自动推导（够 3 列就 3 列、不够 2 列、再不够 1 列；1 列时卡片保持最小宽 180 DIP，不拉成整宽），4 张卡排成 3+1 时主动退成 2 列，避免最后一行空大半。卡片可**拖拽换序**：按住卡片拖动时同格让位（拖动中的卡片半透明、`ZIndex` 抬高），松手把新顺序写进 `ModuleOrder`；拖拽用 `TopTiles.CaptureMouse()` 独占鼠标，岛的展开/收起与拖动窗口都被 `_draggingTile` 闸门挡住。贴顶模式下胶囊**永远只显示收起行**（`IslandExpanded => _expanded && !IsTopMode`），否则展开态四行会挤进 44 DIP 的胶囊里溢出。
-
-钩子仍装在**独立后台线程**上（低级钩子的回调只在该线程被调用，且它必须自己泵消息：`WaitMessage` + `PeekMessage`）。回调里只有「判 `nCode`/`y` → `PostMessage`」，不建控件、不读文件、不写日志。`SetCursorPos` **不会**产生输入事件，低层钩子收不到，测唤醒必须用 `mouse_event`/`SendInput` 注入。
 
 区域是**并集**：`UpdateWindowRegion()` 在贴顶模式把胶囊与面板两块圆角区域用 `CombineRgn(..., RGN_OR)` 合起来，中间帧不会出现「区域是展开的、窗口还是收起的」；胶囊左侧的空白仍然穿透。
 
@@ -489,7 +487,7 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 11. **用量/额度**：`UsageLedger.cs`（`Utf8JsonReader` 流式挑 `days`/`balanceRef`/`planSamples.go`，失败返回 null）、`UsageWatcher.cs`（`FileSystemWatcher` + 2 秒去抖，事件切回 UI 线程）、`MainWindow.RefreshIslandText()`（按 `Modules` 顺序拼三行文案）、`SettingsWindow` 的「岛内容」行（开关 + 上移/下移）。
 12. **任务面板**：`TasksHub.cs`（`TcpListener` 只绑回环 + 手写最小 HTTP/1.1 + 会话表 + 两个一次性 `DispatcherTimer`：25 秒心跳超时、5 秒「刚结束」淡出），`MainWindow.RefreshTaskRows()`（最多 4 行 + 签名缓存，内容没变不重建控件）、`TaskRow_Click` → `TasksHub.Jump`。
 13. **拖动**：`MainWindow.Island_MouseLeftButtonDown/MouseMove/MouseLeftButtonUp` → `MoveTo`（`SetWindowPos`，带 `SWP_NOACTIVATE`）→ `EndDrag` 里 `Placement.ClampInto` + `SavePlacement`；`_dragging` 优先级高于悬停定时器，`Island.IsMouseOver` 才重新起悬停。
-14. **贴顶工作台**：`TopEdgeHook.cs`（独立后台线程装 `WH_MOUSE_LL`，`WaitMessage`+`PeekMessage` 泵消息，回调只 `PostMessage`）、`MainWindow.ApplyMode/OnTopWake/OpenTopWorkbench/CloseTopWorkbench/RefreshTopTiles`（旧 `ShowTopPanel/HideTopPanel` 已删除），面板卡片是 `WrapPanel` 两列 + `Tile()` 现拼；`UpdateWindowRegion()` 在贴顶模式把胶囊与面板两块圆角区域用 `CombineRgn(RGN_OR)` 合起来，胶囊模式只取岛。
+14. **贴顶工作台**：`MainWindow.ApplyMode/OpenTopWorkbench/CloseTopWorkbench/RefreshTopTiles/LayoutTiles/MeasureWorkbenchHeight`，卡片是 `Grid`（列数由 `Placement.WorkbenchLayout` 按可用宽度自动推导）+ `Tile()` 现拼；旧的 `TopEdgeHook.cs`（`WH_MOUSE_LL` 碰顶唤醒）与 `OnTopWake` 已整条删除，展开只由悬停胶囊触发。`UpdateWindowRegion()` 在贴顶模式把胶囊与面板两块圆角区域用 `CombineRgn(RGN_OR)` 合起来，胶囊模式只取岛。
 
 ## 已知限制（有意的取舍）
 
@@ -516,7 +514,6 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 - **`ModuleOrder` 与 `Modules` 双写**：内存里只有 `Modules` 一个真源，`ModuleOrder` 是给外部/手改留的兼容字段，只在 `SettingsStore.Save` 时回写。手改 `ModuleOrder` 后要保证 `Modules` 为空才会被采用；两者不一致时以 `Modules` 为准。
 - **设置窗整窗拖动用 `PreviewMouseLeftButtonDown`**：普通 `MouseLeftButtonDown` 会被 `ScrollViewer` 吃掉（实测 Window 上收不到事件、窗口拖不动），所以挂在隧道事件上；命中 `ButtonBase/TextBoxBase/ComboBox/Slider/ScrollBar/Thumb/PasswordBox` 时不抢拖动。设置窗位置按设备像素存 `SettingsLeftPx/TopPx`，记忆位置不在任何工作区内（含拔掉显示器）回落居中。
 - **已加全局单实例互斥**（`App.OnStartup`：`new Mutex(true, "Global\\FloatIsle.SingleInstance")`）：第二个实例 `createdNew == false` 直接 `Shutdown()` 退出，不做「激活已有实例」的 IPC。互斥不覆盖 `--selftest`（装着的实例在跑时也能跑自检）。
-- **贴顶模式的唤醒阈值是 4 DIP**，实测靠**注入输入事件**（`mouse_event`）验证，`SetCursorPos` 不产生输入、钩子收不到；真实手指/鼠标路径与注入事件走的是同一套 `WH_MOUSE_LL`，但没有物理鼠标的实测记录。
 - **琥珀 / 绿两态只在 100% 下测过**：三态色值与切换时序都是 100%、单屏 2560×1552 的读数；150% 下只验过蓝色呼吸（描边不越界、区域外 0），琥珀与绿的 150% 读数未测。
 - **呼吸辉光在 150% 下只验到「描边不越界 + 呼吸不灭」**：描边四边内缩 4/2/4/2 px、区域外蓝像素 0、振幅 44.2→201.6；150% 的完成闪 3 连峰时序**没有**与 100% 同套采样（150% 只跑了修前那组），上面修后序列是 100% 档读数。
 - **展开越屏已修，但只在 150% + 单屏验证**：`GrowDown` 的上边固定 + 向下长在 `--selftest` 有 100%/150% 两条用例；真双屏/负坐标屏的展开落位仍未实测。
