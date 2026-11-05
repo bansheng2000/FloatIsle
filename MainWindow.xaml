@@ -35,8 +35,14 @@
                      这条 1px 高光自己只占一层，删掉实测呼吸不变（见 README）。取舍写在 README「已知限制」。 -->
                 <Rectangle x:Name="FrostHighlight" Margin="1" RadiusX="21" RadiusY="21"
                            Stroke="#26FFFFFF" StrokeThickness="1" IsHitTestVisible="False" />
-                <!-- 呼吸辉光描边：铺满胶囊内侧（Margin 1 让开 1px 边框），只做装饰、不吃鼠标事件。
-                     整圈同步明暗（动画只改这一条的 Opacity），粗细是 DIP、随 WPF 缩放。 -->
+                <!-- 呼吸辉光 = 两层同心描边：外圈 7px（晕，Opacity 0.12↔0.55）+ 内层 3px（芯，0.85↔1.0）。
+                     两层都画在胶囊内侧：窗口被 SetWindowRgn 裁成胶囊，画到形状外会被切掉，
+                     所以外圈用 Margin 3.5 + 粗细 7 让它的外沿正好压在胶囊边缘（区域外仍全透明）。
+                     只改两层 Opacity，不加 Effect.Blur（分层窗口下每帧成本会翻几倍，见 README）。 -->
+                <Rectangle x:Name="GlowOuter"
+                           Margin="3.5" RadiusX="18.5" RadiusY="18.5"
+                           Stroke="#4DA3FF" StrokeThickness="7" Opacity="0"
+                           Visibility="Collapsed" IsHitTestVisible="False" />
                 <Rectangle x:Name="Glow"
                            Margin="1" RadiusX="21" RadiusY="21"
                            Stroke="#4DA3FF" StrokeThickness="3" Opacity="0"

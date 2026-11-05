@@ -287,6 +287,7 @@ public partial class MainWindow : Window
             _glowBrush.Color = color;
         }
         Glow.Stroke = _glowBrush;
+        GlowOuter.Stroke = _glowBrush;
     }
 
     /// <summary>有任务在跑 → 边框呼吸；任务清空 → 立刻停（除非正显示「已完成」常亮）。</summary>
@@ -313,26 +314,41 @@ public partial class MainWindow : Window
         }
         _glowBreathing = true;
         Glow.Stroke = _glowBrush;
+        GlowOuter.Stroke = _glowBrush;
         Glow.Visibility = Visibility.Visible;
-        var breath = new DoubleAnimation(0.45, 1, TimeSpan.FromMilliseconds(1000))
-        {
-            AutoReverse = true,
-            RepeatBehavior = RepeatBehavior.Forever,
-            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-        };
-        Timeline.SetDesiredFrameRate(breath, GlowFps);
-        Glow.BeginAnimation(UIElement.OpacityProperty, breath);
+        GlowOuter.Visibility = Visibility.Visible;
+        // 1.6 s 一个来回：芯 0.85↔1.0、晕 0.12↔0.55（慢 + 大反差 =「一圈光在呼吸」而不是一条线在闪）
+        Glow.BeginAnimation(UIElement.OpacityProperty,
+            BreathAnimation(0.28, 1.0));
+        GlowOuter.BeginAnimation(UIElement.OpacityProperty,
+            BreathAnimation(0.02, 0.60));
     }
 
     private void StopBreath()
     {
         _glowBreathing = false;
         Glow.BeginAnimation(UIElement.OpacityProperty, null);
+        GlowOuter.BeginAnimation(UIElement.OpacityProperty, null);
         if (!_glowSteady && !_glowPulse)
         {
             Glow.Visibility = Visibility.Collapsed;
+            GlowOuter.Visibility = Visibility.Collapsed;
             Glow.Opacity = 0;
+            GlowOuter.Opacity = 0;
         }
+    }
+
+    /// <summary>一次呼吸半程的动画（AutoReverse 后整周期 1.6 s），缓入缓出。</summary>
+    private static DoubleAnimation BreathAnimation(double from, double to)
+    {
+        var anim = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(800))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+        Timeline.SetDesiredFrameRate(anim, GlowFps);
+        return anim;
     }
 
     /// <summary>收到 completed：600ms 内脉冲 3 次（同色，只抬透明度），然后转常亮。</summary>
@@ -349,18 +365,27 @@ public partial class MainWindow : Window
             return;
         }
         Glow.Stroke = _glowBrush;
+        GlowOuter.Stroke = _glowBrush;
         _glowPulse = true;
         _glowBreathing = false; // 呼吸让位给脉冲
         Glow.Visibility = Visibility.Visible;
+        GlowOuter.Visibility = Visibility.Visible;
         Glow.BeginAnimation(UIElement.OpacityProperty, null);
-        var pulse = new DoubleAnimation(0.35, 1, TimeSpan.FromMilliseconds(100))
+        GlowOuter.BeginAnimation(UIElement.OpacityProperty, null);
+        // 3 次 300 ms 峰：芯顶满、晕顶到 0.75，比呼吸高一档，扫一眼就能看出「完成了」
+        DoubleAnimation PulseAnim(double from, double to)
         {
-            AutoReverse = true,
-            RepeatBehavior = new RepeatBehavior(3),
-            // 正弦缓入缓出：峰和谷都不是硬拐点，避免锯齿感（时长不变，600ms 三连峰时序不变）
-            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-        };
-        Timeline.SetDesiredFrameRate(pulse, 30); // 脉冲只有 600ms，5fps 会一帧都抽不到
+            var a = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(150))
+            {
+                AutoReverse = true,
+                RepeatBehavior = new RepeatBehavior(3),
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+            };
+            Timeline.SetDesiredFrameRate(a, 30); // 脉冲 900ms，5fps 抽不到峰
+            return a;
+        }
+        DoubleAnimation pulse = PulseAnim(0.55, 1.0);
+        DoubleAnimation pulseOuter = PulseAnim(0.2, 0.75);
         Glow.Opacity = 1;
         pulse.Completed += (_, _) =>
         {
@@ -379,11 +404,15 @@ public partial class MainWindow : Window
                 StartBreath();
                 return;
             }
+            // 常亮：芯满、晕留一档（不再是内层 0.55 那种「暗一档」）
             _glowSteady = true;
             Glow.BeginAnimation(UIElement.OpacityProperty, null);
-            Glow.Opacity = 0.55;
+            GlowOuter.BeginAnimation(UIElement.OpacityProperty, null);
+            Glow.Opacity = 1.0;
+            GlowOuter.Opacity = 0.35;
         };
         Glow.BeginAnimation(UIElement.OpacityProperty, pulse);
+        GlowOuter.BeginAnimation(UIElement.OpacityProperty, pulseOuter);
     }
 
     /// <summary>展开/看一眼就算「已读」，常亮消失（不自动定时熄灭）。</summary>
@@ -395,10 +424,13 @@ public partial class MainWindow : Window
         }
         _glowSteady = false;
         Glow.BeginAnimation(UIElement.OpacityProperty, null);
+        GlowOuter.BeginAnimation(UIElement.OpacityProperty, null);
         Glow.Opacity = 0;
+        GlowOuter.Opacity = 0;
         if (!_glowBreathing)
         {
             Glow.Visibility = Visibility.Collapsed;
+            GlowOuter.Visibility = Visibility.Collapsed;
         }
     }
 
