@@ -41,32 +41,44 @@
                            Margin="1" RadiusX="21" RadiusY="21"
                            Stroke="#4DA3FF" StrokeThickness="3" Opacity="0"
                            Visibility="Collapsed" IsHitTestVisible="False" />
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="280">
-                <!-- 两行内容由 RefreshIslandText() 按「岛内容」模块顺序填：主行 14pt、副行 11pt。
-                     收起时只留主行，展开时两行 + 状态行（见 Animate）。 -->
-                <TextBlock x:Name="Line1" Text="FloatIsle"
-                           Foreground="#F2FFFFFF" FontSize="14" FontWeight="SemiBold"
-                           TextTrimming="CharacterEllipsis" TextAlignment="Center"
-                           HorizontalAlignment="Center" />
-                <TextBlock x:Name="Line2" Text=""
-                           Margin="0,3,0,0"
-                           Foreground="#CCFFFFFF" FontSize="11"
-                           TextTrimming="CharacterEllipsis" TextAlignment="Center"
-                           HorizontalAlignment="Center" />
-                <!-- 任务区：展开时最多 4 行「工作区 · 状态」，行由 RefreshTaskRows() 生成（点一行 = 跳回会话） -->
-                <StackPanel x:Name="TaskRowsPanel" Margin="0,4,0,0" Visibility="Collapsed" />
-                <!-- 插件给的失败原因（心跳 notice），null 时下次心跳自动清掉 -->
-                <TextBlock x:Name="NoticeText" Text=""
-                           Margin="0,4,0,0"
-                           Foreground="#E8B24D" FontSize="10"
-                           TextWrapping="Wrap" MaxWidth="280"
-                           HorizontalAlignment="Center" TextAlignment="Center"
-                           />
-                <TextBlock x:Name="StatusText" Text="…"
-                           Margin="0,4,0,0"
-                           Foreground="#88FFFFFF" FontSize="10"
-                           HorizontalAlignment="Center" TextAlignment="Center" />
-                </StackPanel>
+                <!-- 固定行网格（主行 / 副行 / 任务行×N / 提示行 / 状态行）：每行单行 + CharacterEllipsis，
+                     行距 2 DIP，任意两行不重叠（UIA 矩形实测见 README）。必须用 Stretch 才会真的省略——
+                     HorizontalAlignment=Center 时 TextBlock 按自然宽度排版，超长直接顶出胶囊外面。 -->
+                <Grid VerticalAlignment="Center" HorizontalAlignment="Center"
+                      MaxWidth="280" Margin="16,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <!-- 两行内容由 RefreshIslandText() 按「岛内容」模块顺序填：主行 14pt、副行 11pt。
+                         收起时只留主行，展开时两行 + 状态行（见 Animate）。 -->
+                    <TextBlock x:Name="Line1" Grid.Row="0" Text="FloatIsle"
+                               Foreground="#F2FFFFFF" FontSize="14" FontWeight="SemiBold"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                               TextAlignment="Center" HorizontalAlignment="Stretch" />
+                    <TextBlock x:Name="Line2" Grid.Row="1" Text=""
+                               Margin="0,2,0,0"
+                               Foreground="#CCFFFFFF" FontSize="11"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                               TextAlignment="Center" HorizontalAlignment="Stretch" />
+                    <!-- 任务区：展开时最多 4 行「工作区 · 状态」，行由 RefreshTaskRows() 生成（点一行 = 跳回会话） -->
+                    <StackPanel x:Name="TaskRowsPanel" Grid.Row="2" Margin="0,2,0,0" Visibility="Collapsed" />
+                    <!-- 插件给的失败原因（心跳 notice）与本地提示（跳转失败）：单行省略，
+                         TextWrapping=Wrap 时两行会把状态行顶出胶囊（改前就是这么乱的）。 -->
+                    <TextBlock x:Name="NoticeText" Grid.Row="3" Text=""
+                               Margin="0,2,0,0"
+                               Foreground="#E8B24D" FontSize="10"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                               HorizontalAlignment="Stretch" TextAlignment="Center" />
+                    <TextBlock x:Name="StatusText" Grid.Row="4" Text="…"
+                               Margin="0,2,0,0"
+                               Foreground="#88FFFFFF" FontSize="10"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                               HorizontalAlignment="Stretch" TextAlignment="Center" />
+                </Grid>
             </Grid>
         </Border>
 

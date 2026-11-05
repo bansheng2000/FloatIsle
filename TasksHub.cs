@@ -218,28 +218,27 @@ internal sealed class TasksHub : IDisposable
         RaiseChanged();
     }
 
-    /// <summary>点任务行：把 sid 发给插件的跳转端口。1 秒超时，失败静默（插件没跑也不该弹窗）。</summary>
-    internal static void Jump(string endpoint, string sid)
+    /// <summary>点任务行：把 sid 发给插件的跳转端口（超时 1 秒），返回是否成功，失败由界面提示。</summary>
+    internal static async Task<bool> JumpAsync(string endpoint, string sid)
     {
         if (!TryParsePort(endpoint, out int port) || string.IsNullOrEmpty(sid))
         {
-            return;
+            return false;
         }
 
-        string json = JsonSerializer.Serialize(new { sid });
-        _ = Task.Run(async () =>
+        try
         {
-            try
-            {
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
-                using HttpResponseMessage _ = await JumpClient
-                    .PostAsync($"http://127.0.0.1:{port}/jump", content).ConfigureAwait(false);
-            }
-            catch
-            {
-                // 跳转只是锦上添花：端口不通/插件没装都当无事发生
-            }
-        });
+            string json = JsonSerializer.Serialize(new { sid });
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using HttpResponseMessage resp = await JumpClient
+                .PostAsync($"http://127.0.0.1:{port}/jump", content).ConfigureAwait(false);
+            return resp.IsSuccessStatusCode;
+        }
+        catch
+        {
+            // 端口不通/插件没装：返回 false，由界面给出可见提示（不再静默）
+            return false;
+        }
     }
 
     internal static bool TryParsePort(string endpoint, out int port)

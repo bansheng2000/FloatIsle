@@ -47,6 +47,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _hoverTimer;
     // 收起前的二次确认：自己挪窗/改区域会给一次假 MouseLeave，隔 150ms 看光标是不是真的走了
     private readonly DispatcherTimer _leaveTimer;
+    // 本地提示（跳转失败）：与插件 notice 共用 NoticeText 那一行
+    private string _localNotice = "";
+    private DispatcherTimer? _localNoticeTimer;
 
     private IntPtr _hwnd;
     private HwndSource? _hwndSource;
@@ -1137,7 +1140,7 @@ public partial class MainWindow : Window
             parts.Add(ModuleTitle(id));
         }
 
-        Line2.Text = string.Join(" · ", parts);
+        Line2.Text = FitSecondaryLine(parts);
         // 没有副行内容时别留一条空行（比如只开今日用量、又没在放歌）
         Line2.Visibility = _expanded && parts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateNoticeText();
@@ -1149,7 +1152,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void UpdateNoticeText()
     {
-        string notice = _tasks?.Notice ?? "";
+        // 本地提示（跳转失败）优先：那是用户刚点的动作，反馈必须立刻看得见；插件 notice 4 秒后自动回来
+        string notice = _localNotice.Length > 0 ? _localNotice : (_tasks?.Notice ?? "");
         NoticeText.Text = notice;
         NoticeText.Visibility = _expanded && notice.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -1187,9 +1191,11 @@ public partial class MainWindow : Window
                     : new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
                 FontSize = 10,
                 TextTrimming = TextTrimming.CharacterEllipsis,
+                TextWrapping = TextWrapping.NoWrap,
                 TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                Margin = new Thickness(0, 1, 0, 0),
+                // Stretch 才能吃到网格给的宽度上限、真的显示省略号；Center 会按自然宽度顶出胶囊
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+                Margin = new Thickness(0, 2, 0, 0),
                 Tag = row.Sid,
             };
             if (row.State != TaskState.Ended)
@@ -1207,9 +1213,11 @@ public partial class MainWindow : Window
                 Text = $"还有 {rows.Count - MaxTaskRows} 个",
                 Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
                 FontSize = 10,
+                TextWrapping = TextWrapping.NoWrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
                 TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                Margin = new Thickness(0, 1, 0, 0),
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+                Margin = new Thickness(0, 2, 0, 0),
             });
         }
 
@@ -1217,12 +1225,94 @@ public partial class MainWindow : Window
     }
 
     /// <summary>点一行任务 = 让插件把该会话窗口拉到前台。插件不在就静默失败（TasksHub.Jump）。</summary>
-    private void TaskRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private async void TaskRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: string sid })
+        e.Handled = true;
+        if (sender is not FrameworkElement { Tag: string sid })
         {
-            TasksHub.Jump(_settings.TasksJumpEndpoint, sid);
+            return;
         }
+        bool jumped = await TasksHub.JumpAsync(_settings.TasksJumpEndpoint, sid).ConfigureAwait(true);
+        if (jumped)
+        {
+            return;
+        }
+        // 别让用户以为「点了没反应」：跳转端口不通时在岛上说一句（4 秒后自动清）
+        ShowLocalNotice($"跳转失败：{_settings.TasksJumpEndpoint} 没响应");
+    }
+
+    /// <summary>本地提示（跳转失败等）与插件 notice 共用一行，4 秒后自动清掉。</summary>
+    private void ShowLocalNotice(string text)
+    {
+        _localNotice = text;
+        UpdateNoticeText();
+        _localNoticeTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        _localNoticeTimer.Stop();
+        _localNoticeTimer.Tick -= LocalNoticeElapsed;
+        _localNoticeTimer.Tick += LocalNoticeElapsed;
+        _localNoticeTimer.Start();
+        // 提示行出现要多 16 DIP 高，否则会把状态行挤出去（Animate 里已有这条规则，复用同一路径）
+        if (_expanded)
+        {
+            Animate(true);
+        }
+    }
+
+    private void LocalNoticeElapsed(object? sender, EventArgs e)
+    {
+        _localNoticeTimer?.Stop();
+        _localNotice = "";
+        UpdateNoticeText();
+    }
+
+    /// <summary>点在任务行子树里？（含「还有 N 个」这种无 Tag 的行：也当行内，不触发拖动）</summary>
+    private bool IsInsideTaskRows(System.Windows.DependencyObject? source)
+    {
+        for (System.Windows.DependencyObject? node = source;
+             node is not null && !ReferenceEquals(node, Island);
+             node = System.Windows.Media.VisualTreeHelper.GetParent(node)
+                    ?? System.Windows.LogicalTreeHelper.GetParent(node))
+        {
+            if (ReferenceEquals(node, TaskRowsPanel) ||
+                (node is FrameworkElement { Tag: string }))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 副行按宽度降级：完整串超过 280 DIP 就从尾部丢项（先丢「任务 N 个在跑」，再丢月/周），
+    /// 剩下的仍超宽就交给 CharacterEllipsis。100% 下完整串实测 276 px，已经在边缘上。
+    /// </summary>
+    private string FitSecondaryLine(System.Collections.Generic.List<string> parts)
+    {
+        const double MaxWidth = 280;
+        var keep = new System.Collections.Generic.List<string>(parts);
+        while (keep.Count > 1 && MeasureTextWidth(string.Join(" · ", keep), 11) > MaxWidth)
+        {
+            keep.RemoveAt(keep.Count - 1);
+        }
+        return string.Join(" · ", keep);
+    }
+
+    /// <summary>按当前 DPI 量一段文字的自然宽度（DIP），只给副行降级用。</summary>
+    private double MeasureTextWidth(string text, double size)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return 0;
+        }
+        var formatted = new System.Windows.Media.FormattedText(
+            text,
+            System.Globalization.CultureInfo.CurrentUICulture,
+            System.Windows.FlowDirection.LeftToRight,
+            new System.Windows.Media.Typeface("Segoe UI"),
+            size,
+            System.Windows.Media.Brushes.White,
+            System.Windows.Media.VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        return formatted.WidthIncludingTrailingWhitespace;
     }
 
     /// <summary>
@@ -1482,6 +1572,14 @@ public partial class MainWindow : Window
     {
         if (IsTopMode || _hwnd == IntPtr.Zero)
         {
+            return;
+        }
+
+        // 点在任务行上就不许走拖动/收起：窗口一收、鼠标被岛捕获，行上的 MouseUp 就轮不到了，
+        // 表现就是「点任务行只是收起、不跳转」。
+        if (IsInsideTaskRows(e.OriginalSource as System.Windows.DependencyObject))
+        {
+            e.Handled = true;
             return;
         }
 
