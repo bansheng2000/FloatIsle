@@ -2,6 +2,18 @@
 
 Windows 桌面「灵动岛」外壳（v0.2）：透明、无边框、置顶、**不抢焦点**的胶囊窗口。鼠标悬停展开，**只有胶囊形状本身可点，形状外一律穿透**；展开后显示当前 SMTC 媒体的标题/艺人/播放状态；**全屏应用或锁屏时自动让位**；托盘菜单管显示、穿透、自启、设置、退出；配置持久化在 `%APPDATA%\FloatIsle\settings.json`。
 
+## 下载 / 安装（普通用户）
+
+到 [Releases](https://github.com/bansheng2000/FloatIsle/releases/latest) 下载 `FloatIsle-Setup.exe` 直接装：
+
+- 装到 `%LOCALAPPDATA%\Programs\FloatIsle`，**per-user，不要管理员权限**，不写 HKLM；
+- self-contained，**不用装 .NET 运行时**；要求 Windows 10 2004+ / Windows 11（x64）；
+- 自带卸载器（「应用和功能」里卸载），卸载会清掉安装目录、开始菜单快捷方式与自启项；
+- 安装时可勾「开机自启」（只写当前用户的 Run 项，托盘菜单随时可关）；
+- **没有代码签名**，首次运行 SmartScreen 会拦：点「更多信息」→「仍要运行」。
+
+以下 `## 环境要求` 起是**从源码构建 / 开发**的内容。
+
 ## 环境要求
 
 - Windows 10 2004+ / Windows 11（SMTC 的 `GlobalSystemMediaTransportControlsSessionManager` 需要 10.0.19041 以上）
@@ -109,21 +121,21 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 编译安装包（Inno Setup 6.7.3）：
 
 ```powershell
-& "C:\Users\12576\AppData\Local\Programs\Inno Setup 6\ISCC.exe" "installer\FloatIsle.iss"
-# 产物 installer\Output\FloatIsle-Setup.exe（本次 57,154,023 字节 / 54.51 MB，md5 9D4EA4D3BE7A3B47330EB5CD79E0D352；lzma2/max）
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" "installer\FloatIsle.iss"
+# 产物 installer\Output\FloatIsle-Setup.exe（本次 57,218,714 字节 / 54.57 MB，md5 1943637C78AAE47F9467287261718B5F；lzma2/max）
 ```
 
 **版本号只有一个来源**：`FloatIsle.csproj` 里的 `<Version>0.2.0</Version>`。SDK 把它写进 exe 的版本资源，`installer/FloatIsle.iss` 用 `#define AppVersion GetStringFileInfo(...)` 从 publish 出来的 exe 里读，安装脚本里不再手写第二份（以前写死 `1.0.0`，跟 README 自称的 v0.2 对不上，装完「应用和功能」显示 `FloatIsle 1.0.0`）。
 
 **改版本号只改 `csproj` 的 `<Version>`**，然后重新 publish + 编译安装包即可；「应用和功能」里显示的就是 `FloatIsle <Version>`（实测 `FloatIsle 0.2.0`）。`IncludeSourceRevisionInInformationalVersion=false` 是为了不让 git 提交号混进 `ProductVersion`。
 
-`publish/` 实测 475 文件 / 204,905,215 字节；装完 `%LOCALAPPDATA%\Programs\FloatIsle` 是 477 文件 / 209,750,197 字节（多 `unins000.exe` + `unins000.dat`）。安装包的字节数每次 publish + 编译会因文件时间戳略有浮动（本次 57,154,023，上一次 57,139,450）。
+`publish/` 实测 475 文件 / 204,905,215 字节；装完 `%LOCALAPPDATA%\Programs\FloatIsle` 是 477 文件 / 209,750,197 字节（多 `unins000.exe` + `unins000.dat`）。安装包的字节数每次 publish + 编译会因文件时间戳略有浮动（本次 57,218,714，上一次 57,154,023）。
 
 安装包行为：装到 `%LOCALAPPDATA%\Programs\FloatIsle`（per-user，不需要管理员、不写 HKLM）、开始菜单快捷方式、自带卸载器 `unins000.exe`、可选「开机自启」（只写 HKCU 的 Run 值）。卸载会删 Run 值、删安装目录、删快捷方式。
 
 **没有代码签名**：首次运行 Windows 会拦，需要点「更多信息」→「仍要运行」（安装界面第一页也写了这句）。
 
-> 本机环境的一个坑（**不是安装包的问题**）：DSH 的工作区目录 `E:\文档\deepseek-harness\FloatIsle` 上挂了**低完整性标签**（`icacls` 能看到 `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`，以及 `Everyone:(CI)(DENY)(DC)`、一个 `S-1-4-...` 沙箱 SID 的 `(OI)(CI)(W,D,DC)`）。同一份 exe（md5 相同、无 ADS）拷进工作区就带这个标签、拷到工作区外就没有；`Chief`、`dsh-plot-clone` 这些工作区目录上同样有，还没跑过会话的目录则干净。**从该目录里启动的 exe 会拿到受限上下文**：往 `%TEMP%` 写文件被拒、Inno Setup 建不了自己的临时目录后静默退出、`SHQueryUserNotificationState` 恒返回 2。低完整性 + no-write-up 能解释前两件事；**第三个只确认了相关性，机制未验明**。同一份 exe 拷到工作区外（`E:\文档\big-cjk\`、`C:\...\Temp`）一切正常：安装 2 秒完成、状态读数正常。装完之后从 `%LOCALAPPDATA%\Programs\FloatIsle` 启动（在工作区外），不受影响。**要测装包/跑程序，先把 exe 拷到工作区外。**
+> 一个环境坑（**不是安装包的问题**）：如果把 exe 放在挂了**低完整性标签**或沙箱 ACL 的目录里启动，进程会拿到受限上下文——往 `%TEMP%` 写文件被拒、Inno Setup 建不了临时目录后静默退出、`SHQueryUserNotificationState` 恒返回 2。把 exe 拷到普通目录（或正常装到 `%LOCALAPPDATA%\Programs\FloatIsle`）再运行就正常。**要测安装包 / 跑程序，别在受限目录里直接跑。**
 
 ## 全屏让位
 
@@ -202,7 +214,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 - 坏文件不崩、不删：解析失败时把原文件改名成 `settings.json.bak`（覆盖上一次的 .bak），用默认值启动，设置面板顶部红字给出 .bak 路径。
 - 写入走 `settings.json.tmp` + 替换，避免中途被杀留下半个 JSON。
 
-实测（用的是**装好的 exe**，从 `%LOCALAPPDATA%\Programs\FloatIsle` 启动，配置在 `%APPDATA%`；不要从仓库 `bin\Release\...` 里跑，那条路径带低完整性标签会写不进去）：
+实测（用的是**装好的 exe**，从 `%LOCALAPPDATA%\Programs\FloatIsle` 启动，配置在 `%APPDATA%`；别从带低完整性标签的沙箱目录里跑，那样配置写不进去）：
 
 | 检查 | 读数 |
 | --- | --- |
@@ -252,7 +264,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | 胶囊模式对照 | 收起 176×60、展开 `1148,0,336x166`，行为未变 |
 | CPU（3 任务、光标在岛外、只推一次心跳） | 30 s 两轮 **12.00 / 2.00 个时间片**（15.625 ms 一片）；第二轮 2 片是 25 s 心跳超时后呼吸已停，与胶囊模式基线（中位 12–17 片）同档，**没有新增常驻定时器** |
 
-截图（只存盘、未读）：`C:\Users\12576\AppData\Local\Temp\floatisle-j\top-mode-collapsed.png`、`top-mode-expanded.png`、`capsule-mode-collapsed.png`、`capsule-mode-expanded.png`。
+截图（只存盘、未读）：`%TEMP%\floatisle-j\top-mode-collapsed.png`、`top-mode-expanded.png`、`capsule-mode-collapsed.png`、`capsule-mode-expanded.png`。
 
 **工作台卡片布局 / 自动列数 / 拖拽换序 / 设置窗拖动**（100% 档、单屏 2560×1552、工作区宽 2560）：
 
@@ -272,7 +284,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -o publish
 | 记忆位置在屏外 | 手改 `SettingsLeftPx=SettingsTopPx=99999` 后重启 → 回落居中 `1080,244` |
 | 面板宽上限 | 三档实测 404 / 596 / 212，均 ≤ 工作区宽一半（1280） |
 
-截图（只存盘、未读，均在 `C:\Users\12576\AppData\Local\Temp\floatisle-j\`）：`c2.png`（4 卡 2 列）、`c3.png`（3 卡 3 列）、`c1.png`（3 卡 1 列）、`u0.png`~`u3.png`（上移/下移前后）。
+截图（只存盘、未读，均在 `%TEMP%\floatisle-j\`）：`c2.png`（4 卡 2 列）、`c3.png`（3 卡 3 列）、`c1.png`（3 卡 1 列）、`u0.png`~`u3.png`（上移/下移前后）。
 
 **未实测**：150% 档的贴顶工作台与卡片网格（自检里那条 150% 是 `×1.5` 构造用例，用例名已标注「未实机」）；真双屏下贴顶模式的展开落位；物理鼠标（只有注入事件）；卡片拖拽与设置窗拖动也只用注入鼠标测过。
 
@@ -494,7 +506,7 @@ E:\temp-fi2\e\FloatIsle.exe --selftest "$env:TEMP\placement-report.txt"
 - **系统阴影被裁掉了**。`SetWindowRgn` 按形状裁剪窗口，画在胶囊外的 `DropShadowEffect` 会被切出硬边，所以去掉阴影，只留 1px 描边。
 - 区域边缘没有抗锯齿，圆角是硬边（1px 级锯齿）。
 - **只认系统 SMTC**：不注册 SMTC 会话的播放器（部分小众播放器、网页里被浏览器接管的情况）读不到；浏览器类通常以浏览器进程为一个会话。
-- **全屏判定踩到一个反常现象**：本机实测，同一份 exe 放在仓库 `bin\Release\...` 目录里，`SHQueryUserNotificationState` 会稳定返回 `QUNS_BUSY(2)`；把同样的文件拷到 `C:\...\Temp` 或 `E:\temp-fi` 下运行则返回正常的 `5`。现象与工作区目录上的**低完整性标签**相关（见上面「打包」一节；机制未验明，只确认相关性），不是程序逻辑问题。因此 2/3 两条路径不单看返回值，还要复核前台窗口是否盖满显示器——这样即使返回值异常也不会误隐藏。**独占全屏 D3D 游戏（state 3）本机没有可测环境，未实测。**
+- **全屏判定踩到一个反常现象**：实测发现，同一份 exe 在带低完整性标签的沙箱目录里运行时，`SHQueryUserNotificationState` 会稳定返回 `QUNS_BUSY(2)`；拷到普通目录运行则返回正常的 `5`（机制未验明，只确认相关性），不是程序逻辑问题。因此 2/3 两条路径不单看返回值，还要复核前台窗口是否盖满显示器——这样即使返回值异常也不会误隐藏。**独占全屏 D3D 游戏（state 3）本机没有可测环境，未实测。**
 - 没有封面、没有进度条、没有任何播放控制（按 v0.2 范围只读）。
 - **用量面板的数字来自成本插件的私有账本格式**：`days`/`balanceRef`/`planSamples.go` 任一改结构，这里就显示「无数据」（不会崩）。订阅计划下 `cost` 恒为 0，所以默认不显示金额。
 - **收起态只显示 token 总数**（`2.8 亿 tok`），调用次数与额度百分比只在展开态：完整行 184 DIP 放不进收起态 158 DIP 的可用宽度，硬塞就是省略号。要看全就悬停展开。
@@ -581,3 +593,6 @@ curl.exe -s -o NUL -w "%{http_code}`n" http://127.0.0.1:47821/event
 
 `GetWindowRgn` 读回：收起态 `box=110,68,269,111`（159×43），展开态 `box=30,30,349,149`（319×119）。
 
+## 许可
+
+[MIT](LICENSE)。仓库里只有本程序的源码；运行时依赖的 .NET / WPF / WinForms / Windows SDK 投影按各自许可。
