@@ -66,16 +66,22 @@ export function eventChannelGap(report: DshBridgeReport): boolean {
 export function dshBridgeDiagnostics(status: DshBridgeStatus): string {
   const { processes, plugin, report } = status;
   const main = processes.mainPids.join(", ") || "none";
+  // The start time is kept in milliseconds for machines and in UTC for the person pasting
+  // this into a chat, who would otherwise have to convert it.
+  const startedAt =
+    processes.startedAt === null
+      ? "unknown"
+      : `${processes.startedAt} (${new Date(processes.startedAt).toISOString()})`;
   const bridge = report.selfDescribing
     ? `clients=${report.clients} pid=${report.pid} epoch=${report.epoch}`
     : "not self-describing (old plugin)";
   return [
     `state: ${status.state}`,
     `endpoint: ${status.endpoint} reachable=${status.reachable} http=${status.httpStatus ?? "none"}`,
-    `process: main=${main} children=${processes.childCount} startedAt=${processes.startedAt ?? "unknown"}`,
+    `process: main=${main} children=${processes.childCount} startedAt=${startedAt}`,
     `plugin: ${plugin.version ?? "unknown"}${plugin.profile ? ` (${plugin.profile})` : ""}`,
     `bridge: ${bridge}`,
-    `sessions: running=${report.running.length} recent=${report.recent} lastEventAt=${report.lastEventAt ?? "never"}`,
+    `sessions: running=${report.running.length} recentCount=${report.recent} lastEventAt=${report.lastEventAt ?? "never"}`,
     `events: sent=${report.eventsSent ?? "?"} failed=${report.eventsFailed ?? "?"} lastError=${report.lastEventError ?? "none"}`,
     `error: ${status.error ?? "none"}`,
     `raw: ${status.raw ?? "(no body)"}`,

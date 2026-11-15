@@ -23,9 +23,11 @@ test("the island's own missing event receiver is read out of the plugin's last e
 
 test("diagnostics carry both numbers and bodies, and never invent values", () => {
   const healthy = dshBridgeDiagnostics(status());
-  for (const line of ["state: ok", "main=20832", "children=8", "plugin: 0.12.0 (desktop)", "clients=4 pid=20832 epoch=e1", "running=2", 'raw: {"ok":true}']) {
+  for (const line of ["state: ok", "main=20832", "children=8", "plugin: 0.12.0 (desktop)", "clients=4 pid=20832 epoch=e1", "running=2", "recentCount=3", 'raw: {"ok":true}']) {
     assert.ok(healthy.includes(line), line);
   }
+  // The person pasting this into a chat should not have to convert milliseconds to a clock time.
+  assert.ok(healthy.includes(`startedAt=${processes.startedAt} (${new Date(processes.startedAt).toISOString()})`), healthy);
   // An old plugin has no clients, pid or epoch; the text says so instead of printing numbers.
   const old = dshBridgeDiagnostics(status({ state: "pluginOutdated", report: report({ pid: null, epoch: null, clients: null, selfDescribing: false }), raw: null }));
   assert.ok(old.includes("not self-describing (old plugin)"));

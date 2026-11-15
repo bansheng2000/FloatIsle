@@ -81,7 +81,19 @@ DSH 官方账户采用充值与赠送钱包；没有查到本地持久化的余�
 
 2026-11-13 注册表、exe 版本和 Electron 包清单交叉确认：本机为 DataElement DSH Desktop 0.12.1。核对时无 DSH 进程；生产解析得到 5 个会话，全部已结束、已退出，宿主 DataElement。不输出标题、正文、用户名或凭据，不再次请求余额。临时核对测试已移除。
 
+## 通知桥连接卡（设置 → 连接）
+
+卡片只读。一次检测做三件事：按父子关系取 DSH 主进程（另报渲染/GPU 子进程个数与启动时间）；扫本机 `~/.dsh{,-beta}/profiles/*/node_modules/dsh-task-notify/package.json`，取修改时间最新的那份报版本与 profile；2 秒超时 GET `http://127.0.0.1:47822/status`。不碰 47821 端口，不发 `/jump` 与 `/decision`。
+
+状态五态：未运行、插件未响应、端口被占、旧版、正常。「旧版」按应答里有没有 `clients`、`pid`、`epoch` 判定，不看 `package.json` 的版本号——磁盘上的版本和宿主进程里实际加载的代码可以不一致，本机就遇到过磁盘已是 v0.12.0、宿主仍跑老代码的情况。
+
+覆盖边界：真机只观察到过「旧版」和「未运行」。「插件未响应」「端口被占」两态从未在真机出现，只有 `src-tauri/src/agent_status/dsh_bridge_tests.rs` 里的报文 fixture 覆盖，不要把 fixture 通过当成真机验过。报障请用卡右上角的复制诊断信息：九行字段加原始 `/status` 报文（截断 4KB，单行 JSON 固定排在最后）。
+
+本版浮岛还没有 47821 事件接收端，所以插件的 `eventsFailed` 会一直增长，卡片底部那行琥珀提示说的就是这件事；接收端实现后它会随 `lastEventError` 消失，不需要手动改文案。
+
 ## English
+
+The Connection page states the notifier bridge in one read-only card: the DSH main process (taken from the parent-child relationships, with the child count and start time), the newest `dsh-task-notify` manifest under the DSH profiles, and one 2-second GET on 47822 `/status`. The status has five values: not running, plugin silent, port taken, outdated, and OK. Outdated means the reply has no `clients`, `pid` or `epoch`, which is checked instead of the manifest version because the loaded code can lag behind the file on disk. Only outdated and not running were ever seen on a real machine; plugin silent and port taken are covered by reply fixtures alone. This build has no 47821 event receiver, so the amber line about failed events stays until that receiver exists.
 
 DeepSeek Harness desktop sessions are read offline from its versioned projection checkpoints, with distinct DS text icons, the existing session cards and source settings. DSH uses prepaid wallets rather than subscription windows: its teal rings indicate balance/bonus availability and show currency amounts, never an invented percentage. Balance queries reuse the default saved DSH credential in native memory, use fixed official HTTPS endpoints, and cache only sanitized amounts in memory. Credentials and conversation contents are not copied into diagnostics or fixtures.
 
