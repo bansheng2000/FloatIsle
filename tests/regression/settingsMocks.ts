@@ -18,6 +18,38 @@ export const replyMarkerCalls: boolean[] = [];
 export const translationShortcutCalls: string[] = [];
 // Kept like the native store, so a page opened again reads back what was saved.
 let clipboardSettings = { enabled: true, captureImages: true, maxItems: 100, shortcut: "Ctrl+Shift+V", shortcutEnabled: true };
+// The bridge card has two regression scenarios. The healthy one is the default, so every other
+// page keeps asserting what it asserted before. The second replays the reply this machine's DSH
+// gave on 2026-11-16 06:0x: the full self-describing field set, but `clients: 0` with an empty
+// `clientList`, which the card must never show as OK. Only the epoch value is a stand-in — it is
+// a random runtime id, not something a test can read off the wire.
+export type DshBridgeScenario = "ok" | "noClients";
+let dshBridgeScenario: DshBridgeScenario = "ok";
+export function setDshBridgeScenario(next: DshBridgeScenario): void {
+  dshBridgeScenario = next;
+}
+const DSH_EXE = String.raw`E:\Programs\DeepSeek Harness\DeepSeek Harness.exe`;
+const dshBridgeStatus = () =>
+  dshBridgeScenario === "noClients"
+    ? {
+        state: "noClients",
+        processes: { mainPids: [3304], childCount: 8, startedAt: Date.parse("2026-11-16T06:09:19+08:00"), exe: DSH_EXE },
+        plugin: { version: "0.12.1", profile: "desktop" },
+        endpoint: "127.0.0.1:47822", reachable: true, httpStatus: 200, error: null,
+        report: { pid: 19680, epoch: "e-noclients", clients: 0, clientIds: [], running: [], recent: 0, lastEventAt: "2026-11-16T06:20:37.000Z", eventsSent: 0, eventsFailed: 0, lastEventError: "connect ECONNREFUSED 127.0.0.1:47821", listening: true, selfDescribing: true },
+        raw: `{"ok":true,"running":[],"pending":[],"clients":0,"clientList":[],"pid":19680,"epoch":"e-noclients","stats":{"enabled":true,"listening":true,"eventsSent":0,"eventsFailed":0,"lastEventAt":"2026-11-16T06:20:37.000Z","lastEventError":"connect ECONNREFUSED 127.0.0.1:47821","heartbeats":114}}`,
+      }
+    : {
+        // The healthy bridge: a self-describing plugin, four copies in one process, and the
+        // island's own missing event receiver still visible in the plugin's last error.
+        state: "ok",
+        processes: { mainPids: [20832], childCount: 8, startedAt: Date.now() - 3_600_000, exe: DSH_EXE },
+        plugin: { version: "0.12.0", profile: "desktop" },
+        endpoint: "127.0.0.1:47822", reachable: true, httpStatus: 200, error: null,
+        report: { pid: 20832, epoch: "e1", clients: 4, clientIds: ["20832-1"], running: ["s1", "s2"], recent: 3, lastEventAt: "2026-11-15T13:59:36.830Z", eventsSent: 203, eventsFailed: 2059, lastEventError: "connect ECONNREFUSED 127.0.0.1:47821", listening: true, selfDescribing: true },
+        raw: `{"ok":true}`,
+      };
+
 mockIPC((command, payload) => {
   commands.push(command);
   const args = (payload ?? {}) as Record<string, unknown>;
@@ -45,14 +77,7 @@ mockIPC((command, payload) => {
     case "get_agent_status": return { codex: { phase: "idle", updatedAt: 0 }, claudeCode: { phase: "idle", updatedAt: 0 }, updatedAt: 0, statusPath: "C:\\Users\\demo\\AppData\\Roaming\\com.focusd.island\\agent-status.json" };
     // The DSH bridge healthy: a self-describing plugin, four copies in one process, and the
     // island's own missing event receiver still visible in the plugin's last error.
-    case "probe_dsh_bridge": return {
-      state: "ok",
-      processes: { mainPids: [20832], childCount: 8, startedAt: Date.now() - 3_600_000, exe: "E:\\Programs\\DeepSeek Harness\\DeepSeek Harness.exe" },
-      plugin: { version: "0.12.0", profile: "desktop" },
-      endpoint: "127.0.0.1:47822", reachable: true, httpStatus: 200, error: null,
-      report: { pid: 20832, epoch: "e1", clients: 4, clientIds: ["20832-1"], running: ["s1", "s2"], recent: 3, lastEventAt: "2026-11-15T13:59:36.830Z", eventsSent: 203, eventsFailed: 2059, lastEventError: "connect ECONNREFUSED 127.0.0.1:47821", listening: true, selfDescribing: true },
-      raw: "{\"ok\":true}",
-    };
+    case "probe_dsh_bridge": return dshBridgeStatus();
     case "copy_text_to_clipboard": return null;
     case "get_qq_mail_state": return mailboxes;
     case "connect_qq_mail":

@@ -10,7 +10,8 @@ import { SettingsWindow } from "../../src/windows/settings/SettingsWindow";
 import { DEFAULT_SETTINGS } from "../../src/features/appearance/settings";
 import { settingsCategoryFor } from "../../src/windows/settings/categories";
 import { I18nProvider, LOCALE_STORAGE_KEY } from "../../src/i18n";
-import { commands, mailCalls, REPLY_MARKER, replyMarkerCalls, translationShortcutCalls } from "./settingsMocks";
+import { commands, mailCalls, REPLY_MARKER, replyMarkerCalls, setDshBridgeScenario, translationShortcutCalls } from "./settingsMocks";
+import { checkEmptyBridge, checkHealthyBridge } from "./dshBridgeChecks";
 
 const query = new URLSearchParams(location.search);
 const automated = query.has("test");
@@ -257,11 +258,12 @@ if (!automated) {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
     check(replyMarkerCalls.join() === "true" && markerSwitch!.checked, "Switching the reply status marker on writes it");
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
-    const bridge = [...document.querySelectorAll<HTMLElement>(".settings-group")].find((group) => group.textContent?.includes("DSH 通知桥"));
-    const bridgeText = (title: string) => [...(bridge?.querySelectorAll<HTMLElement>(".settings-row") ?? [])].find((row) => row.querySelector(".settings-row__title")?.textContent === title)?.textContent ?? "";
-    check(bridgeText("DSH 进程").includes("主进程 PID 20832") && bridgeText("DSH 进程").includes("另有 8 个渲染/GPU 子进程"), "DSH's main process and its renderer children are reported apart");
-    check(bridgeText("桥实例").includes("4 份") && bridgeText("桥实例").includes("同一个进程里被加载了 4 次") && !bridgeText("桥实例").includes("客户端连接"), "Bridge copies use the plugin's own words, not four connected clients");
-    check(bridge?.textContent?.includes("正常") && bridge?.textContent?.includes("本版浮岛未实现接收端（47821）"), "A healthy bridge still calls out the island's own missing event receiver");
+    checkHealthyBridge(check);
+    // The card only probes when it mounts, so leave and come back for the empty-bridge case.
+    setDshBridgeScenario("noClients");
+    await openPage("agents"); await openPage("agentConnect"); await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+    checkEmptyBridge(check);
+    setDshBridgeScenario("ok");
 
     await openPage("agents"); await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
     const hooksLink = [...document.querySelectorAll<HTMLButtonElement>(".editor-panel .settings-link-button")].find((button) => button.textContent === "安装/修复");
