@@ -10,8 +10,6 @@ export type IslandText = {
   tuckToTop: string;
   resetPosition: string;
   resetPositionLabel: string;
-  /** The settings button while its red dot leads to the community group in About. */
-  settingsWithNews: string;
   editor: string;
   todoList: string;
   music: string;
@@ -38,7 +36,6 @@ export const zhCN: IslandText = {
   tuckToTop: "收起到屏幕顶部",
   resetPosition: "复位",
   resetPositionLabel: "回到主屏顶部居中",
-  settingsWithNews: "设置（关于里有新内容）",
   editor: "岛屿编辑",
   todoList: "任务清单",
   music: "Music",
@@ -63,7 +60,6 @@ export const en: IslandText = {
   tuckToTop: "Tuck to top edge",
   resetPosition: "Reset",
   resetPositionLabel: "Reset island to the top center of the primary screen",
-  settingsWithNews: "Settings (something new in About)",
   editor: "Island editor",
   todoList: "Tasks",
   music: "Music",

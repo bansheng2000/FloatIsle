@@ -3,7 +3,6 @@ import { ArrowUpRight, ClipboardList, Info, Languages, ListTodo, MessageCircle, 
 import { isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { PROJECT_AUTHOR_URL } from "../../features/updater/projectLinks";
-import { useCommunityInvite } from "../../features/updater/useCommunityInvite";
 import { useTranslation } from "../../i18n";
 import { SETTINGS_GROUPS, type SettingsCategory } from "./categories";
 import "./SettingsSidebar.css";
@@ -36,8 +35,6 @@ export function SettingsSidebar({
   const t = useTranslation();
   const text = t.settings.categories;
   const listRef = useRef<HTMLDivElement>(null);
-  // About keeps a red dot until the community group on it has been opened.
-  const communityPending = useCommunityInvite().pending;
   // The list can outgrow a short window or the island; keep the open page in sight.
   useEffect(() => {
     listRef.current?.querySelector(".settings-sidebar__item--active")?.scrollIntoView({ block: "nearest" });
@@ -57,7 +54,6 @@ export function SettingsSidebar({
         >
           <Icon size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
           <span>{text[entry]}</span>
-          {entry === "about" && communityPending && <span className="settings-sidebar__dot" role="img" aria-label={t.settings.project.communityNew} />}
         </button>
       </li>
     );
