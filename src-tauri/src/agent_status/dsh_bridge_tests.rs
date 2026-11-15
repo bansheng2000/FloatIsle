@@ -60,6 +60,50 @@ fn parses_the_current_plugin_document_as_ok() {
 }
 
 #[test]
+fn a_hub_without_registered_clients_is_not_reported_as_ok() {
+    // Measured on 2026-11-16 after a restart: the full field set, a pid, an epoch and a
+    // heartbeat every ten seconds, but `clients: 0` and an empty `clientList` — the hub
+    // listened while no DSH instance was attached, so not one event could arrive.
+    let hub = json!({
+        "ok": true,
+        "running": [],
+        "pending": [],
+        "recent": [],
+        "clients": 0,
+        "clientList": [],
+        "pid": 19680,
+        "epoch": "mwie0bovhj0x",
+        "stats": {"enabled": true, "listening": true, "eventsSent": 0, "eventsFailed": 0, "heartbeats": 17}
+    })
+    .to_string();
+    let report = parse_status(&hub).unwrap();
+    assert!(report.self_describing);
+    assert_eq!(report.clients, Some(0));
+    assert_eq!(
+        classify(true, &Answer::Ours { status: 200, report, raw: String::new() }),
+        DshBridgeState::NoClients
+    );
+
+    // An empty `running` list is not the same thing: nobody running a task is a normal bridge.
+    let idle = json!({
+        "ok": true,
+        "running": [],
+        "pending": [],
+        "clients": 1,
+        "clientList": [{"id": "19680-1", "since": "2026-11-16T06:00:00.000Z", "ws": "/w", "probe": ["harness"]}],
+        "pid": 19680,
+        "epoch": "mwie0bovhj0x",
+        "stats": {"enabled": true, "listening": true, "eventsSent": 0, "eventsFailed": 0, "heartbeats": 17}
+    })
+    .to_string();
+    let report = parse_status(&idle).unwrap();
+    assert_eq!(
+        classify(true, &Answer::Ours { status: 200, report, raw: String::new() }),
+        DshBridgeState::Ok
+    );
+}
+
+#[test]
 fn a_body_that_is_not_the_plugins_is_a_taken_port_not_a_silent_plugin() {
     assert!(parse_status("<html>hello</html>").is_none());
     assert!(parse_status(r#"{"ok":false}"#).is_none());

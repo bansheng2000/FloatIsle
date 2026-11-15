@@ -3,7 +3,13 @@
  * src-tauri/src/agent_status/dsh_bridge.rs: every field but the state may be missing,
  * because an older plugin answers without the self-describing ones.
  */
-export type DshBridgeState = "dshNotRunning" | "pluginSilent" | "portTaken" | "pluginOutdated" | "ok";
+export type DshBridgeState =
+  | "dshNotRunning"
+  | "pluginSilent"
+  | "portTaken"
+  | "pluginOutdated"
+  | "noClients"
+  | "ok";
 
 export type DshProcessSummary = {
   /** Top-level DSH processes; children are renderer, GPU and utility processes. */

@@ -21,6 +21,14 @@ test("the island's own missing event receiver is read out of the plugin's last e
   assert.equal(eventChannelGap(report({ lastEventError: "ECONNREFUSED 127.0.0.1:47822" })), false);
 });
 
+test("a bridge with no registered client reads as its own state, not as OK", () => {
+  const empty = dshBridgeDiagnostics(status({ state: "noClients", report: report({ clients: 0, clientIds: [], running: [] }) }));
+  assert.ok(empty.includes("state: noClients"), empty);
+  assert.ok(empty.includes("clients=0"), empty);
+  // Nothing invented for the session count: an empty running list is a legitimate zero.
+  assert.ok(empty.includes("running=0"), empty);
+});
+
 test("diagnostics carry both numbers and bodies, and never invent values", () => {
   const healthy = dshBridgeDiagnostics(status());
   for (const line of ["state: ok", "main=20832", "children=8", "plugin: 0.12.0 (desktop)", "clients=4 pid=20832 epoch=e1", "running=2", "recentCount=3", 'raw: {"ok":true}']) {

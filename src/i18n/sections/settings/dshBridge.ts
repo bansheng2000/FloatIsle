@@ -17,6 +17,7 @@ export type SettingsDshBridgeText = {
     pluginSilent: string;
     portTaken: string;
     pluginOutdated: string;
+    noClients: string;
     ok: string;
   };
   hints: {
@@ -24,6 +25,7 @@ export type SettingsDshBridgeText = {
     silent: string;
     portTaken: string;
     outdated: (version: string) => string;
+    noClients: string;
     ok: string;
   };
   mainProcess: (pid: number) => string;
@@ -35,6 +37,7 @@ export type SettingsDshBridgeText = {
   bridgeCount: (count: number) => string;
   bridgeHint: (count: number) => string;
   bridgeUnavailable: string;
+  bridgeEmptyHint: string;
   running: (count: number) => string;
   recent: (when: string) => string;
   recentNever: string;
@@ -60,6 +63,7 @@ export const zhCN: SettingsDshBridgeText = {
     pluginSilent: "插件未响应",
     portTaken: "端口被占",
     pluginOutdated: "旧版",
+    noClients: "无实例",
     ok: "正常",
   },
   hints: {
@@ -67,6 +71,7 @@ export const zhCN: SettingsDshBridgeText = {
     silent: "DSH 在跑，但 47822 端口没有应答：插件可能没启用，或者还没被加载。",
     portTaken: "47822 端口有别的东西在应答，那不是 DSH 的插件。",
     outdated: (version) => `磁盘上是 v${version}，但 DSH 里跑的还是老代码，重启 DSH 才会加载新版，不用重装。`,
+    noClients: "插件进程在听，但没有任何 DSH 实例注册到桥，事件一条也不会到达。",
     ok: "插件在线，状态可读。",
   },
   mainProcess: (pid) => `主进程 PID ${pid}`,
@@ -78,6 +83,7 @@ export const zhCN: SettingsDshBridgeText = {
   bridgeCount: (count) => `${count} 份`,
   bridgeHint: (count) => `同一个进程里被加载了 ${count} 次；原因待确认，插件内已改为进程级单例共享一套资源。`,
   bridgeUnavailable: "旧版插件不提供",
+  bridgeEmptyHint: "0 份：插件进程在，但没有实例注册到桥，事件不会到达。",
   running: (count) => `${count} 个会话在跑`,
   recent: (when) => `最近事件：${when}`,
   recentNever: "最近事件：无",
@@ -103,6 +109,7 @@ export const en: SettingsDshBridgeText = {
     pluginSilent: "Plugin silent",
     portTaken: "Port taken",
     pluginOutdated: "Outdated",
+    noClients: "No instances",
     ok: "OK",
   },
   hints: {
@@ -110,6 +117,7 @@ export const en: SettingsDshBridgeText = {
     silent: "DSH runs, but nothing answers on 47822: the plugin may be disabled or not loaded yet.",
     portTaken: "Something else answers on 47822, and it is not the DSH plugin.",
     outdated: (version) => `The copy on disk is v${version}, but DSH still runs the old code; restart DSH to load it, no reinstall needed.`,
+    noClients: "The plugin listens, but no DSH instance is registered with the bridge, so no event arrives.",
     ok: "The plugin is online and its state is readable.",
   },
   mainProcess: (pid) => `main process PID ${pid}`,
@@ -121,6 +129,7 @@ export const en: SettingsDshBridgeText = {
   bridgeCount: (count) => (count === 1 ? "1 copy" : `${count} copies`),
   bridgeHint: (count) => `loaded ${count} times in one process; the cause is unconfirmed, and the plugin now shares one set of resources through a process-wide singleton.`,
   bridgeUnavailable: "Not provided by the old plugin",
+  bridgeEmptyHint: "0 copies: the plugin process is up, but nothing is registered with the bridge, so no event arrives.",
   running: (count) => (count === 1 ? "1 session running" : `${count} sessions running`),
   recent: (when) => `last event: ${when}`,
   recentNever: "last event: never",

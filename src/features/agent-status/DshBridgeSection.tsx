@@ -84,7 +84,9 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
             ? text.hints.portTaken
             : status.state === "pluginOutdated"
               ? text.hints.outdated(plugin?.version ?? "?")
-              : text.hints.ok;
+              : status.state === "noClients"
+                ? text.hints.noClients
+                : text.hints.ok;
 
   const footer = error ? (
     <span className="dsh-bridge__note dsh-bridge__note--error" role="alert">{text.failed(error)}</span>
@@ -149,7 +151,13 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
         />
         <SettingsRow
           title={text.bridge}
-          description={report?.clients != null && report.clients > 1 ? text.bridgeHint(report.clients) : undefined}
+          description={
+            report?.clients === 0
+              ? text.bridgeEmptyHint
+              : report?.clients != null && report.clients > 1
+                ? text.bridgeHint(report.clients)
+                : undefined
+          }
           control={
             report?.clients != null ? (
               <span className="dsh-bridge__value">{text.bridgeCount(report.clients)}</span>

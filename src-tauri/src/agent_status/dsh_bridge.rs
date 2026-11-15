@@ -45,7 +45,10 @@ pub enum DshBridgeState {
     PortTaken,
     /// The plugin answers, but without `clients` / `pid` / `epoch`: the running copy is old.
     PluginOutdated,
-    /// The plugin answers with the self-describing fields.
+    /// The plugin answers with the self-describing fields but nothing registered with it:
+    /// a hub that listens and beats, yet no DSH instance is attached, so no event arrives.
+    NoClients,
+    /// The plugin answers with the self-describing fields and at least one registered client.
     Ok,
 }
 
@@ -297,10 +300,15 @@ fn text_of(value: &Value, key: &str) -> Option<String> {
 fn classify(has_process: bool, answer: &Answer) -> DshBridgeState {
     match answer {
         Answer::Ours { report, .. } => {
-            if report.self_describing {
-                DshBridgeState::Ok
-            } else {
+            if !report.self_describing {
                 DshBridgeState::PluginOutdated
+            } else if report.clients == Some(0) {
+                // A hub that answers with a full field set but has nothing attached is not a
+                // healthy bridge: it beats and listens, and not one event can arrive. An empty
+                // `running` list is different — that only means nobody is running a task now.
+                DshBridgeState::NoClients
+            } else {
+                DshBridgeState::Ok
             }
         }
         Answer::Foreign { .. } => DshBridgeState::PortTaken,

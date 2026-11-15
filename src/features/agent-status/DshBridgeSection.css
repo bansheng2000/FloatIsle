@@ -22,8 +22,9 @@
   background: var(--color-white-a06);
 }
 
-/* The state badge: grey when nothing runs, amber when something is wrong, green only when
-   the plugin answered with the self-describing fields. */
+/* The state badge: grey when nothing runs, amber when something is wrong (including a bridge
+   that answers with a full field set but has no registered client), green only when the plugin
+   answered with the self-describing fields and at least one client. */
 .dsh-bridge__badge {
   padding: 2px 8px;
   border-radius: var(--radius-pill);
@@ -38,7 +39,8 @@
 
 .dsh-bridge__badge--pluginSilent,
 .dsh-bridge__badge--portTaken,
-.dsh-bridge__badge--pluginOutdated {
+.dsh-bridge__badge--pluginOutdated,
+.dsh-bridge__badge--noClients {
   color: var(--color-warning);
   background: rgba(255, 209, 102, 0.12);
 }

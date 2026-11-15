@@ -85,7 +85,7 @@ DSH 官方账户采用充值与赠送钱包；没有查到本地持久化的余�
 
 卡片只读。一次检测做三件事：按父子关系取 DSH 主进程（另报渲染/GPU 子进程个数与启动时间）；扫本机 `~/.dsh{,-beta}/profiles/*/node_modules/dsh-task-notify/package.json`，取修改时间最新的那份报版本与 profile；2 秒超时 GET `http://127.0.0.1:47822/status`。不碰 47821 端口，不发 `/jump` 与 `/decision`。
 
-状态五态：未运行、插件未响应、端口被占、旧版、正常。「旧版」按应答里有没有 `clients`、`pid`、`epoch` 判定，不看 `package.json` 的版本号——磁盘上的版本和宿主进程里实际加载的代码可以不一致，本机就遇到过磁盘已是 v0.12.0、宿主仍跑老代码的情况。
+状态六态：未运行、插件未响应、端口被占、旧版、无实例、正常。「旧版」按应答里有没有 `clients`、`pid`、`epoch` 判定，不看 `package.json` 的版本号——磁盘上的版本和宿主进程里实际加载的代码可以不一致，本机就遇到过磁盘已是 v0.12.0、宿主仍跑老代码的情况。字段齐了但 `clients` 是 0 也不报正常：这时桥在听、心跳在走，却没有任何 DSH 实例注册，事件一条也到不了，报成正常会把真故障伪装成绿灯。注意它与「会话 0 个」不同——没人跑任务时 `running` 为空是正常的，`clients` 为 0 永远不正常。
 
 覆盖边界：真机只观察到过「旧版」和「未运行」。「插件未响应」「端口被占」两态从未在真机出现，只有 `src-tauri/src/agent_status/dsh_bridge_tests.rs` 里的报文 fixture 覆盖，不要把 fixture 通过当成真机验过。报障请用卡右上角的复制诊断信息：九行字段加原始 `/status` 报文（截断 4KB，单行 JSON 固定排在最后）。
 
@@ -93,7 +93,7 @@ DSH 官方账户采用充值与赠送钱包；没有查到本地持久化的余�
 
 ## English
 
-The Connection page states the notifier bridge in one read-only card: the DSH main process (taken from the parent-child relationships, with the child count and start time), the newest `dsh-task-notify` manifest under the DSH profiles, and one 2-second GET on 47822 `/status`. The status has five values: not running, plugin silent, port taken, outdated, and OK. Outdated means the reply has no `clients`, `pid` or `epoch`, which is checked instead of the manifest version because the loaded code can lag behind the file on disk. Only outdated and not running were ever seen on a real machine; plugin silent and port taken are covered by reply fixtures alone. This build has no 47821 event receiver, so the amber line about failed events stays until that receiver exists.
+The Connection page states the notifier bridge in one read-only card: the DSH main process (taken from the parent-child relationships, with the child count and start time), the newest `dsh-task-notify` manifest under the DSH profiles, and one 2-second GET on 47822 `/status`. The status has six values: not running, plugin silent, port taken, outdated, no clients, and OK. Outdated means the reply has no `clients`, `pid` or `epoch`, which is checked instead of the manifest version because the loaded code can lag behind the file on disk. A full field set with `clients: 0` is its own state rather than OK: the hub listens and beats while no DSH instance is registered, so no event can arrive, and calling that OK would dress a real fault as a green light. It differs from zero sessions running, which is a legitimate empty `running` list; zero clients never is. Only outdated, no clients and not running were ever seen on a real machine; plugin silent and port taken are covered by reply fixtures alone. This build has no 47821 event receiver, so the amber line about failed events stays until that receiver exists.
 
 DeepSeek Harness desktop sessions are read offline from its versioned projection checkpoints, with distinct DS text icons, the existing session cards and source settings. DSH uses prepaid wallets rather than subscription windows: its teal rings indicate balance/bonus availability and show currency amounts, never an invented percentage. Balance queries reuse the default saved DSH credential in native memory, use fixed official HTTPS endpoints, and cache only sanitized amounts in memory. Credentials and conversation contents are not copied into diagnostics or fixtures.
 
