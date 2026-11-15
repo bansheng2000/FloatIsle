@@ -72,7 +72,6 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
   const report = status?.report;
   const plugin = status?.plugin;
   const mainPid = processes?.mainPids[0];
-  const outdated = status?.state === "pluginOutdated" && plugin?.version;
 
   const hint =
     !status
@@ -136,7 +135,7 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
         />
         <SettingsRow
           title={text.plugin}
-          description={outdated ? text.hints.outdated(plugin?.version ?? "?") : undefined}
+          description={undefined}
           control={
             plugin?.version ? (
               <span className="dsh-bridge__value">

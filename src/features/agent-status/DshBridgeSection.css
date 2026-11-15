@@ -86,3 +86,17 @@
 .dsh-bridge__note--error {
   color: #ff9aa9;
 }
+
+/* Windows high contrast replaces the palette, so the amber and green tints disappear with the
+   background that carried their contrast. Give the badge a system-colour outline and let the
+   two notes use the window text colour, so both stay readable in that theme. */
+@media (forced-colors: active) {
+  .dsh-bridge__badge {
+    border: 1px solid CanvasText;
+  }
+
+  .dsh-bridge__note--attention,
+  .dsh-bridge__note--error {
+    color: CanvasText;
+  }
+}
