@@ -1,0 +1,242 @@
+.todo-notebook {
+  --todo-scheduled-color: #c4b5fd;
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--space-md);
+  overflow: hidden;
+  padding: 12px 0;
+  color: var(--text-1);
+  background: transparent;
+}
+
+.todo-notebook--daily,
+.todo-notebook--calendar {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.todo-calendar {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: clamp(186px, 42%, 218px) minmax(0, 1fr);
+  gap: var(--space-xl);
+}
+
+.todo-date-overview__sidebar {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  background: var(--color-white-a04);
+  border: 1px solid var(--color-white-a08);
+  border-radius: var(--corner-sm);
+  corner-shape: var(--corner-shape);
+}
+
+.todo-notebook__topline {
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.todo-notebook__title-group {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.todo-notebook__count {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.todo-notebook__progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.todo-notebook__progress progress {
+  appearance: none;
+  width: 84px;
+  height: 5px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-pill);
+}
+
+.todo-notebook__progress progress::-webkit-progress-bar {
+  background: var(--color-white-a18);
+  border-radius: var(--radius-pill);
+}
+
+.todo-notebook__progress progress::-webkit-progress-value {
+  background: var(--color-accent);
+  border-radius: var(--radius-pill);
+}
+
+.todo-page-toggle {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  outline: none;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.todo-page-toggle:hover,
+.todo-page-toggle--active {
+  color: var(--text-1);
+  background: var(--color-white-a08);
+}
+
+.todo-page-toggle:active {
+  transform: translateY(1px);
+}
+
+.todo-page-toggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.todo-form {
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0 10px;
+  color: var(--text-3);
+  background: var(--color-white-a06);
+  border: 1px solid var(--color-white-a08);
+  border-radius: var(--corner-xs);
+  corner-shape: var(--corner-shape);
+}
+
+.todo-form--dated {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+}
+
+.todo-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: var(--text-1);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.todo-form input::placeholder {
+  color: var(--text-placeholder);
+}
+
+.todo-form input:disabled {
+  cursor: default;
+  color: var(--text-3);
+}
+
+.todo-form:focus-within {
+  border-color: var(--color-focus-ring-soft);
+}
+
+.todo-list {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
+  gap: var(--space-sm);
+  overflow-y: auto;
+  /* Room for the scrollbar without making the rows narrower than the add field above them. */
+  margin-right: -4px;
+  padding-right: 4px;
+}
+
+.todo-list--scroll {
+  overflow-y: auto;
+}
+
+.todo-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.todo-list::-webkit-scrollbar-thumb {
+  background: var(--color-white-a18);
+  border-radius: var(--radius-pill);
+}
+
+.daily-note {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 8px 10px 12px;
+  resize: none;
+  color: var(--text-1);
+  background: var(--color-white-a04);
+  border: 1px solid var(--color-white-a08);
+  border-radius: var(--corner-xs);
+  corner-shape: var(--corner-shape);
+  outline: none;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 28px;
+  scrollbar-color: var(--color-white-a18) transparent;
+}
+
+.daily-note::placeholder {
+  color: var(--text-placeholder);
+}
+
+.daily-note:focus {
+  border-color: var(--color-focus-ring-soft);
+}
+
+.daily-note::-webkit-scrollbar {
+  width: 6px;
+}
+
+.daily-note::-webkit-scrollbar-thumb {
+  background: var(--color-white-a18);
+  border-radius: var(--radius-pill);
+}
+
+.todo-empty {
+  min-height: 64px;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+}

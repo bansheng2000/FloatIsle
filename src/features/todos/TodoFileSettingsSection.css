@@ -1,0 +1,44 @@
+.todo-file-path {
+  display: block;
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todo-file-status {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.todo-file-status--ok {
+  color: var(--green, #3dbe6b);
+}
+
+.todo-file-status--warn {
+  color: var(--amber, #e8b24d);
+}
+
+.todo-file-status--bad {
+  color: var(--danger, #e5534b);
+}
+
+.todo-file-status--muted {
+  color: var(--text-3);
+}
+
+.todo-file-actions {
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.todo-file-error {
+  display: block;
+  margin-top: 6px;
+  color: var(--danger, #e5534b);
+  font-size: 11px;
+  line-height: 1.4;
+}
