@@ -75,6 +75,11 @@ export function clearClipboardHistory() {
   return invoke<ClipboardHistorySnapshot>("clear_clipboard_history");
 }
 
+/** 只把文本放进剪贴板，不写进历史记录；用于诊断信息的「复制」按钮。 */
+export function copyTextToClipboard(text: string) {
+  return invoke<void>("copy_text_to_clipboard", { text });
+}
+
 /** 返回取消订阅函数的 Promise；调用方负责在卸载时取消。 */
 export function listenClipboardHistoryChanged(handler: () => void) {
   return listen(CLIPBOARD_HISTORY_CHANGED_EVENT, handler);

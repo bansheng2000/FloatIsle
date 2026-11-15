@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentEffortLabels } from "./effortLabels";
+import type { DshBridgeStatus } from "./dshBridge";
 
 // 与 src-tauri/src/agent_status/snapshot.rs 中的 AgentTaskStatus、AgentStatusSnapshot，以及 agent_status/mod.rs 中的 AgentHooksInstallResult 对应。
 export type AgentProvider = "codex" | "claudeCode" | "dsh";
@@ -221,6 +222,11 @@ export type DshUsage = {
 /** Read-only official wallet query using DSH's saved credential, cached in native memory. */
 export function getDshUsage() {
   return invoke<DshUsage | null>("get_dsh_usage");
+}
+
+/** One read of the DSH notifier bridge: processes, installed manifest and one GET on 47822. */
+export function probeDshBridge() {
+  return invoke<DshBridgeStatus>("probe_dsh_bridge");
 }
 
 export function getAgentHooksState() {

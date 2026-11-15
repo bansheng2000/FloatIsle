@@ -1,0 +1,88 @@
+/* The bridge card's title line: copy diagnostics as an icon, then the re-check link. */
+.dsh-bridge__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dsh-bridge__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.dsh-bridge__copy:hover {
+  color: var(--color-text);
+  background: var(--color-white-a06);
+}
+
+/* The state badge: grey when nothing runs, amber when something is wrong, green only when
+   the plugin answered with the self-describing fields. */
+.dsh-bridge__badge {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dsh-bridge__badge--ok {
+  color: var(--color-agent-idle);
+  background: rgba(53, 233, 133, 0.12);
+}
+
+.dsh-bridge__badge--pluginSilent,
+.dsh-bridge__badge--portTaken,
+.dsh-bridge__badge--pluginOutdated {
+  color: var(--color-warning);
+  background: rgba(255, 209, 102, 0.12);
+}
+
+.dsh-bridge__badge--dshNotRunning,
+.dsh-bridge__badge--unknown {
+  color: var(--color-text-muted);
+  background: var(--color-white-a06);
+}
+
+/* A number on the right of its row; the profile sits beside the plugin version, smaller. */
+.dsh-bridge__value {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: right;
+}
+
+.dsh-bridge__value--missing {
+  color: var(--color-text-subtle);
+}
+
+.dsh-bridge__aside {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+}
+
+/* Under the card: the island's missing event receiver, or why the check itself failed. */
+.dsh-bridge__note {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.dsh-bridge__note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.dsh-bridge__note--attention {
+  color: var(--color-warning);
+}
+
+.dsh-bridge__note--error {
+  color: #ff9aa9;
+}

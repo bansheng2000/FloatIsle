@@ -43,6 +43,17 @@ mockIPC((command, payload) => {
       clipboardSettings = { ...clipboardSettings, ...(args.settings as object | undefined) };
       return { settings: clipboardSettings, items: [] };
     case "get_agent_status": return { codex: { phase: "idle", updatedAt: 0 }, claudeCode: { phase: "idle", updatedAt: 0 }, updatedAt: 0, statusPath: "C:\\Users\\demo\\AppData\\Roaming\\com.focusd.island\\agent-status.json" };
+    // The DSH bridge healthy: a self-describing plugin, four copies in one process, and the
+    // island's own missing event receiver still visible in the plugin's last error.
+    case "probe_dsh_bridge": return {
+      state: "ok",
+      processes: { mainPids: [20832], childCount: 8, startedAt: Date.now() - 3_600_000, exe: "E:\\Programs\\DeepSeek Harness\\DeepSeek Harness.exe" },
+      plugin: { version: "0.12.0", profile: "desktop" },
+      endpoint: "127.0.0.1:47822", reachable: true, httpStatus: 200, error: null,
+      report: { pid: 20832, epoch: "e1", clients: 4, clientIds: ["20832-1"], running: ["s1", "s2"], recent: 3, lastEventAt: "2026-11-15T13:59:36.830Z", eventsSent: 203, eventsFailed: 2059, lastEventError: "connect ECONNREFUSED 127.0.0.1:47821", listening: true, selfDescribing: true },
+      raw: "{\"ok\":true}",
+    };
+    case "copy_text_to_clipboard": return null;
     case "get_qq_mail_state": return mailboxes;
     case "connect_qq_mail":
     case "disconnect_qq_mail":

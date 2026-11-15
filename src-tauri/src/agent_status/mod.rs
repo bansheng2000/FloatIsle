@@ -9,6 +9,7 @@ mod codex_process;
 mod codex_usage;
 mod codex_version;
 mod conversation_link;
+pub(crate) mod dsh_bridge;
 mod dsh_credentials;
 mod dsh_desktop;
 mod dsh_sessions;
@@ -498,6 +499,7 @@ macro_rules! tauri_commands {
             crate::agent_status::get_agent_usage,
             crate::agent_status::get_codex_usage,
             crate::agent_status::dsh_usage::get_dsh_usage,
+            crate::agent_status::dsh_bridge::probe_dsh_bridge,
             crate::agent_status::reply_marker::get_reply_marker_state,
             crate::agent_status::reply_marker::set_reply_marker,
             crate::agent_status::sound_packs::list_sound_packs,

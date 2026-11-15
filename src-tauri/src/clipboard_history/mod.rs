@@ -196,6 +196,14 @@ pub fn clear_clipboard_history() -> Result<ClipboardHistorySnapshot, String> {
     service()?.clear()
 }
 
+/// Puts plain text on the system clipboard without going through the history. Bounded by
+/// the same write path, used by the diagnostics copy buttons so their text does not become
+/// a history entry the user has to clean up.
+#[tauri::command]
+pub fn copy_text_to_clipboard(text: String) -> Result<(), String> {
+    service::write_clipboard_text(&text)
+}
+
 pub fn init(app: &AppHandle) -> Result<(), String> {
     if CLIPBOARD_HISTORY.get().is_some() {
         return Ok(());
@@ -257,6 +265,7 @@ macro_rules! tauri_commands {
             crate::clipboard_history::set_clipboard_history_item_note,
             crate::clipboard_history::delete_clipboard_history_item,
             crate::clipboard_history::clear_clipboard_history,
+            crate::clipboard_history::copy_text_to_clipboard,
         ] $($rest)*)
     };
 }

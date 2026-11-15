@@ -111,7 +111,7 @@ export function SettingsPanel({
       {category === "clipboard" && <ClipboardSettingsPage settings={settings} onSettingsChange={setSettings} />}
       {category === "music" && <MusicSettingsPage settings={settings} onSettingsChange={setSettings} />}
       {category === "agents" && <AgentSettingsPage settings={settings} onSettingsChange={setSettings} onOpenConnect={() => setCategory("agentConnect")} />}
-      {category === "agentConnect" && <AgentConnectSettingsPage />}
+      {category === "agentConnect" && <AgentConnectSettingsPage settings={settings} onSettingsChange={setSettings} />}
       {category === "about" && <AboutSettingsPage />}
     </LayoutEditor>
   );

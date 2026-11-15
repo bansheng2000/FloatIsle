@@ -21,6 +21,7 @@ import type { SettingsColorsText } from "./colors";
 import type { SettingsSaveText } from "./save";
 import type { SettingsSoundsText } from "./sounds";
 import type { SettingsTodoFileText } from "./todoFile";
+import type { SettingsDshBridgeText } from "./dshBridge";
 import * as fileShelf from "./fileShelf.ts";
 import * as modules from "./modules.ts";
 import * as messageSources from "./messageSources.ts";
@@ -44,6 +45,7 @@ import * as colors from "./colors.ts";
 import * as save from "./save.ts";
 import * as sounds from "./sounds.ts";
 import * as todoFile from "./todoFile.ts";
+import * as dshBridge from "./dshBridge.ts";
 
 export type SettingsText = {
   fileShelf: SettingsFileShelfText;
@@ -89,6 +91,7 @@ export type SettingsText = {
 
   save: SettingsSaveText;
   todoFile: SettingsTodoFileText;
+  dshBridge: SettingsDshBridgeText;
   sounds: SettingsSoundsText;
 };
 
@@ -135,6 +138,7 @@ export const zhCN: SettingsText = {
 
   save: save.zhCN,
   todoFile: todoFile.zhCN,
+  dshBridge: dshBridge.zhCN,
   sounds: sounds.zhCN,
 };
 
@@ -181,5 +185,6 @@ export const en: SettingsText = {
 
   save: save.en,
   todoFile: todoFile.en,
+  dshBridge: dshBridge.en,
   sounds: sounds.en,
 };
