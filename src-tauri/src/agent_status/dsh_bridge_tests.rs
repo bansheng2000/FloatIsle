@@ -220,3 +220,42 @@ fn a_mounts_refusal_is_never_read_as_an_empty_list() {
         assert_eq!(parse_mounts(body), None, "refused body: {body}");
     }
 }
+
+#[test]
+fn a_numeric_received_at_gives_the_age_when_the_hub_omits_it() {
+    let mut mount = serde_json::from_value::<DshMount>(json!({
+        "clientId": "20832-1",
+        "mountedSessionId": "s2",
+        "visible": true,
+        "focused": true,
+        "reportedAt": 1_700_000_000_000i64,
+        "receivedAt": 1_700_000_010_000i64,
+        "stale": false
+    }))
+    .expect("a numeric timestamp is still a timestamp");
+    assert_eq!(mount.received_at.as_deref(), Some("1700000010000"));
+    fill_age(1_700_000_012_000, &mut mount);
+    assert_eq!(mount.age_ms, Some(2_000), "the hub's own arrival time is the freshness");
+}
+
+#[test]
+fn an_iso_received_at_also_gives_the_age() {
+    let received = "2026-11-16T09:00:00.000Z";
+    let now = super::super::sessions::parse_timestamp_ms("2026-11-16T09:00:05.000Z").unwrap();
+    let mut mount = DshMount { received_at: Some(received.to_string()), ..DshMount::default() };
+    fill_age(now, &mut mount);
+    assert_eq!(mount.age_ms, Some(5_000));
+}
+
+#[test]
+fn one_unreadable_page_makes_the_whole_answer_unusable() {
+    let body = json!({
+        "ok": true,
+        "clients": [
+            {"clientId": "a", "mountedSessionId": "s1"},
+            {"clientId": "b", "mountedSessionId": {"nested": true}}
+        ]
+    })
+    .to_string();
+    assert!(parse_mounts(&body).is_none(), "a page we cannot read must not look like an absent page");
+}

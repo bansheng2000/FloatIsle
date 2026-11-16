@@ -101,7 +101,8 @@ pub struct DshBridgeReport {
 
 /// One page's report from `/_task-notify/mounted`. `age_ms` is the hub's own freshness
 /// (milliseconds since it received the report) and is what the card uses; `received_at` and
-/// `reported_at` are ISO strings from two different clocks and are only for display.
+/// `reported_at` are timestamps whose serialisation differs between hub versions (numbers in
+/// one, ISO strings in another) and are only there to fall back on.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DshMount {
@@ -110,9 +111,57 @@ pub struct DshMount {
     pub visible: Option<bool>,
     pub focused: Option<bool>,
     pub stale: Option<bool>,
+    #[serde(default, deserialize_with = "timestamp")]
     pub reported_at: Option<String>,
+    #[serde(default, deserialize_with = "timestamp")]
     pub received_at: Option<String>,
     pub age_ms: Option<u64>,
+}
+
+/// A timestamp that may arrive as an ISO string or as epoch milliseconds, kept as text so the
+/// interface shows what the hub said rather than a reformatted guess.
+fn timestamp<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Text(String),
+        Integer(i64),
+        Fraction(f64),
+    }
+    Ok(Option::<Raw>::deserialize(deserializer)?.map(|raw| match raw {
+        Raw::Text(text) => text,
+        Raw::Integer(millis) => millis.to_string(),
+        Raw::Fraction(millis) => (millis as i64).to_string(),
+    }))
+}
+
+/// Wall-clock milliseconds, for turning a hub timestamp into an age.
+fn mount_now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+/// Fills in `age_ms` from `received_at` when the hub is new enough to answer but old enough
+/// not to compute the age for us. A missing stamp leaves the age unknown, which the card says.
+fn fill_age(now_ms: i64, mount: &mut DshMount) {
+    if mount.age_ms.is_some() {
+        return;
+    }
+    let Some(received) = mount.received_at.as_deref() else {
+        return;
+    };
+    let stamp = received
+        .parse::<i64>()
+        .ok()
+        .or_else(|| super::sessions::parse_timestamp_ms(received));
+    if let Some(stamp) = stamp {
+        mount.age_ms = Some(now_ms.saturating_sub(stamp).max(0) as u64);
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -452,12 +501,16 @@ fn parse_mounts(body: &str) -> Option<Vec<DshMount>> {
         return None;
     }
     let clients = value.get("clients")?.as_array()?;
-    Some(
-        clients
-            .iter()
-            .filter_map(|client| serde_json::from_value::<DshMount>(client.clone()).ok())
-            .collect(),
-    )
+    let now_ms = mount_now_ms();
+    let mut mounts = Vec::with_capacity(clients.len());
+    for client in clients {
+        // One page the shape of which we do not understand makes the whole answer unusable:
+        // showing the pages we happened to parse would look like a complete list.
+        let mut mount = serde_json::from_value::<DshMount>(client.clone()).ok()?;
+        fill_age(now_ms, &mut mount);
+        mounts.push(mount);
+    }
+    Some(mounts)
 }
 
 /// Everything the connection card shows: DSH's processes, the plugin's manifest, and one
