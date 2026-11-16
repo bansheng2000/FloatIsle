@@ -1,7 +1,7 @@
 //! Payload shapes copied from a live Magpie (0.1.4224) so the parser is checked against
 //! what the gateway really answers, not against a guess.
 
-use super::{describe, parse_quotas, parse_spend, parse_week_cost};
+use super::{week_cost, describe, parse_quotas, parse_spend, parse_week_cost};
 
 const USAGE: &str = r#"{"period":"30d","since":"2026-10-18T00:00:00+08:00","calls":7428,"errors":24,"retried":4,"canceled":11,"input":23815287,"output":4701986,"cache_read":1005431850,"cache_write":0,"reasoning":1995531,"cost":11.190596045999968,"unpriced":3,"bucket":"day","series":[]}"#;
 
@@ -49,6 +49,16 @@ const WEEK: &str = r#"{"period":"7d","cost":14.1,"bucket":"day","series":[{"labe
 fn the_seven_day_figure_is_the_sum_of_its_daily_buckets() {
     let week = parse_week_cost(WEEK).unwrap_or_else(|| panic!("the live 7d document did not parse"));
     assert!((week - 14.1).abs() < 1e-9, "summed cost was {week}");
+}
+
+/// A real 7d document: the envelope repeats the 30-day total, the buckets are the actual week. A
+/// row wired to the envelope shows 14.0775 instead of 14.1 and this fails.
+const WEEK_REAL: &str = r#"{"period":"7d","cost":14.0775,"bucket":"day","series":[{"label":"2026-11-10","cost":1.5},{"label":"2026-11-11","cost":2.25},{"label":"2026-11-12","cost":0.75},{"label":"2026-11-13","cost":3.0},{"label":"2026-11-14","cost":4.1},{"label":"2026-11-15","cost":1.2},{"label":"2026-11-16","cost":1.3}]}"#;
+
+#[test]
+fn the_week_row_reads_the_buckets_not_the_document_total() {
+    let week = week_cost(WEEK_REAL).unwrap_or_else(|| panic!("the live 7d document did not parse"));
+    assert!((week - 14.1).abs() < 1e-9, "the week row read {week}; the envelope says 14.0775");
 }
 
 #[test]

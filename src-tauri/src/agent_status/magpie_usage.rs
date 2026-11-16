@@ -91,7 +91,7 @@ pub(crate) async fn read_at(base: &str) -> MagpieUsage {
     usage.reachable = true;
     usage.error = today.as_ref().err().cloned().or_else(|| month.as_ref().err().cloned());
     usage.spend_today = today.as_deref().ok().and_then(parse_spend).map(|spend| spend.cost);
-    usage.spend_week = week.as_deref().ok().and_then(parse_week_cost);
+    usage.spend_week = week.as_deref().ok().and_then(week_cost);
     let monthly = month.as_deref().ok().and_then(parse_spend);
     usage.spend_month = monthly.as_ref().map(|spend| spend.cost);
     usage.spend = monthly;
@@ -175,6 +175,12 @@ fn parse_week_cost(body: &str) -> Option<f64> {
         total += cost;
     }
     Some(total)
+}
+
+/// The one seat the 7-day row reads: the buckets, never the envelope. Its own function so a test
+/// can break exactly this wiring and see the row go wrong, not just the parser.
+fn week_cost(body: &str) -> Option<f64> {
+    parse_week_cost(body)
 }
 
 fn parse_quotas(body: &str) -> (Vec<MagpieWindow>, Vec<String>, Option<String>) {
