@@ -47,7 +47,7 @@ test("spend carries its own period, and a missing gateway says so", () => {
 });
 
 test("quota repeats each window and the gateway's balance string verbatim", () => {
-  assert.equal(quotaSummary(usage), "5 hours 82% · Month 88% · ¥0.00");
+  assert.equal(quotaSummary(usage), "剩余 5 hours 82% · 剩余 Month 88% · ¥0.00");
   assert.ok(quotaDetail(usage).startsWith("重置 5 hours · "));
   assert.equal(quotaSummary({ ...usage, windows: [], balances: [] }), null);
 });

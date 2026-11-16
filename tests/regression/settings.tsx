@@ -96,10 +96,10 @@ if (!automated) {
       // General has two more for the two island timers the owner asked for (2026-11-11): collapsing
       // the open island and tucking the collapsed one.
       const rowCount = panel.querySelectorAll(".settings-row").length;
-      // Six of Connection's rows are the read-only DSH bridge card plus its source switch, and
-      // three more are the usage card's session/spend/quota figures; the spare one above today's
-      // thirteen is for an agent that reports an extra row.
-      const maxRows = category === "general" ? 10 : category === "appearance" ? 9 : category === "agentConnect" ? 14 : 8;
+      // Our own rows follow the four hook rows (status, Codex, Claude Code, reply marker); the
+      // limit is ours plus one spare, and the exact row list below pins the page's fourteen.
+      const measuredRows = category === "agentConnect" ? rowCount - 4 : rowCount;
+      const maxRows = category === "general" ? 10 : category === "appearance" ? 9 : category === "agentConnect" ? 11 : 8;
       if (category === "general") {
         const timers = [...panel.querySelectorAll<HTMLInputElement>("input[role='spinbutton']")];
         const labels = timers.map((input) => panel.querySelector(`label[for='${CSS.escape(input.id)}']`)?.textContent ?? "");
@@ -122,7 +122,7 @@ if (!automated) {
         check(notice?.textContent?.includes("账号限制") && toggle?.checked === false,
           "WeChat's account risk is visible before previews are enabled");
       }
-      check(category === "messages" || rowCount <= maxRows, `${category}: the page keeps to a handful of rows (${rowCount})`);
+      check(category === "messages" || measuredRows <= maxRows, `${category}: the page keeps to a handful of rows (${measuredRows} counted, ${rowCount} on the page, limit ${maxRows})`);
     }
     check(settingsCategoryFor("sounds") === "agents" && settingsCategoryFor("agentAlerts") === "agents" && settingsCategoryFor("agentApprovals") === "agents"
       && settingsCategoryFor("shelf") === "clipboard", "Old names of merged pages open the page they became");

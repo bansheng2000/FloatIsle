@@ -17,6 +17,21 @@ const rowText = (title: string) => usageRow(title)?.textContent ?? "";
 const rowDescription = (title: string) => usageRow(title)?.querySelector(".settings-row__description")?.textContent ?? "";
 const rowValue = (title: string) => usageRow(title)?.querySelector(".dsh-usage__value")?.textContent ?? "";
 
+/** Every row Connection is allowed to have, in order, so the count cannot drift unnoticed. */
+const CONNECTION_ROWS = [
+  "当前状态", "Codex", "Claude Code", "让 Claude 在回复末尾标出在等什么（推荐打开）",
+  "状态", "DSH 进程", "插件", "桥实例", "会话", "挂载会话", "DeepSeek Harness（DSH）",
+  "本会话 token", "花费", "剩余额度",
+];
+
+export function checkConnectionRows(check: Check): void {
+  const titles = [...document.querySelectorAll<HTMLElement>(".settings-row__title")].map(
+    (node) => node.textContent ?? "",
+  );
+  check(titles.join("|") === CONNECTION_ROWS.join("|"),
+    `Connection lists exactly its fourteen rows in order (${titles.length})`);
+}
+
 export function checkAllSources(check: Check): void {
   check(rowValue("本会话 token") === "1,200 in · 950 out" && rowDescription("本会话 token").includes("cache 3,400 read")
     && rowDescription("本会话 token").includes("6 calls"),
@@ -24,8 +39,8 @@ export function checkAllSources(check: Check): void {
   check(rowValue("花费") === "近 30 天 · $11.19" && rowDescription("花费").includes("7,428 次调用")
     && rowDescription("花费").includes("有 3 次调用未计价"),
     "Spend keeps Magpie's period and flags the calls it could not price");
-  check(rowValue("剩余额度") === "5 hours 86% · 7 days 90% · Month 89% · ¥0.00",
-    "Remaining quota lists each window and repeats a balance string verbatim");
+  check(rowValue("剩余额度") === "剩余 5 hours 86% · 剩余 7 days 90% · 剩余 Month 89% · ¥0.00",
+    "Remaining quota prefixes every window with what the percentage means");
   check(!rowText("花费").includes(" in · ") && !rowText("剩余额度").includes(" in · "),
     "Spend and quota never borrow the session token shape");
 }
@@ -42,7 +57,9 @@ export function checkMagpieMissing(check: Check): void {
 export function checkLedgerMissing(check: Check): void {
   check(rowValue("本会话 token") === "未提供" && rowDescription("本会话 token").includes("账本不存在"),
     "An unreadable ledger leaves the session row unprovided, never zero");
-  check(rowValue("花费") === "近 30 天 · $11.19" && rowValue("剩余额度").startsWith("5 hours 86%"),
+  check(rowDescription("本会话 token") === "账本不存在：C:\\Users\\demo\\.dsh\\bot\\usage.sqlite · 账本缺失 · 来源：插件上报的当前会话",
+    "A missing ledger stops naming itself as the source of the session row");
+  check(rowValue("花费") === "近 30 天 · $11.19" && rowValue("剩余额度") === "剩余 5 hours 86% · 剩余 7 days 90% · 剩余 Month 89% · ¥0.00",
     "A missing ledger leaves spend and quota untouched");
 }
 
@@ -52,6 +69,7 @@ export async function checkUsageScenarios(
   openPage: (category: string) => Promise<void>,
   settle: () => Promise<void>,
 ): Promise<void> {
+  checkConnectionRows(check);
   const visit = async (scenario: "all" | "noMagpie" | "noLedger") => {
     setDshUsageScenario(scenario);
     await openPage("about");

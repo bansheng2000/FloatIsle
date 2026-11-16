@@ -55,6 +55,12 @@ export function DshUsageSection() {
   const spend = spendLabel(usage);
   const quota = quotaSummary(usage);
   const magpieGap = magpieMissingLabel(usage);
+  // A missing ledger must not still be named as the source: the row would claim to read a
+  // file it just said it could not open.
+  const ledgerMissing = Boolean(
+    tokens && !tokens.available && (tokens.error ?? "").startsWith("账本不存在"),
+  );
+  const sessionSource = ledgerMissing ? text.sessionSourceWithoutLedger : text.sessionSource;
 
   return (
     <SettingsGroup
@@ -68,8 +74,8 @@ export function DshUsageSection() {
       <SettingsRow
         title={text.session}
         description={sessionValue
-          ? `${sessionTokenDetail(tokens)} · ${text.sessionSource}`
-          : `${tokens?.error ?? text.sessionUnknown} · ${text.sessionSource}`}
+          ? `${sessionTokenDetail(tokens)} · ${sessionSource}`
+          : `${tokens?.error ?? text.sessionUnknown} · ${sessionSource}`}
         control={
           <span className="dsh-usage__value">{sessionValue ?? text.unavailable}</span>
         }

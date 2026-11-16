@@ -85,7 +85,7 @@ export function quotaSummary(usage: MagpieUsage | null): string | null {
   if (!usage) return null;
   const parts = usage.windows
     .filter((window) => window.remaining !== null)
-    .map((window) => `${window.name} ${Math.round(window.remaining ?? 0)}%`);
+    .map((window) => `剩余 ${window.name} ${Math.round(window.remaining ?? 0)}%`);
   if (usage.balances.length > 0) parts.push(usage.balances.join(" · "));
   return parts.length > 0 ? parts.join(" · ") : null;
 }
