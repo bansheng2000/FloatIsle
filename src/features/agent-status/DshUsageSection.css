@@ -57,3 +57,10 @@
   /* One title line tall; a taller control overflows symmetrically around that line. */
   height: 19px;
 }
+
+/* The card draws its hairlines from SettingsGroup. In this group the first one lands right under a
+   two-line hint, where it reads as part of the text instead of a divider; lifting all three by one
+   step makes the three boundaries look the same. */
+.dsh-usage-settings__row::before {
+  border-top-color: var(--color-white-a10);
+}
