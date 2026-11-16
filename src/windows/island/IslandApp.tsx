@@ -22,6 +22,7 @@ import { useIslandFeatures } from "./useIslandFeatures";
 import { useIslandAgentAlerts } from "./useIslandAgentAlerts";
 import { useIslandAgents } from "./useIslandAgents";
 import { useQuotaAlert } from "../../features/agent-status/useQuotaAlert";
+import { useIslandUsageVisible } from "../../features/agent-status/islandUsageVisible";
 import { AgentArrangeButton } from "../../features/agent-status/AgentArrangeButton";
 import { useAgentIndicator } from "./useAgentIndicator";
 import { usageLineCount } from "../../features/agent-status/usage";
@@ -113,6 +114,7 @@ export function IslandApp() {
     collapseIsland,
   });
   const { fileShelf, isShelfDropping } = useIslandShelf(settings, navigation);
+  const islandUsageVisible = useIslandUsageVisible();
   const expandedIslandHeight = getExpandedIslandHeight({
     page,
     todoPageMode,
@@ -126,6 +128,8 @@ export function IslandApp() {
     agentVisibleRows: settings.agentVisibleRows,
     agentSessionView: settings.agentSessionView,
     agentUsageLines: settings.agentShowUsage ? usageLineCount(agentUsages) : 0,
+    // The two rows exist only while Magpie answers, and the page shrinks when they go.
+    agentDshUsageLines: settings.agentShowUsage && islandUsageVisible ? 1 : 0,
     agentAlertRowHeight: agentCardHeight,
     settingsContentHeight,
     shelfItems: fileShelf.items.length,

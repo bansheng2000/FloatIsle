@@ -1,0 +1,48 @@
+/* The two usage rows under the quota rings on the Agent page: two 16px lines 4px apart and 8px
+   below, 44 in all — part of the page's chrome in getAgentPageExpandedHeight
+   (windows/island/layout.ts, AGENT_DSH_USAGE_HEIGHT: keep the two in step). */
+.agent-dsh-usage {
+  flex: none;
+  margin: 0 6px 8px;
+  display: grid;
+  row-gap: 4px;
+  overflow: hidden;
+}
+
+.agent-dsh-usage__line {
+  height: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The label column is fixed so both rows start their figures on the same edge. */
+.agent-dsh-usage__label {
+  flex: none;
+  width: 26px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Three tier columns of equal share: 今天 / 7天 / 30天 stay evenly spaced whatever the figures are. */
+.agent-dsh-usage__value {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+  color: var(--text-1);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.agent-dsh-usage__tier {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

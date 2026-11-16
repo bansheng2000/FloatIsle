@@ -2,6 +2,7 @@ import { AgentHooksSettingsSection } from "../../features/agent-status/AgentHook
 import { AgentReplyMarkerSettings } from "../../features/agent-status/AgentReplyMarkerSettings";
 import { DshBridgeSection } from "../../features/agent-status/DshBridgeSection";
 import { DshUsageSection } from "../../features/agent-status/DshUsageSection";
+import { AgentUsageSettingsSection } from "../../features/agent-status/AgentUsageSettingsSection";
 import { useAgentStatusSettings } from "../../features/agent-status/useAgentStatusSettings";
 import type { IslandSettings } from "../../features/appearance/types";
 
@@ -25,7 +26,8 @@ export function AgentConnectSettingsPage({ settings, onSettingsChange }: {
         agentShowDsh={settings.agentShowDsh}
         onAgentShowDshChange={(agentShowDsh) => onSettingsChange({ ...settings, agentShowDsh })}
       />
-      <DshUsageSection />
+      <DshUsageSection mode={settings.agentUsageMode} />
+      <AgentUsageSettingsSection settings={settings} onSettingsChange={onSettingsChange} />
     </>
   );
 }

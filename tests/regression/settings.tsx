@@ -97,9 +97,9 @@ if (!automated) {
       // the open island and tucking the collapsed one.
       const rowCount = panel.querySelectorAll(".settings-row").length;
       // Our own rows follow the four hook rows (status, Codex, Claude Code, reply marker); the
-      // limit is ours plus one spare, and the exact row list below pins the page's fourteen.
+      // limit is ours plus one spare, and the exact row list below pins every row in order.
       const measuredRows = category === "agentConnect" ? rowCount - 4 : rowCount;
-      const maxRows = category === "general" ? 10 : category === "appearance" ? 9 : category === "agentConnect" ? 11 : 8;
+      const maxRows = category === "general" ? 10 : category === "appearance" ? 9 : category === "agentConnect" ? 14 : 8;
       if (category === "general") {
         const timers = [...panel.querySelectorAll<HTMLInputElement>("input[role='spinbutton']")];
         const labels = timers.map((input) => panel.querySelector(`label[for='${CSS.escape(input.id)}']`)?.textContent ?? "");

@@ -30,6 +30,8 @@ export type AgentArchiveMotion = "slide" | "dissolve";
 export type AgentCardEffects = "off" | "sparkle" | "gradient";
 /** Which session starts open the Agent page: every turn, a new session's first turn only, or none. */
 export type AgentAlertStarted = "everyTurn" | "newSession" | "off";
+/** Whether the usage rows read quota windows as what is left of them, or as what was already used. */
+export type AgentUsageMode = "remaining" | "used";
 /** What double-clicking a file shelf entry does. */
 export type ShelfDoubleClick = "open" | "reveal";
 /** What the collapsed island can show in its text: a running agent, the lyric line, a todo. */
@@ -88,6 +90,10 @@ export type IslandSettings = {
   agentShowActivity: boolean;
   /** Claude's usage limits at the top of the Agent page, when claude-hud keeps a usage snapshot. */
   agentShowUsage: boolean;
+  /** Whether the island's quota row counts down what is left or up what is used. */
+  agentUsageMode: AgentUsageMode;
+  /** How often the island reads Magpie again, in milliseconds; 0 means only when asked. */
+  agentUsageRefreshMs: number;
   /** Open the Agent page when a session finishes, fails or waits for the user. */
   agentAlertCompleted: boolean;
   agentAlertFailed: boolean;

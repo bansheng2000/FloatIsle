@@ -75,3 +75,13 @@ fn a_missing_ledger_file_never_reads_as_an_empty_tally() {
     assert!(error.starts_with("账本不存在"), "{error}");
     assert_eq!(tokens.calls, 0);
 }
+
+#[test]
+fn a_broken_ledger_names_itself_even_before_a_session_is_known() {
+    // A wrong path is the user's to fix; "wait for the plugin" would hide it behind a second cause.
+    let path = ledger().with_file_name("absent-too.sqlite");
+    let tokens = session_tokens_in(&path, None);
+    assert!(!tokens.available);
+    let error = tokens.error.unwrap_or_default();
+    assert!(error.starts_with("账本不存在"), "{error}");
+}

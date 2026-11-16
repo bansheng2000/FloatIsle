@@ -114,14 +114,17 @@ const AGENT_ROWS: Record<AgentSessionView, { height: number; gap: number }> = {
 };
 // The usage row above the list (both agents' quota rings): 22 plus 6 below it (AgentQuotaRings.css).
 const AGENT_USAGE_HEIGHT = 28;
+// The two DSH usage lines under the rings (spend and quota, one row each): two 16px lines 4px apart
+// and 8px below, 44 in all (DshUsageLines.css). Keep the two in step.
+const AGENT_DSH_USAGE_HEIGHT = 44;
 
 /**
  * Expanded height that fits exactly `rows` Agent sessions, shown as `view`, below `usageLines`
- * usage lines (true: one).
+ * usage lines (true: one) and, when it shows, the two DSH usage numbers.
  */
-export function getAgentPageExpandedHeight(rows: number, usageLines: number | boolean = 0, view: AgentSessionView = "list") {
+export function getAgentPageExpandedHeight(rows: number, usageLines: number | boolean = 0, view: AgentSessionView = "list", dshUsageLines: number | boolean = 0) {
   const { height, gap } = AGENT_ROWS[view];
-  return AGENT_PAGE_CHROME_HEIGHT + Number(usageLines) * AGENT_USAGE_HEIGHT + rows * (height + gap) - gap;
+  return AGENT_PAGE_CHROME_HEIGHT + Number(usageLines) * AGENT_USAGE_HEIGHT + Number(dshUsageLines) * AGENT_DSH_USAGE_HEIGHT + rows * (height + gap) - gap;
 }
 
 /** Expanded height around an alert's one-session card, whose row measured `rowHeight`. */

@@ -95,10 +95,11 @@ const dshSessionTokens = () =>
 const magpieUsage = () =>
   dshUsageScenario === "noMagpie"
     ? { base: "http://127.0.0.1:3425", reachable: false, error: "connect ECONNREFUSED 127.0.0.1:3425",
-        spend: null, windows: [], balances: [], readAt: null }
+        spend: null, spendToday: null, spendWeek: null, spendMonth: null, windows: [], balances: [], readAt: null }
     : {
         base: "http://127.0.0.1:3425", reachable: true, error: null,
         spend: { cost: 11.190596045999968, period: "30d", calls: 7428, errors: 24, unpriced: 3 },
+        spendToday: 7.9466, spendWeek: 14.1033, spendMonth: 14.1,
         windows: [
           { name: "5 hours", kind: "plan", remaining: 86, used: 14, resetsAt: "2026-11-16T21:00:00.000Z" },
           { name: "7 days", kind: "plan", remaining: 90, used: 10, resetsAt: "2026-11-20T00:00:00.000Z" },

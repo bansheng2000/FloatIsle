@@ -39,10 +39,18 @@ export type MagpieUsage = {
   reachable: boolean;
   error: string | null;
   spend: MagpieSpend | null;
+  /** Today's spend, the top-level `cost` of `?period=today`. */
+  spendToday: number | null;
+  /** Seven days, summed from the seven daily buckets: the gateway answers any other period with 30 days. */
+  spendWeek: number | null;
+  spendMonth: number | null;
   windows: MagpieWindow[];
   balances: string[];
   readAt: string | null;
 };
+
+/** Whether a quota window is read as what is left of it, or as what was already used. */
+export type QuotaMode = "remaining" | "used";
 
 export const MAGPIE_MISSING = "未配置 Magpie（本机未检测到 127.0.0.1:3425）";
 
@@ -110,6 +118,89 @@ export function quotaDetail(usage: MagpieUsage | null): string | null {
   if (first?.resetsAt) parts.push(`重置 ${first.name} · ${shortTime(first.resetsAt)}`);
   if (usage.readAt) parts.push(`读取 ${shortTime(usage.readAt)}`);
   return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** A balance string the gateway hands over verbatim, unless it is zero: a zero balance says nothing. */
+export function nonzeroBalances(balances: readonly string[]): string[] {
+  return balances.filter((balance) => {
+    const amount = Number.parseFloat(balance.replace(/[^0-9.-]/g, ""));
+    return Number.isNaN(amount) || amount !== 0;
+  });
+}
+
+/** `5 hours` → `5h`, `7 days` → `7d`, `Month` → the month word: the island's row is one line. */
+export function windowShortName(name: string, month: string): string {
+  const text = name.trim();
+  const hours = /^(\d+)\s*hours?$/i.exec(text);
+  if (hours) return `${hours[1]}h`;
+  const days = /^(\d+)\s*days?$/i.exec(text);
+  if (days) return `${days[1]}d`;
+  if (/^(month|30 days)$/i.test(text)) return month;
+  return text;
+}
+
+/**
+ * One quota window in percent, from the field the mode asks for.
+ *
+ * The gateway sends both `used` and `remaining`; only when the wanted one is missing is the other
+ * turned around (100 − x), and the caller marks that as derived rather than passing it off as read.
+ */
+export function windowPercent(
+  window: MagpieWindow,
+  mode: QuotaMode,
+): { value: number; derived: boolean } | null {
+  const wanted = mode === "used" ? window.used : window.remaining;
+  if (wanted !== null) return { value: Math.round(wanted), derived: false };
+  const other = mode === "used" ? window.remaining : window.used;
+  if (other === null) return null;
+  return { value: Math.round(100 - other), derived: true };
+}
+
+/** The island's quota row: `5h 87% · 7d 82% · 月 85%`, with any non-zero balance last. */
+export function quotaTiers(usage: MagpieUsage | null, mode: QuotaMode, month: string): string | null {
+  if (!usage) return null;
+  const parts: string[] = [];
+  for (const window of usage.windows) {
+    const percent = windowPercent(window, mode);
+    if (!percent) continue;
+    parts.push(`${windowShortName(window.name, month)} ${percent.derived ? "≈" : ""}${percent.value}%`);
+  }
+  parts.push(...nonzeroBalances(usage.balances));
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** The island's spend row: `今天 $7.95 · 7天 $14.10 · 30天 $14.10`; a missing figure stays a dash. */
+export function spendTiers(
+  usage: MagpieUsage | null,
+  labels: { today: string; week: string; month: string },
+): string | null {
+  if (!usage) return null;
+  const tiers = [
+    [labels.today, usage.spendToday],
+    [labels.week, usage.spendWeek],
+    [labels.month, usage.spendMonth],
+  ] as const;
+  if (!tiers.some(([, cost]) => cost !== null)) return null;
+  return tiers.map(([label, cost]) => `${label} ${cost === null ? "—" : `$${cost.toFixed(2)}`}`).join(" · ");
+}
+
+/** Why Magpie did not answer, read off the transport error: refused, timed out, or nothing there. */
+export function magpieFailureReason(error: string | null): "refused" | "timeout" | "silent" {
+  const text = (error ?? "").toLowerCase();
+  if (/refused|actively refused|10061|拒绝/.test(text)) return "refused";
+  if (/timed out|timeout|超时/.test(text)) return "timeout";
+  return "silent";
+}
+
+/** The state line under Settings → AI Agent → Usage and quota: where it asked, and what came back. */
+export function magpieStateLabel(
+  usage: MagpieUsage,
+  words: { reasonRefused: string; reasonTimeout: string; reasonSilent: string },
+): string {
+  if (usage.reachable) return usage.base;
+  const reason = magpieFailureReason(usage.error);
+  const said = reason === "refused" ? words.reasonRefused : reason === "timeout" ? words.reasonTimeout : words.reasonSilent;
+  return `${said}（${usage.base}）`;
 }
 
 /** What the two Magpie rows say when the gateway is not there. */

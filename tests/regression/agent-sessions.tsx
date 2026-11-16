@@ -249,7 +249,7 @@ async function runChecks() {
     check(!document.querySelector(".agent-session__prompt") && !document.querySelector(".agent-session__tool") && rows()[0].querySelector(".agent-session__message"), "关掉后只显示回复");
 
     check(!document.querySelector(".agent-quota"), "没打开用量时不显示额度环");
-    fixture.style.height = `${getAgentPageExpandedHeight(3, true) - ISLAND_CHROME_HEIGHT}px`;
+    fixture.style.height = `${getAgentPageExpandedHeight(3, 1, "list", 1) - ISLAND_CHROME_HEIGHT}px`;
     await act(async () => {
       root.render(<StrictMode><I18nProvider><AgentSessionsPanel sort="recent" sessions={sessions} hostDisplay="both" showUsage /></I18nProvider></StrictMode>);
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -280,7 +280,7 @@ async function runChecks() {
       codex: { updatedAt: readAt, plan: "Plus", source: "codex" as const, fiveHour: { name: "", used: 9, resetsAt: null }, sevenDay: { name: "", used: 91, resetsAt: readAt + 2 * 86_400_000 }, models: [] },
       readAt,
     };
-    fixture.style.height = `${getAgentPageExpandedHeight(3, usageLineCount(usages)) - ISLAND_CHROME_HEIGHT}px`;
+    fixture.style.height = `${getAgentPageExpandedHeight(3, usageLineCount(usages), "list", 1) - ISLAND_CHROME_HEIGHT}px`;
     await act(async () => {
       root.render(<StrictMode><I18nProvider><AgentSessionsPanel sort="recent" sessions={sessions} hostDisplay="both" showUsage usages={usages} /></I18nProvider></StrictMode>);
       await new Promise((resolve) => setTimeout(resolve, 50));

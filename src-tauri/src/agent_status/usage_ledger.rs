@@ -54,6 +54,16 @@ pub(crate) fn session_tokens(session: Option<&str>) -> SessionTokens {
 /// Same read, against an explicit file; tests and the negative case both use this.
 pub(crate) fn session_tokens_in(path: &std::path::Path, session: Option<&str>) -> SessionTokens {
     let source = path.to_string_lossy().to_string();
+    // The ledger's own fault is reported even before a session is known: a wrong path or a
+    // missing file is something the user can fix, and hiding it behind "no session reported"
+    // would leave a broken ledger looking like a silent plugin.
+    if !path.exists() {
+        return SessionTokens {
+            source,
+            error: Some(format!("账本不存在：{}", path.to_string_lossy())),
+            ..SessionTokens::default()
+        };
+    }
     let Some(session) = session.map(str::trim).filter(|session| !session.is_empty()) else {
         return SessionTokens {
             source,

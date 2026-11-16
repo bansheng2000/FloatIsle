@@ -7,6 +7,8 @@ import type { AgentArchiveMotion, AgentCardEffects, AgentHostDisplay, AgentSessi
 import { AgentSessionCard } from "./AgentSessionCard";
 import { AgentProviderIcon } from "./AgentProviderIcon";
 import { AgentQuotaRings } from "./AgentQuotaRings";
+import { DshUsageLines } from "./DshUsageLines";
+import type { QuotaMode } from "./dshSpend";
 import type { AgentUsages } from "./usage";
 import { focusAgentWindow, type AgentSessionSummary } from "./api";
 import { arrangeSessions, isActivePhase, minutesAgo, modelLabel, sessionProject } from "./sessionList";
@@ -51,6 +53,8 @@ export function AgentSessionsPanel({
   reveal,
   showUsage: usageOn = false,
   usages,
+  usageMode = "remaining",
+  usageRefreshMs = 60_000,
   approvals,
 }: {
   sessions: AgentSessionSummary[];
@@ -79,6 +83,10 @@ export function AgentSessionsPanel({
   showUsage?: boolean;
   /** Those limits as the island read them; without them the rings read their own. */
   usages?: AgentUsages;
+  /** Whether the usage rows below the rings count down what is left or up what is used. */
+  usageMode?: QuotaMode;
+  /** How often those rows read Magpie again, in milliseconds; 0 only when asked. */
+  usageRefreshMs?: number;
   /** Permission requests agents wait on; the page shows the first one alone. */
   approvals?: AgentApprovals;
 }) {
@@ -154,6 +162,7 @@ export function AgentSessionsPanel({
     return (
       <section className="agent-sessions" aria-label={t.agent.sessions.title}>
         {showUsage && <AgentQuotaRings usages={usages} />}
+        {showUsage && <DshUsageLines mode={usageMode} refreshMs={usageRefreshMs} />}
         <div className="agent-sessions__empty">
           <strong>{t.agent.sessions.empty}</strong>
           <span>{t.agent.sessions.emptyHint}</span>
@@ -166,6 +175,7 @@ export function AgentSessionsPanel({
   return (
     <section className="agent-sessions" aria-label={t.agent.sessions.title}>
       {showUsage && <AgentQuotaRings usages={usages} />}
+      {showUsage && <DshUsageLines mode={usageMode} refreshMs={usageRefreshMs} />}
       <ul
         ref={list.ref}
         className={`agent-sessions__list${view === "list" ? "" : ` agent-sessions__list--${view}`}${removal && !reveal ? " agent-sessions__list--archivable" : ""}`}

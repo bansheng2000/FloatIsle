@@ -38,7 +38,14 @@ pub(crate) struct MagpieUsage {
     pub(crate) base: String,
     pub(crate) reachable: bool,
     pub(crate) error: Option<String>,
+    /// The 30-day totals, kept for the settings card.
     pub(crate) spend: Option<MagpieSpend>,
+    /// The island's three spend figures. Today and 30 days come from the top-level `cost`;
+    /// the 7-day figure is the sum of the seven daily buckets, because the gateway answers a
+    /// non-today period with the 30-day total at the top level.
+    pub(crate) spend_today: Option<f64>,
+    pub(crate) spend_week: Option<f64>,
+    pub(crate) spend_month: Option<f64>,
     pub(crate) windows: Vec<MagpieWindow>,
     pub(crate) balances: Vec<String>,
     pub(crate) read_at: Option<String>,
@@ -74,16 +81,20 @@ pub(crate) async fn read_at(base: &str) -> MagpieUsage {
         return usage;
     };
 
-    match fetch(&client, &format!("{base}/v1/magpie/usage")).await {
-        Ok(document) => {
-            usage.reachable = true;
-            usage.spend = parse_spend(&document);
-        }
-        Err(error) => {
-            usage.error = Some(error);
-            return usage;
-        }
+    let today = fetch(&client, &format!("{base}/v1/magpie/usage?period=today")).await;
+    let week = fetch(&client, &format!("{base}/v1/magpie/usage?period=7d")).await;
+    let month = fetch(&client, &format!("{base}/v1/magpie/usage?period=30d")).await;
+    if let (Err(error), Err(_), Err(_)) = (&today, &week, &month) {
+        usage.error = Some(error.clone());
+        return usage;
     }
+    usage.reachable = true;
+    usage.error = today.as_ref().err().cloned().or_else(|| month.as_ref().err().cloned());
+    usage.spend_today = today.as_deref().ok().and_then(parse_spend).map(|spend| spend.cost);
+    usage.spend_week = week.as_deref().ok().and_then(parse_week_cost);
+    let monthly = month.as_deref().ok().and_then(parse_spend);
+    usage.spend_month = monthly.as_ref().map(|spend| spend.cost);
+    usage.spend = monthly;
 
     match fetch(&client, &format!("{base}/v1/magpie/quotas")).await {
         Ok(document) => {
@@ -102,7 +113,7 @@ async fn fetch(client: &reqwest::Client, url: &str) -> Result<String, String> {
         .get(url)
         .send()
         .await
-        .map_err(|error| format!("Magpie 未运行（{url}）：{error}"))?;
+        .map_err(|error| format!("Magpie 未运行（{url}）：{}", describe(&error)))?;
     if !response.status().is_success() {
         return Err(format!("Magpie 拒绝了 {url}：HTTP {}", response.status()));
     }
@@ -110,6 +121,19 @@ async fn fetch(client: &reqwest::Client, url: &str) -> Result<String, String> {
         .text()
         .await
         .map_err(|error| format!("Magpie 的应答读不出来：{error}"))
+}
+
+/// reqwest keeps the cause chain out of `Display`, and the cause is what tells a refusal from a
+/// timeout; the settings page names the reason from this text, so carry the whole chain along.
+fn describe(error: &dyn std::error::Error) -> String {
+    let mut detail = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        detail.push_str(": ");
+        detail.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    detail
 }
 
 fn number(value: Option<&serde_json::Value>) -> Option<f64> {
@@ -135,6 +159,22 @@ fn parse_spend(body: &str) -> Option<MagpieSpend> {
         errors: number(spend.get("errors")).unwrap_or_default() as i64,
         unpriced: number(spend.get("unpriced")).unwrap_or_default() as i64,
     })
+}
+
+/// The seven daily buckets added up. The gateway's top-level `cost` is the 30-day total for
+/// every non-today period, so a 7-day figure must be summed rather than read from the envelope.
+fn parse_week_cost(body: &str) -> Option<f64> {
+    let document: serde_json::Value = serde_json::from_str(body).ok()?;
+    let series = document.get("series")?.as_array()?;
+    if series.is_empty() {
+        return None;
+    }
+    let mut total = 0.0;
+    for bucket in series {
+        let cost = bucket.get("cost").and_then(|value| value.as_f64())?;
+        total += cost;
+    }
+    Some(total)
 }
 
 fn parse_quotas(body: &str) -> (Vec<MagpieWindow>, Vec<String>, Option<String>) {

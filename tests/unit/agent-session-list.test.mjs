@@ -84,6 +84,16 @@ test("the Agent page fits the session rows set in Settings", async () => {
   assert.equal(getAgentPageExpandedHeight(4, 0, "cards") - getAgentPageExpandedHeight(3, 0, "cards"), 68);
   assert.equal(getAgentPageExpandedHeight(4, 0, "compact") - getAgentPageExpandedHeight(3, 0, "compact"), 38);
   assert.equal(getAgentPageExpandedHeight(1, 0, "cards"), getAgentPageExpandedHeight(0, 0, "cards") + 62 + 6 - 6 + 6);
+  // The two usage rows on the island (spend tiers / quota tiers) add their own fixed block.
+  assert.equal(getAgentPageExpandedHeight(3, 0, "list", 1) - getAgentPageExpandedHeight(3, 0, "list", 0), 44);
+  assert.equal(getAgentPageExpandedHeight(3, 1, "list", 1), getAgentPageExpandedHeight(3, 1, "list", 0) + 44);
+  // Both new settings save and read back; an interval outside the four choices falls back to a minute.
+  assert.equal(normalizeSettings({ agentUsageMode: "used" }).agentUsageMode, "used");
+  assert.equal(normalizeSettings({ agentUsageMode: "sideways" }).agentUsageMode, "remaining");
+  assert.equal(normalizeSettings({ agentUsageRefreshMs: 300_000 }).agentUsageRefreshMs, 300_000);
+  assert.equal(normalizeSettings({ agentUsageRefreshMs: 0 }).agentUsageRefreshMs, 0);
+  assert.equal(normalizeSettings({ agentUsageRefreshMs: 1_000 }).agentUsageRefreshMs, 60_000);
+  assert.equal(normalizeSettings({}).agentUsageRefreshMs, 60_000);
   // Flat rows are the view; the view, archive motion and card effects are no longer settings,
   // so whatever an older version saved loads as the default.
   assert.equal(DEFAULT_SETTINGS.agentSessionView, "list");

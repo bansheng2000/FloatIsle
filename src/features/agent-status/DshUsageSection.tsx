@@ -7,12 +7,13 @@ import { probeMagpieUsage, readDshSessionTokens } from "./api";
 import {
   magpieMissingLabel,
   quotaDetail,
-  quotaSummary,
+  quotaTiers,
   sessionTokenDetail,
   sessionTokenSummary,
   spendDetail,
   spendLabel,
   type MagpieUsage,
+  type QuotaMode,
   type SessionTokens,
 } from "./dshSpend";
 import "./DshUsageSection.css";
@@ -25,7 +26,7 @@ import "./DshUsageSection.css";
  * borrowing Magpie's rolling 30-day figure. Spend and quota come from Magpie and are
  * absent, with the reason, when that gateway is not running.
  */
-export function DshUsageSection() {
+export function DshUsageSection({ mode }: { mode: QuotaMode }) {
   const t = useTranslation();
   const text = t.settings.dshUsage;
   const [tokens, setTokens] = useState<SessionTokens | null>(null);
@@ -53,7 +54,7 @@ export function DshUsageSection() {
 
   const sessionValue = sessionTokenSummary(tokens);
   const spend = spendLabel(usage);
-  const quota = quotaSummary(usage);
+  const quota = quotaTiers(usage, mode, text.monthShort);
   const magpieGap = magpieMissingLabel(usage);
   // A missing ledger must not still be named as the source: the row would claim to read a
   // file it just said it could not open.
@@ -86,7 +87,7 @@ export function DshUsageSection() {
         control={<span className="dsh-usage__value">{spend ?? text.unavailable}</span>}
       />
       <SettingsRow
-        title={text.quota}
+        title={text.islandQuota}
         description={quota ? quotaDetail(usage) : `${magpieGap} · ${text.magpieSource}`}
         control={<span className="dsh-usage__value">{quota ?? text.unavailable}</span>}
       />

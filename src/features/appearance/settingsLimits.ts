@@ -7,6 +7,11 @@ export const AGENT_SESSION_GROUPS: readonly AgentSessionGroup[] = ["computer", "
 export const AGENT_SESSION_HOURS = [1, 2, 6, 24] as const;
 /** How long a page opened for an agent alert stays, in seconds. */
 export const AGENT_ALERT_SECONDS = [3, 5, 8, 15, 30] as const;
+/** How the usage rows read a quota window: what is left, or what was used. */
+export const AGENT_USAGE_MODES = ["remaining", "used"] as const;
+/** How often the island reads Magpie again, in milliseconds; 0 is "only when asked". */
+export const AGENT_USAGE_REFRESH_MS = [30_000, 60_000, 300_000, 0] as const;
+export const DEFAULT_AGENT_USAGE_REFRESH_MS = 60_000;
 
 // Bottom corner radius of the expanded island; every other island radius scales from it
 // (IslandShell.css). 1.4x a 30px corner, for Apple's continuous corner (cornerShape.ts); the
