@@ -12,6 +12,7 @@ export function SettingsRow({
   control,
   labelFor,
   indent = false,
+  className,
   children,
 }: {
   title: ReactNode;
@@ -20,10 +21,13 @@ export function SettingsRow({
   /** Id of the input the title names; clicking the title then focuses or toggles it. */
   labelFor?: string;
   indent?: boolean;
+  /** Extra class for a group that lays its rows out differently. */
+  className?: string;
   children?: ReactNode;
 }) {
+  const name = ["settings-row", indent && "settings-row--indent", className].filter(Boolean).join(" ");
   return (
-    <div className={indent ? "settings-row settings-row--indent" : "settings-row"}>
+    <div className={name}>
       <div className="settings-row__main">
         <div className="settings-row__text">
           {labelFor ? (

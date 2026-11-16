@@ -44,3 +44,16 @@
     color: CanvasText;
   }
 }
+
+/* The three rows of the usage group line their controls up with the title line, not with the whole
+   title-plus-hint block: a row with a hint would otherwise push its value 10-20px lower than a row
+   without one, and the column stops reading as a column. Scoped here so every other settings page
+   keeps the centred layout. */
+.dsh-usage-settings__row .settings-row__main {
+  align-items: flex-start;
+}
+
+.dsh-usage-settings__row .settings-row__control {
+  /* One title line tall; a taller control overflows symmetrically around that line. */
+  height: 19px;
+}

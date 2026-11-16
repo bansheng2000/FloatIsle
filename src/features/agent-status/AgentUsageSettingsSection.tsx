@@ -73,6 +73,7 @@ export function AgentUsageSettingsSection({ settings, onSettingsChange }: {
       }
     >
       <SettingsRow
+        className="dsh-usage-settings__row"
         title={text.mode}
         description={text.modeHint}
         control={
@@ -88,6 +89,7 @@ export function AgentUsageSettingsSection({ settings, onSettingsChange }: {
         }
       />
       <SettingsRow
+        className="dsh-usage-settings__row"
         title={text.refresh}
         description={settings.agentUsageRefreshMs === 0 ? text.refreshHint : undefined}
         control={
@@ -100,6 +102,7 @@ export function AgentUsageSettingsSection({ settings, onSettingsChange }: {
         }
       />
       <SettingsRow
+        className="dsh-usage-settings__row"
         title="Magpie"
         description={usage ? magpieStateLabel(usage, text) : text.reading}
         control={
