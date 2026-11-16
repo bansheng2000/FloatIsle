@@ -25,6 +25,9 @@ const READ_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_BODY_BYTES: usize = 64 * 1024;
 const MAX_HEADERS: usize = 32;
 const MAX_LINE_BYTES: usize = 4 * 1024;
+/// A client that stops reporting is forgotten at the same age the hub forgets it, so a
+/// crashed page (or a leftover test post) never keeps naming a session that is gone.
+const PRESENCE_TTL_MS: u64 = 10 * 60 * 1000;
 
 /// What the plugin's window is showing. Field names are the plugin's (`mountedSessionId`),
 /// with the older `sessionId` still accepted because deployed copies send that.
@@ -100,6 +103,10 @@ impl Shared {
             last_event_at_ms: state.last_event_at_ms,
             last_event_type: state.last_event_type.clone(),
         };
+        if presence_expired(status.last_presence_at_ms, now_ms()) {
+            status.presence = None;
+            status.last_presence_at_ms = None;
+        }
         if status.presence.is_none() {
             status.last_presence_at_ms = None;
         }
@@ -281,6 +288,14 @@ fn event_from(body: &[u8]) -> Result<(String, Option<Presence>), (u16, &'static 
         None
     };
     Ok((kind.to_string(), presence))
+}
+
+/// True when the last report is older than the hub's own forget window.
+fn presence_expired(last_ms: Option<u64>, now: Option<u64>) -> bool {
+    let (Some(last), Some(now)) = (last_ms, now) else {
+        return false;
+    };
+    now.saturating_sub(last) > PRESENCE_TTL_MS
 }
 
 fn now_ms() -> Option<u64> {

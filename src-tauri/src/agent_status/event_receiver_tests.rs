@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use super::{Receiver, PORT};
+use super::{presence_expired, Receiver, PORT};
 
 fn connect(port: u16) -> std::io::Result<TcpStream> {
     let stream = TcpStream::connect(("127.0.0.1", port))?;
@@ -60,6 +60,17 @@ fn a_fresh_listener_reports_its_ephemeral_port_and_an_empty_state() {
     assert_eq!(status.presences, 0);
     assert_eq!(status.events, 0);
     assert_eq!(status.rejected, 0);
+}
+
+#[test]
+fn a_presence_nobody_refreshes_is_forgotten_after_ten_minutes() {
+    // The forged posts used while checking the card must not outlive the check: the
+    // receiver drops a report the hub would also have dropped by now.
+    assert!(!presence_expired(Some(1_000), Some(1_000)));
+    assert!(!presence_expired(Some(1_000), Some(1_000 + 9 * 60 * 1000)));
+    assert!(presence_expired(Some(1_000), Some(1_000 + 11 * 60 * 1000)));
+    assert!(!presence_expired(None, Some(1_000)));
+    assert!(!presence_expired(Some(1_000), None));
 }
 
 #[test]
