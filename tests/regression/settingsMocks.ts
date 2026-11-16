@@ -41,13 +41,13 @@ const dshBridgeStatus = () => {
         raw: `{"ok":true,"running":[],"pending":[],"clients":0,"clientList":[],"pid":19680,"epoch":"e-noclients","stats":{"enabled":true,"listening":true,"eventsSent":0,"eventsFailed":0,"lastEventAt":"2026-11-16T06:20:37.000Z","lastEventError":"connect ECONNREFUSED 127.0.0.1:47821","heartbeats":114}}`,
       }
     : {
-        // The healthy bridge: a self-describing plugin, four copies in one process, and the
-        // island's own missing event receiver still visible in the plugin's last error.
+        // The healthy bridge: a self-describing plugin, four connections accumulated in the hub,
+        // and the island's own missing event receiver still visible in the plugin's last error.
         state: "ok",
         processes: { mainPids: [20832], childCount: 8, startedAt: Date.now() - 3_600_000, exe: DSH_EXE },
         plugin: { version: "0.12.0", profile: "desktop" },
         endpoint: "127.0.0.1:47822", reachable: true, httpStatus: 200, error: null,
-        report: { pid: 20832, epoch: "e1", clients: 4, clientIds: ["20832-1"], running: ["s1", "s2"], recent: 3, lastEventAt: "2026-11-15T13:59:36.830Z", eventsSent: 203, eventsFailed: 2059, lastEventError: "connect ECONNREFUSED 127.0.0.1:47821", listening: true, selfDescribing: true },
+        report: { pid: 20832, epoch: "e1", clients: 4, clientIds: ["20832-1", "20832-2", "20832-3", "20832-4"], running: ["s1", "s2"], recent: 3, lastEventAt: "2026-11-15T13:59:36.830Z", eventsSent: 203, eventsFailed: 2059, lastEventError: "connect ECONNREFUSED 127.0.0.1:47821", listening: true, selfDescribing: true },
         mounts: [{ clientId: "20832-1", mountedSessionId: "s2", visible: true, focused: true, stale: false, reportedAt: "2026-11-16T07:10:00.000Z", receivedAt: "2026-11-16T07:10:00.500Z", ageMs: 1200 }],
         mountsError: null,
         raw: `{"ok":true}`,
@@ -132,8 +132,8 @@ mockIPC((command, payload) => {
       clipboardSettings = { ...clipboardSettings, ...(args.settings as object | undefined) };
       return { settings: clipboardSettings, items: [] };
     case "get_agent_status": return { codex: { phase: "idle", updatedAt: 0 }, claudeCode: { phase: "idle", updatedAt: 0 }, updatedAt: 0, statusPath: "C:\\Users\\demo\\AppData\\Roaming\\com.focusd.island\\agent-status.json" };
-    // The DSH bridge healthy: a self-describing plugin, four copies in one process, and the
-    // island's own missing event receiver still visible in the plugin's last error.
+    // The DSH bridge healthy: a self-describing plugin, four connections accumulated in the hub,
+    // and the island's own missing event receiver still visible in the plugin's last error.
     case "probe_dsh_bridge": return dshBridgeStatus();
     case "dsh_receiver_status": return dshReceiverStatus();
     case "dsh_session_tokens": return dshSessionTokens();

@@ -29,7 +29,7 @@ export type DshPluginInfo = {
 export type DshBridgeReport = {
   pid: number | null;
   epoch: string | null;
-  /** How many copies of the plugin this process loaded; not a count of connected clients. */
+  /** The hub's running total of accepted connections, one per plugin load; not process copies. */
   clients: number | null;
   clientIds: string[];
   running: string[];

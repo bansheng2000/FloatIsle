@@ -73,6 +73,10 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
 
   const processes = status?.processes;
   const report = status?.report;
+  // The hub counts the connections it has accepted since it started, one per plugin load, so this
+  // is a running total and not "how many times this process loaded the plugin". Its clientList is
+  // the authoritative list; `clients` is the older single number for plugins that only send one.
+  const connections = report ? report.clientIds.length || report.clients : null;
   const plugin = status?.plugin;
   const mainPid = processes?.mainPids[0];
 
@@ -181,13 +185,13 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
           description={
             report?.clients === 0
               ? text.bridgeEmptyHint
-              : report?.clients != null && report.clients > 1
-                ? text.bridgeHint(report.clients)
+              : connections != null && connections > 1
+                ? text.bridgeHint(connections)
                 : undefined
           }
           control={
-            report?.clients != null ? (
-              <span className="dsh-bridge__value">{text.bridgeCount(report.clients)}</span>
+            connections != null ? (
+              <span className="dsh-bridge__value">{text.bridgeCount(connections)}</span>
             ) : (
               <span className="dsh-bridge__value dsh-bridge__value--missing">{text.bridgeUnavailable}</span>
             )

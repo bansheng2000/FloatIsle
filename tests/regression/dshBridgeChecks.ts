@@ -22,8 +22,8 @@ export function checkHealthyBridge(check: Check): void {
   const bridge = bridgeGroup();
   check(rowText("DSH 进程").includes("主进程 PID 20832") && rowText("DSH 进程").includes("另有 8 个渲染/GPU 子进程"),
     "DSH's main process and its renderer children are reported apart");
-  check(rowText("桥实例").includes("4 份") && rowText("桥实例").includes("同一个进程里被加载了 4 次") && !rowText("桥实例").includes("客户端连接"),
-    "Bridge copies use the plugin's own words, not four connected clients");
+  check(rowText("桥实例").includes("累计 4 条") && rowText("桥实例").includes("hub 累计连接 4 条（旧 hub 未重启，重启后归 1）") && !rowText("桥实例").includes("客户端连接"),
+    "Bridge connections read as the hub's running total, not as process loads");
   check(bridge?.textContent?.includes("正常") && rowText("会话").includes("已收 3 条") && rowText("会话").includes("最近：task ·"),
     "A healthy bridge reports what the island's own receiver has taken, and what arrived last");
   check(rowText("挂载会话").includes("s2") && rowDescription("挂载会话") === "hub 在 1 秒前收到这条上报",
@@ -35,9 +35,9 @@ export function checkEmptyBridge(check: Check): void {
   check(badge?.className === "dsh-bridge__badge dsh-bridge__badge--noClients" && badge.textContent === "无实例"
     && rowDescription("状态") === "插件进程在听，但没有任何 DSH 实例注册到桥，事件一条也不会到达。",
     "An empty bridge gets its own amber state and says why, not the healthy one");
-  check(rowDescription("桥实例") === "0 份：插件进程在，但没有实例注册到桥，事件不会到达。"
-    && bridgeRow("桥实例")?.querySelector(".dsh-bridge__value")?.textContent === "0 份",
-    "The bridge row spells out that zero copies means no events arrive");
+  check(rowDescription("桥实例") === "0 条：插件进程在，但没有客户端注册到桥，事件不会到达。"
+    && bridgeRow("桥实例")?.querySelector(".dsh-bridge__value")?.textContent === "0 条",
+    "The bridge row spells out that zero connections means no events arrive");
   check(!bridgeGroup()?.querySelector(".dsh-bridge__badge--ok") && !bridgeGroup()?.textContent?.includes("正常"),
     "Nothing on the card calls an empty bridge healthy");
   check(rowText("会话").includes("已收 0 条") && rowText("会话").includes("还没有收到事件")
