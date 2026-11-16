@@ -75,6 +75,8 @@
 
 - DSH（issue #51）：新增只读命令 `get_dsh_usage()`，返回 `null` 或 `{ updatedAt, available, wallets: [{ currency, total, granted, toppedUp }], source: "dshApi" | "dshAccount" }`，金额为十进制字符串。`list_agent_sessions` 的 `provider` 新增 `dsh`；`focus_agent_window`、`agent_sessions_in_front` 接受 `dsh`，既有参数和返回结构不变。无新增事件，无新增 localStorage key；`focusd-island-settings` 兼容新增 `agentShowDsh`（缺失时为 true）。`agent-status.json`、钩子安装状态仍只含 Claude/Codex。该命令是自有 Rust 命令，不增加 Tauri 插件/核心权限；现有 capabilities 足够。
 
+- DSH 会话的跳转（点击岛上的 DSH 会话行）：命令 `jump_dsh_session(sessionId)` 先读插件（端口 47822）的 `GET /_task-notify/mounted`，页面已经停在那个会话时不发请求；否则 `POST http://127.0.0.1:47822/jump`，载荷 `{ "sid": "<sessionId>" }`。返回 `{ delivered, reason, status, body }`，`delivered` 为假时前端回落 `focus_agent_window`。每次请求和回答追加到应用数据目录的 `agent-jump.log`；不新增 Tauri 插件或核心权限（reqwest 已是依赖）。
+
 - 展开岛屿的按钮样式保存在 `focusd-island-settings.pageButtonStyle`，支持 `capsule` 和 `icon`，缺失或未知值使用 `capsule`。
 - 微信摘要通过 `set_wechat_message_preview_enabled(enabled)` 开关。`set_wechat_minimized_taskbar_hidden(hidden)` 设置最小化时隐藏微信任务栏图标。`set_wechat_reminders_enabled` 可接收 `previewEnabled` 和 `hideMinimizedTaskbar`，省略时保留对应偏好。事件快照包含 `previewEnabled`、`previewStatus`、`hideMinimizedTaskbar`、`messages`，消息行是 `{ id, receivedAt, contact, body }`。
 - `open_wechat_conversation(messageId)` 用内存中的摘要 ID 定位微信会话。返回 `true` 表示已点击对应会话，`false` 表示已打开微信主窗口。微信的会话标识和进程身份保存在原生内存中。

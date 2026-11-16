@@ -22,6 +22,7 @@ mod focus;
 mod focus_log;
 mod hooks_state;
 mod host_icon;
+mod jump_request;
 mod magpie;
 mod markers;
 mod notifications;
@@ -312,6 +313,20 @@ pub async fn focus_agent_window(
     .map_err(|error| format!("Failed to join the window focus task: {error}"))
 }
 
+/// Asks the notifier plugin to switch the browser page to a DSH session (jump_request.rs): the
+/// click on a DSH session row goes there first, and only a page that took it counts as found.
+#[tauri::command]
+pub async fn jump_dsh_session(
+    app: AppHandle,
+    session_id: String,
+) -> Result<jump_request::JumpOutcome, String> {
+    if session_id.trim().is_empty() {
+        return Err("A session id is needed to jump to a session.".to_string());
+    }
+    let app_dir = app.path().app_data_dir().ok();
+    Ok(jump_request::jump(&session_id, app_dir.as_deref()).await)
+}
+
 /// Which of `sessions` have their window in front (focus.rs); the Agent page counts those as
 /// seen. Returns their session ids.
 #[tauri::command]
@@ -496,6 +511,7 @@ macro_rules! tauri_commands {
             crate::agent_status::install_agent_status_hooks,
             crate::agent_status::get_agent_hooks_state,
             crate::agent_status::focus_agent_window,
+            crate::agent_status::jump_dsh_session,
             crate::agent_status::agent_sessions_in_front,
             crate::agent_status::get_agent_host_icon,
             crate::agent_status::list_agent_sessions,

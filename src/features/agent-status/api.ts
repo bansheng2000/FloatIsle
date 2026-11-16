@@ -174,6 +174,25 @@ export function focusAgentWindow(provider: AgentProvider, cwd: string | null, ti
   return invoke<boolean>("focus_agent_window", { provider, cwd, title, sessionId });
 }
 
+/**
+ * Mirrors JumpOutcome in src-tauri/src/agent_status/jump_request.rs: whether a browser page took
+ * the jump, and which branch the island took (kept in agent-jump.log).
+ */
+export type DshJumpOutcome = {
+  delivered: boolean;
+  reason: string;
+  status: number | null;
+  body: string;
+};
+
+/**
+ * Asks the notifier plugin to switch the page showing a DSH session to `sessionId`; written up
+ * with the request and the answer in agent-jump.log. `delivered` false means no page took it.
+ */
+export function jumpDshSession(sessionId: string) {
+  return invoke<DshJumpOutcome>("jump_dsh_session", { sessionId });
+}
+
 /** Session ids among `sessions` whose window is in front (agent_sessions_in_front). */
 export function agentSessionsInFront(sessions: Pick<AgentSessionSummary, "provider" | "sessionId">[]) {
   return invoke<string[]>("agent_sessions_in_front", {

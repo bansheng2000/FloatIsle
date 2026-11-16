@@ -10,7 +10,7 @@ import { AgentQuotaRings } from "./AgentQuotaRings";
 import { DshUsageLines } from "./DshUsageLines";
 import type { QuotaMode } from "./dshSpend";
 import type { AgentUsages } from "./usage";
-import { focusAgentWindow, type AgentSessionSummary } from "./api";
+import { focusAgentWindow, jumpDshSession, type AgentSessionSummary } from "./api";
 import { arrangeSessions, isActivePhase, minutesAgo, modelLabel, sessionProject } from "./sessionList";
 import { shownEffort } from "./effortLabels";
 import { useEffortLabels } from "./useEffortLabels";
@@ -127,20 +127,30 @@ export function AgentSessionsPanel({
     return () => window.clearTimeout(timer);
   }, [notFoundId]);
 
-  const focus = (session: AgentSessionSummary) => {
+  const focus = async (session: AgentSessionSummary) => {
     setNotFoundId(null);
     unseen?.markSeen(session);
-    // A session on another computer runs in a terminal tab or editor window connected to it
-    // (a WezTerm SSH tab, VS Code Remote): found by title and folder only, as its process and
-    // session id mean nothing here.
-    void focusAgentWindow(session.provider, session.cwd, session.title, session.remoteHost ? "" : session.sessionId)
-      .then((found) => {
-        if (!found) setNotFoundId(session.sessionId);
-      })
-      .catch((error) => {
-        console.error("Failed to focus the agent window", error);
-        setNotFoundId(session.sessionId);
-      });
+    try {
+      // A DSH session is shown by a browser page the notifier plugin controls, and a jump through
+      // that plugin is the only thing that switches it (jump_request.rs). A page that already shows
+      // the session needs no switch, but either way its window comes forward: the switch is worth
+      // nothing behind another window, and a click has to land somewhere.
+      if (session.provider === "dsh" && !session.remoteHost) {
+        const { delivered } = await jumpDshSession(session.sessionId);
+        if (delivered) {
+          await focusAgentWindow(session.provider, session.cwd, session.title, session.sessionId);
+          return;
+        }
+      }
+      // A session on another computer runs in a terminal tab or editor window connected to it
+      // (a WezTerm SSH tab, VS Code Remote): found by title and folder only, as its process and
+      // session id mean nothing here.
+      const found = await focusAgentWindow(session.provider, session.cwd, session.title, session.remoteHost ? "" : session.sessionId);
+      if (!found) setNotFoundId(session.sessionId);
+    } catch (error) {
+      console.error("Failed to focus the agent window", error);
+      setNotFoundId(session.sessionId);
+    }
   };
 
   // A request an agent is waiting on comes before everything else on the page.
@@ -224,7 +234,7 @@ export function AgentSessionsPanel({
                   notFound={notFound}
                   cardReply={reveal && !isActivePhase(session.phase) ? session.lastMessage : null}
                   effects={cardEffects}
-                  onOpen={() => focus(session)}
+                  onOpen={() => void focus(session)}
                 />
                 {archive}
               </li>
@@ -264,7 +274,7 @@ export function AgentSessionsPanel({
               <button
                 className={`agent-session agent-session--${session.phase} agent-session--light-${light} agent-session--${full ? "full" : "compact"}${unseen?.keys.has(sessionKey(session)) ? " agent-session--unseen" : unseen && asksUser(session) ? " agent-session--looked" : ""}`}
                 type="button"
-                onClick={() => focus(session)}
+                onClick={() => void focus(session)}
               >
                 <span className="agent-session__dot" aria-hidden="true" />
                 <span className="agent-session__main">
