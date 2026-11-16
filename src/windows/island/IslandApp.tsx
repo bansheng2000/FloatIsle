@@ -27,6 +27,7 @@ import { AgentArrangeButton } from "../../features/agent-status/AgentArrangeButt
 import { useAgentIndicator } from "./useAgentIndicator";
 import { usageLineCount } from "../../features/agent-status/usage";
 import { useIslandNavigation } from "./useIslandNavigation";
+import { useIslandSessionJump } from "./useIslandSessionJump";
 import { useIslandTodos } from "./useIslandTodos";
 import { useIslandTucking } from "./useIslandTucking";
 import { useIslandShelf } from "./useIslandShelf";
@@ -49,6 +50,8 @@ export function IslandApp() {
   const t = useTranslation();
   const navigation = useIslandNavigation();
   const { mode, isTucked, page, setPage, collapseIsland, tuckIsland, revealIsland, minimizeToEdge, openIslandPage, toggleClipboardHistory } = navigation;
+  // A jump sent from outside (a click in the notifier plugin's page) opens the Agent page here.
+  const sessionJump = useIslandSessionJump(openIslandPage);
   const [settings, setSettings] = useIslandSettings();
   const detachedSettings = useSettingsPresentation();
   const { openSettings, changePresentation } = useSettingsNavigation(openIslandPage, setPage);
@@ -250,6 +253,8 @@ export function IslandApp() {
           media={media}
           clipboard={clipboard}
           agentSessions={listedAgentSessions}
+          sessionJump={sessionJump.jump}
+          onSessionJumpHandled={sessionJump.clear}
           unseenAgentSessions={unseenAgentSessions}
           agentRemoval={agentRemoval}
           alertedSession={alertedSession}

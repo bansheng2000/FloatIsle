@@ -55,6 +55,14 @@ pub struct ReceiverStatus {
     pub rejected: u64,
     pub last_event_at_ms: Option<u64>,
     pub last_event_type: Option<String>,
+    /// Jumps received on `POST /jump`, and how many hit a row the island scrolled to.
+    pub jumps: u64,
+    pub jumps_found: u64,
+    pub jumps_scrolled: u64,
+    pub last_jump_at_ms: Option<u64>,
+    pub last_jump_sid: Option<String>,
+    pub last_jump_reason: Option<String>,
+    pub last_jump_row: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -66,6 +74,13 @@ struct State {
     rejected: u64,
     last_event_at_ms: Option<u64>,
     last_event_type: Option<String>,
+    jumps: u64,
+    jumps_found: u64,
+    jumps_scrolled: u64,
+    last_jump_at_ms: Option<u64>,
+    last_jump_sid: Option<String>,
+    last_jump_reason: Option<String>,
+    last_jump_row: Option<String>,
 }
 
 struct Shared {
@@ -102,6 +117,13 @@ impl Shared {
             rejected: state.rejected,
             last_event_at_ms: state.last_event_at_ms,
             last_event_type: state.last_event_type.clone(),
+            jumps: state.jumps,
+            jumps_found: state.jumps_found,
+            jumps_scrolled: state.jumps_scrolled,
+            last_jump_at_ms: state.last_jump_at_ms,
+            last_jump_sid: state.last_jump_sid.clone(),
+            last_jump_reason: state.last_jump_reason.clone(),
+            last_jump_row: state.last_jump_row.clone(),
         };
         if presence_expired(status.last_presence_at_ms, now_ms()) {
             status.presence = None;
@@ -117,8 +139,8 @@ impl Shared {
         self.state().rejected += 1;
     }
 
-    /// One request: `presence` and `event` from the plugin, `status` for a readback.
-    fn handle(&self, request: Request) -> Result<(u16, String), (u16, &'static str)> {
+    /// One request: `presence`, `event` and `jump` from the plugin, `status` for a readback.
+    fn handle(&self, request: Request, from: &str) -> Result<(u16, String), (u16, &'static str)> {
         // The plugin talks under `/_task-notify`, older builds post to the bare paths.
         let bare = request.path.as_str();
         let path = bare
@@ -153,13 +175,40 @@ impl Shared {
                 }
                 Ok((200, "{\"ok\":true}".to_string()))
             }
+            ("POST", "/jump") => {
+                let sid = jump_sid(&request.body)?;
+                // The answer is the webview's: it is the only side that knows the list. A jump
+                // nothing answers comes back found:false with the reason it was not.
+                let answer = super::session_jump::ask(&sid, from);
+                {
+                    let mut state = self.state();
+                    state.jumps += 1;
+                    state.jumps_found += u64::from(answer.found);
+                    state.jumps_scrolled += u64::from(answer.scrolled);
+                    state.last_jump_at_ms = now_ms();
+                    state.last_jump_sid = Some(sid.clone());
+                    state.last_jump_reason = Some(answer.reason.clone());
+                    state.last_jump_row = answer.row.clone();
+                }
+                let body = serde_json::json!({
+                    "ok": true,
+                    "sid": sid,
+                    "found": answer.found,
+                    "scrolled": answer.scrolled,
+                    "reason": answer.reason,
+                    "row": answer.row,
+                    "ms": answer.ms,
+                })
+                .to_string();
+                Ok((200, body))
+            }
             ("GET", "/status") => {
                 let body = serde_json::to_string(&self.status(None))
                     .unwrap_or_else(|_| "{\"ok\":false}".to_string());
                 Ok((200, body))
             }
             ("GET", "/") => Ok((200, "{\"ok\":true,\"service\":\"floatisle\"}".to_string())),
-            (_, "/presence" | "/event") => Err((405, "Only POST is accepted here.")),
+            (_, "/presence" | "/event" | "/jump") => Err((405, "Only POST is accepted here.")),
             _ => Err((404, "Unknown path.")),
         }
     }
@@ -290,6 +339,20 @@ fn event_from(body: &[u8]) -> Result<(String, Option<Presence>), (u16, &'static 
     Ok((kind.to_string(), presence))
 }
 
+/// The `POST /jump` body: `{"sid": "session-…"}`. The id is the session itself, not a display
+/// row key, so the webview can compare it with what it mounted.
+fn jump_sid(body: &[u8]) -> Result<String, (u16, &'static str)> {
+    let value: Value = serde_json::from_slice(body).map_err(|_| (400, "Body is not JSON."))?;
+    value
+        .get("sid")
+        .or_else(|| value.get("sessionId"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|sid| !sid.is_empty())
+        .map(str::to_string)
+        .ok_or((400, "The jump names no session (sid)."))
+}
+
 /// True when the last report is older than the hub's own forget window.
 fn presence_expired(last_ms: Option<u64>, now: Option<u64>) -> bool {
     let (Some(last), Some(now)) = (last_ms, now) else {
@@ -372,6 +435,11 @@ fn serve(listener: TcpListener, shared: &Arc<Shared>) {
 }
 
 fn handle_connection(stream: TcpStream, shared: &Shared) {
+    // Who asked, for the jump log: the caller cannot say its own name, the socket can.
+    let from = stream
+        .peer_addr()
+        .map(|address| address.to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
     let Ok(mut writer) = stream.try_clone() else {
         shared.reject();
         return;
@@ -379,7 +447,7 @@ fn handle_connection(stream: TcpStream, shared: &Shared) {
     let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
     let mut reader = BufReader::new(stream);
     let answered = match read_request(&mut reader) {
-        Ok(request) => shared.handle(request),
+        Ok(request) => shared.handle(request, &from),
         Err(error) => Err(error),
     };
     let (status, body) = match answered {

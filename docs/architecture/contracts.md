@@ -70,14 +70,15 @@
 | `focusd-update-state` / `focusd-update-request`（更新状态由主窗口广播；独立设置窗口用后者请求 `snapshot` / `check` / `install` / `dismiss`；3.0.2 及更早还有 `channel`） | `features/updater/updaterController.ts` | 广播 / `main` |
 | `agent-approval-requested`（载荷 `{ id, agent, kind, sessionId, cwd, toolName, toolInput, permissionSuggestions, receivedAt }`：一个会话等你在岛上审批的工具调用（`kind: "permission"`），或要你回答的 AskUserQuestion（`kind: "question"`，`toolInput.questions`），同一会话同时只发一条） | `agent_approval/mod.rs` | 广播 |
 | `agent-approval-closed`（载荷 `{ id, reason }`，`reason` 为 `decided` / `timeout` / `disconnected` / `handedBack` / `shutdown`） | `agent_approval/mod.rs` | 广播 |
+| `island-session-jump`（载荷 `{ requestId, sid }`：端口 47821 收到 `POST /jump`，让 Agent 页滚到该会话并高亮，再用 `report_session_jump` 回答） | `agent_status/session_jump.rs` | `main` |
 
 ## 其他
 
 - DSH（issue #51）：新增只读命令 `get_dsh_usage()`，返回 `null` 或 `{ updatedAt, available, wallets: [{ currency, total, granted, toppedUp }], source: "dshApi" | "dshAccount" }`，金额为十进制字符串。`list_agent_sessions` 的 `provider` 新增 `dsh`；`focus_agent_window`、`agent_sessions_in_front` 接受 `dsh`，既有参数和返回结构不变。无新增事件，无新增 localStorage key；`focusd-island-settings` 兼容新增 `agentShowDsh`（缺失时为 true）。`agent-status.json`、钩子安装状态仍只含 Claude/Codex。该命令是自有 Rust 命令，不增加 Tauri 插件/核心权限；现有 capabilities 足够。
 
-- DSH 会话的跳转（点击岛上的 DSH 会话行）：命令 `jump_dsh_session(sessionId)` 先读插件（端口 47822）的 `GET /_task-notify/mounted`，页面已经停在那个会话时不发请求；否则 `POST http://127.0.0.1:47822/jump`，载荷 `{ "sid": "<sessionId>" }`。返回 `{ delivered, reason, status, body }`，`delivered` 为假时前端回落 `focus_agent_window`。每次请求和回答追加到应用数据目录的 `agent-jump.log`；不新增 Tauri 插件或核心权限（reqwest 已是依赖）。
-
 - 展开岛屿的按钮样式保存在 `focusd-island-settings.pageButtonStyle`，支持 `capsule` 和 `icon`，缺失或未知值使用 `capsule`。
+
+- 事件端口 47821（`agent_status/event_receiver.rs`）只接受 `POST /presence`、`POST /event`、`POST /jump`、`GET /status`、`GET /`；`/jump` 载荷 `{ "sid": "<sessionId>" }`，返回 `{ ok, sid, found, scrolled, reason, row, ms }`。`reason` 为 `ok`（找到并滚动）、`not-listed`（岛上有 Agent 页但列表里没有该会话）、`no-agent-page`、`no-window`（没有可发事件的主窗口）、`no-answer`（发了事件但前端没在 1.2 秒内回答）。每条都会追加到应用数据目录的 `agent-jump-in.log`。配套命令 `jump_dsh_session(sessionId)`（岛上点 DSH 会话行时先向插件 47822 `POST /jump`）与 `report_session_jump(requestId, found, scrolled, reason, row)`（前端的回答）。
 - 微信摘要通过 `set_wechat_message_preview_enabled(enabled)` 开关。`set_wechat_minimized_taskbar_hidden(hidden)` 设置最小化时隐藏微信任务栏图标。`set_wechat_reminders_enabled` 可接收 `previewEnabled` 和 `hideMinimizedTaskbar`，省略时保留对应偏好。事件快照包含 `previewEnabled`、`previewStatus`、`hideMinimizedTaskbar`、`messages`，消息行是 `{ id, receivedAt, contact, body }`。
 - `open_wechat_conversation(messageId)` 用内存中的摘要 ID 定位微信会话。返回 `true` 表示已点击对应会话，`false` 表示已打开微信主窗口。微信的会话标识和进程身份保存在原生内存中。
 - 应用数据目录的 `wechat-accessibility.json` 记录 `{ pid, started_at }`，用于重新校验进程并恢复岛屿临时开启的微信辅助功能标志。

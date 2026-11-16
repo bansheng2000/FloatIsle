@@ -74,6 +74,7 @@ pub fn run() {
                 eprintln!("failed to start the agent approval endpoint: {error}");
             }
             agent_status::event_receiver::start();
+            agent_status::session_jump::init(app.handle());
             if let Err(error) = mail::init(app.handle()) {
                 eprintln!("failed to initialize QQ mail: {error}");
             }

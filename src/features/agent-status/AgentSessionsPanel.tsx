@@ -10,7 +10,7 @@ import { AgentQuotaRings } from "./AgentQuotaRings";
 import { DshUsageLines } from "./DshUsageLines";
 import type { QuotaMode } from "./dshSpend";
 import type { AgentUsages } from "./usage";
-import { focusAgentWindow, jumpDshSession, type AgentSessionSummary } from "./api";
+import { focusAgentWindow, jumpDshSession, reportSessionJump, type AgentSessionSummary, type SessionJumpRequest } from "./api";
 import { arrangeSessions, isActivePhase, minutesAgo, modelLabel, sessionProject } from "./sessionList";
 import { shownEffort } from "./effortLabels";
 import { useEffortLabels } from "./useEffortLabels";
@@ -31,6 +31,21 @@ import "./AgentSessionsPanel.css";
 
 const NOT_FOUND_NOTICE_MS = 3000;
 const AGE_REFRESH_MS = 30_000;
+/** A jump from outside is looked for this long before the post is told the session is not here
+ *  (the post itself waits 1.2 s, see ANSWER_TIMEOUT in session_jump.rs). */
+const JUMP_RETRY_MS = 60;
+const JUMP_TRIES = 15;
+/** How long the row a jump landed on stays lit. */
+const JUMP_LIGHT_MS = 2400;
+
+/** The row for `sid`: rows are keyed `provider:sessionId`, and a jump names only the session. */
+function findJumpRow(element: HTMLElement, sid: string): HTMLElement | null {
+  const suffix = `:${sid}`;
+  for (const row of element.querySelectorAll<HTMLElement>("[data-session-key]")) {
+    if (row.dataset.sessionKey?.endsWith(suffix)) return row;
+  }
+  return null;
+}
 
 /**
  * The island's Agent page: recent sessions; clicking one brings its editor or terminal forward.
@@ -56,6 +71,8 @@ export function AgentSessionsPanel({
   usageMode = "remaining",
   usageRefreshMs = 60_000,
   approvals,
+  jump,
+  onJumpHandled,
 }: {
   sessions: AgentSessionSummary[];
   /** Flat rows (the default), cards framed in their light, or one-line rows (AgentSessionCard). */
@@ -89,6 +106,10 @@ export function AgentSessionsPanel({
   usageRefreshMs?: number;
   /** Permission requests agents wait on; the page shows the first one alone. */
   approvals?: AgentApprovals;
+  /** A jump someone sent to the island (`POST /jump`): scroll to that session's row and answer it. */
+  jump?: SessionJumpRequest | null;
+  /** Called once the jump has been answered, so the request is not repeated on the next visit. */
+  onJumpHandled?: () => void;
 }) {
   const t = useTranslation();
   // An alert's session alone, kept current from the list; the list may leave it out (only
@@ -126,6 +147,51 @@ export function AgentSessionsPanel({
     const timer = window.setTimeout(() => setNotFoundId(null), NOT_FOUND_NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [notFoundId]);
+
+  // A jump from outside (session_jump.rs): the island has opened this page; find the row, scroll to
+  // it, light it, and answer the post with what was found. The post waits a little over a second,
+  // so the row is looked for a few times before the session is called absent.
+  const [litKey, setLitKey] = useState<string | null>(null);
+  const listElement = list.element;
+  useEffect(() => {
+    if (!jump) return;
+    const { requestId, sid } = jump;
+    let retry = 0;
+    let lit = 0;
+    let stopped = false;
+    let tries = 0;
+    const answer = (found: boolean, scrolled: boolean, reason: string, row: string | null) => {
+      if (stopped) return;
+      stopped = true;
+      window.clearTimeout(retry);
+      void reportSessionJump(requestId, found, scrolled, reason, row)
+        .catch((error) => console.error("Failed to answer a session jump", error))
+        .finally(() => onJumpHandled?.());
+    };
+    const look = () => {
+      if (stopped) return;
+      const row = listElement ? findJumpRow(listElement, sid) : null;
+      if (row) {
+        row.scrollIntoView({ block: "nearest" });
+        setLitKey(row.dataset.sessionKey ?? null);
+        lit = window.setTimeout(() => setLitKey(null), JUMP_LIGHT_MS);
+        answer(true, true, "ok", row.dataset.sessionKey ?? null);
+        return;
+      }
+      tries += 1;
+      if (tries > JUMP_TRIES) {
+        answer(false, false, listElement ? "not-listed" : "no-agent-page", null);
+        return;
+      }
+      retry = window.setTimeout(look, JUMP_RETRY_MS);
+    };
+    look();
+    return () => {
+      stopped = true;
+      window.clearTimeout(retry);
+      window.clearTimeout(lit);
+    };
+  }, [jump, listElement, onJumpHandled]);
 
   const focus = async (session: AgentSessionSummary) => {
     setNotFoundId(null);
@@ -272,7 +338,7 @@ export function AgentSessionsPanel({
           return (
             <li key={`${session.provider}:${session.sessionId}`} ref={reveal ? cardRef : undefined} data-session-key={sessionKey(session)}>
               <button
-                className={`agent-session agent-session--${session.phase} agent-session--light-${light} agent-session--${full ? "full" : "compact"}${unseen?.keys.has(sessionKey(session)) ? " agent-session--unseen" : unseen && asksUser(session) ? " agent-session--looked" : ""}`}
+                className={`agent-session agent-session--${session.phase} agent-session--light-${light} agent-session--${full ? "full" : "compact"}${litKey === sessionKey(session) ? " agent-session--jump" : ""}${unseen?.keys.has(sessionKey(session)) ? " agent-session--unseen" : unseen && asksUser(session) ? " agent-session--looked" : ""}`}
                 type="button"
                 onClick={() => void focus(session)}
               >

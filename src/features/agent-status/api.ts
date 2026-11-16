@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { AgentEffortLabels } from "./effortLabels";
 import type { DshBridgeStatus, DshReceiverStatus } from "./dshBridge";
 import type { MagpieUsage, SessionTokens } from "./dshSpend";
@@ -198,6 +199,32 @@ export function agentSessionsInFront(sessions: Pick<AgentSessionSummary, "provid
   return invoke<string[]>("agent_sessions_in_front", {
     sessions: sessions.map(({ provider, sessionId }) => ({ provider, sessionId })),
   });
+}
+
+/**
+ * The event a `POST /jump` on the event port arrives as (session_jump.rs EVENT); part of the
+ * island's contract.
+ */
+export const SESSION_JUMP_EVENT = "island-session-jump";
+
+/** Mirrors Ask in src-tauri/src/agent_status/session_jump.rs, camel-cased by serde. */
+export type SessionJumpRequest = {
+  requestId: number;
+  sid: string;
+};
+
+/** A jump someone sent to the island; the returned function stops listening. */
+export function onSessionJump(handler: (request: SessionJumpRequest) => void) {
+  return listen<SessionJumpRequest>(SESSION_JUMP_EVENT, (event) => handler(event.payload));
+}
+
+/**
+ * What the page did with a received jump (report_session_jump): whether the session was listed,
+ * which row it hit, and whether it was scrolled to. False means the post had already given up
+ * waiting, which is logged in agent-jump-in.log rather than shown.
+ */
+export function reportSessionJump(requestId: number, found: boolean, scrolled: boolean, reason: string | null, row: string | null) {
+  return invoke<boolean>("report_session_jump", { requestId, found, scrolled, reason, row });
 }
 
 /** Mirrors UsageWindow in src-tauri/src/agent_status/usage.rs. */

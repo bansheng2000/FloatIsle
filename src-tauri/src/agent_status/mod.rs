@@ -30,6 +30,7 @@ mod orca;
 pub(crate) mod reply_marker;
 mod reply_text;
 mod session_host;
+pub(crate) mod session_jump;
 mod session_memory;
 mod session_mode;
 mod session_process;
@@ -327,6 +328,28 @@ pub async fn jump_dsh_session(
     Ok(jump_request::jump(&session_id, app_dir.as_deref()).await)
 }
 
+/// What the island did with a `POST /jump` it received (session_jump.rs): true when the post was
+/// still waiting for this answer. A report that arrives after the post gave up is refused, so the
+/// next jump cannot be given the previous one's row.
+#[tauri::command]
+pub fn report_session_jump(
+    request_id: u64,
+    found: bool,
+    scrolled: bool,
+    reason: Option<String>,
+    row: Option<String>,
+) -> bool {
+    session_jump::report(
+        request_id,
+        session_jump::Report {
+            found,
+            scrolled,
+            reason: reason.unwrap_or_default(),
+            row,
+        },
+    )
+}
+
 /// Which of `sessions` have their window in front (focus.rs); the Agent page counts those as
 /// seen. Returns their session ids.
 #[tauri::command]
@@ -512,6 +535,7 @@ macro_rules! tauri_commands {
             crate::agent_status::get_agent_hooks_state,
             crate::agent_status::focus_agent_window,
             crate::agent_status::jump_dsh_session,
+            crate::agent_status::report_session_jump,
             crate::agent_status::agent_sessions_in_front,
             crate::agent_status::get_agent_host_icon,
             crate::agent_status::list_agent_sessions,
