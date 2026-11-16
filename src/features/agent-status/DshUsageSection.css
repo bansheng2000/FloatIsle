@@ -1,7 +1,31 @@
+/* One size for the whole right column: a status line that inherits the page's 16px reads as the
+   loudest thing in the group, louder than the label that explains it. */
 .dsh-usage__value {
+  font-size: 13px;
+  line-height: 1.35;
   font-variant-numeric: tabular-nums;
   color: var(--settings-text-secondary);
   white-space: nowrap;
+}
+
+/* Connected or not, said as a pill: same size as the values beside it, with a tint that carries
+   the state instead of a bigger font. */
+.dsh-usage__state {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.dsh-usage__state--ok {
+  color: var(--color-agent-idle);
+  background: rgba(53, 233, 133, 0.12);
+}
+
+.dsh-usage__state--warn {
+  color: var(--color-warning);
+  background: rgba(255, 209, 102, 0.12);
 }
 
 .dsh-usage__note {

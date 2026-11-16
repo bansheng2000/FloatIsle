@@ -18,8 +18,10 @@ const REFRESH_CHOICES = [30_000, 60_000, 300_000, 0] as const;
  * or up what was used, how often it asks Magpie again, and whether Magpie answers at all.
  *
  * Both choices are saved with the rest of the island's settings, so they survive a restart. The
- * state line is the gateway's own: a refused connection, a timeout and a silent port each say so,
- * and "Retry" asks again without leaving the page.
+ * state line is the gateway's own: a refused connection, a timeout and a silent port each say so.
+ *
+ * "Retry" stays in the group header whatever the state: with the interval set to "manual" it is the
+ * only way to ask again, and while connected it is a plain refresh. It is not a failure-only action.
  */
 export function AgentUsageSettingsSection({ settings, onSettingsChange }: {
   settings: IslandSettings;
@@ -101,7 +103,9 @@ export function AgentUsageSettingsSection({ settings, onSettingsChange }: {
         title="Magpie"
         description={usage ? magpieStateLabel(usage, text) : text.reading}
         control={
-          <span className="dsh-usage__value">
+          <span
+            className={usage && usage.reachable ? "dsh-usage__state dsh-usage__state--ok" : "dsh-usage__state dsh-usage__state--warn"}
+          >
             {usage ? (usage.reachable ? text.magpieOnline : text.magpieOffline) : text.reading}
           </span>
         }
