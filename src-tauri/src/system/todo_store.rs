@@ -544,7 +544,7 @@ mod tests {
             "$f=[IO.File]::Open('{}','OpenOrCreate','ReadWrite','None'); Start-Sleep -Seconds 30",
             path.display()
         );
-        let child = std::process::Command::new("powershell")
+        let mut child = std::process::Command::new("powershell")
             .args(["-NoProfile", "-Command", &script])
             .spawn()
             .expect("powershell");
@@ -566,6 +566,8 @@ mod tests {
             .status()
             .expect("taskkill");
         assert!(killed.success(), "taskkill refused");
+        // /F already ended it; reaping keeps the test from leaving the child behind.
+        let _ = child.wait();
 
         let mut acquired = false;
         let deadline = Instant::now() + Duration::from_secs(20);
