@@ -10,8 +10,8 @@ import { SettingsWindow } from "../../src/windows/settings/SettingsWindow";
 import { DEFAULT_SETTINGS } from "../../src/features/appearance/settings";
 import { settingsCategoryFor } from "../../src/windows/settings/categories";
 import { I18nProvider, LOCALE_STORAGE_KEY } from "../../src/i18n";
-import { commands, mailCalls, REPLY_MARKER, replyMarkerCalls, setDshBridgeScenario, translationShortcutCalls } from "./settingsMocks";
-import { checkEmptyBridge, checkHealthyBridge } from "./dshBridgeChecks";
+import { commands, mailCalls, REPLY_MARKER, replyMarkerCalls, translationShortcutCalls } from "./settingsMocks";
+import { checkBridgeScenarios } from "./dshBridgeChecks";
 
 const query = new URLSearchParams(location.search);
 const automated = query.has("test");
@@ -258,12 +258,8 @@ if (!automated) {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
     check(replyMarkerCalls.join() === "true" && markerSwitch!.checked, "Switching the reply status marker on writes it");
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
-    checkHealthyBridge(check);
-    // The card only probes when it mounts, so leave and come back for the empty-bridge case.
-    setDshBridgeScenario("noClients");
-    await openPage("agents"); await openPage("agentConnect"); await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
-    checkEmptyBridge(check);
-    setDshBridgeScenario("ok");
+    // The card only probes when it mounts, so every scenario leaves the page and comes back.
+    await checkBridgeScenarios(check, openPage, () => act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); }));
 
     await openPage("agents"); await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
     const hooksLink = [...document.querySelectorAll<HTMLButtonElement>(".editor-panel .settings-link-button")].find((button) => button.textContent === "安装/修复");

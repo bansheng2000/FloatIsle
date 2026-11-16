@@ -6,7 +6,7 @@
 //! Everything here is read from three places: a process snapshot, one loopback GET, and the
 //! plugin's own package.json on disk.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
@@ -19,6 +19,9 @@ use crate::win32::{process, process_times, process_tree};
 
 /// The plugin's status endpoint, part of the bridge contract (see analysis/protocol-v1.md).
 const STATUS_URL: &str = "http://127.0.0.1:47822/status";
+/// Which page has which session open, one entry per page. Plugin 0.13.0 answers this with GET;
+/// older builds refuse it (405), and the card then says so instead of claiming nothing is open.
+const MOUNTED_URL: &str = "http://127.0.0.1:47822/_task-notify/mounted";
 /// A loopback request answers in microseconds; waiting longer than this is worse for a
 /// settings card than saying plainly that nothing answered.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -96,6 +99,22 @@ pub struct DshBridgeReport {
     pub self_describing: bool,
 }
 
+/// One page's report from `/_task-notify/mounted`. `age_ms` is the hub's own freshness
+/// (milliseconds since it received the report) and is what the card uses; `received_at` and
+/// `reported_at` are ISO strings from two different clocks and are only for display.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DshMount {
+    pub client_id: Option<String>,
+    pub mounted_session_id: Option<String>,
+    pub visible: Option<bool>,
+    pub focused: Option<bool>,
+    pub stale: Option<bool>,
+    pub reported_at: Option<String>,
+    pub received_at: Option<String>,
+    pub age_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DshBridgeStatus {
@@ -109,6 +128,10 @@ pub struct DshBridgeStatus {
     /// Why the port did not answer, verbatim from the HTTP client.
     pub error: Option<String>,
     pub report: DshBridgeReport,
+    /// The pages that reported a mounted session, or `None` when the plugin refused the read.
+    pub mounts: Option<Vec<DshMount>>,
+    /// Why the mounted read failed, verbatim, when `mounts` is `None`.
+    pub mounts_error: Option<String>,
     /// Body of `/status` (or of whatever answered), truncated for pasting.
     pub raw: Option<String>,
 }
@@ -396,8 +419,45 @@ fn interpret(
         http_status,
         error,
         report,
+        mounts: None,
+        mounts_error: None,
         raw,
     }
+}
+
+/// Reads the per-page mounts. A refusal is reported, never turned into an empty list.
+async fn read_mounts() -> Result<Vec<DshMount>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(PROBE_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .get(MOUNTED_URL)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!("HTTP {status}"));
+    }
+    parse_mounts(&body).ok_or_else(|| "the answer is not a mounts document".to_string())
+}
+
+/// `{ok, ts, count, clients: [...]}`; anything else means the plugin did not answer this route.
+fn parse_mounts(body: &str) -> Option<Vec<DshMount>> {
+    let value: Value = serde_json::from_str(body).ok()?;
+    if value.get("ok").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    let clients = value.get("clients")?.as_array()?;
+    Some(
+        clients
+            .iter()
+            .filter_map(|client| serde_json::from_value::<DshMount>(client.clone()).ok())
+            .collect(),
+    )
 }
 
 /// Everything the connection card shows: DSH's processes, the plugin's manifest, and one
@@ -411,7 +471,19 @@ pub async fn probe_dsh_bridge() -> Result<DshBridgeStatus, String> {
     // The process snapshot is one Toolhelp enumeration, fast enough to stay on this task;
     // the only slow part here is the port, which is awaited.
     let processes = processes();
-    Ok(interpret(probe().await, processes, plugin))
+    let answer = probe().await;
+    // Only ask for mounts when the hub described itself; an old or foreign port has no such route.
+    let (mounts, mounts_error) = match &answer {
+        Answer::Ours { report, .. } if report.self_describing => match read_mounts().await {
+            Ok(mounts) => (Some(mounts), None),
+            Err(error) => (None, Some(error)),
+        },
+        _ => (None, None),
+    };
+    let mut status = interpret(answer, processes, plugin);
+    status.mounts = mounts;
+    status.mounts_error = mounts_error;
+    Ok(status)
 }
 
 #[cfg(test)]

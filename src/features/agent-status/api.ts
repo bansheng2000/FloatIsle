@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentEffortLabels } from "./effortLabels";
-import type { DshBridgeStatus } from "./dshBridge";
+import type { DshBridgeStatus, DshReceiverStatus } from "./dshBridge";
 
 // 与 src-tauri/src/agent_status/snapshot.rs 中的 AgentTaskStatus、AgentStatusSnapshot，以及 agent_status/mod.rs 中的 AgentHooksInstallResult 对应。
 export type AgentProvider = "codex" | "claudeCode" | "dsh";
@@ -227,6 +227,11 @@ export function getDshUsage() {
 /** One read of the DSH notifier bridge: processes, installed manifest and one GET on 47822. */
 export function probeDshBridge() {
   return invoke<DshBridgeStatus>("probe_dsh_bridge");
+}
+
+/** The island's own listener on 47821: whether it runs, and the last presence it read. */
+export function probeDshReceiver() {
+  return invoke<DshReceiverStatus>("dsh_receiver_status");
 }
 
 export function getAgentHooksState() {

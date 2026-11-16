@@ -191,3 +191,32 @@ fn reads_the_newest_installed_manifest_and_its_profile() {
 
     fs::remove_dir_all(&home).ok();
 }
+
+#[test]
+fn a_mounts_document_lists_every_page_separately() {
+    let body = r#"{"ok":true,"ts":"2026-11-16T07:45:00.000Z","count":2,"clients":[
+        {"clientId":"19680-1","mountedSessionId":"session-a","visible":true,"focused":true,"reportedAt":"2026-11-16T07:44:59.000Z","receivedAt":"2026-11-16T07:45:00.000Z","ageMs":1200,"reports":3,"stale":false},
+        {"clientId":"19680-2","mountedSessionId":null,"visible":false,"focused":false,"reportedAt":"2026-11-16T07:40:00.000Z","receivedAt":"2026-11-16T07:45:00.000Z","ageMs":300000,"reports":7,"stale":true}
+    ]}"#;
+    let mounts = parse_mounts(body).expect("a mounts document");
+    assert_eq!(mounts.len(), 2, "pages are never merged");
+    assert_eq!(mounts[0].client_id.as_deref(), Some("19680-1"));
+    assert_eq!(mounts[0].mounted_session_id.as_deref(), Some("session-a"));
+    assert_eq!(mounts[0].received_at.as_deref(), Some("2026-11-16T07:45:00.000Z"));
+    assert_eq!(mounts[0].age_ms, Some(1_200), "freshness comes from the hub's ageMs");
+    assert_eq!(mounts[0].stale, Some(false));
+    assert_eq!(mounts[1].mounted_session_id, None, "a page with nothing mounted keeps its entry");
+    assert_eq!(mounts[1].stale, Some(true));
+}
+
+#[test]
+fn a_mounts_refusal_is_never_read_as_an_empty_list() {
+    for body in [
+        r#"{"ok":false,"error":"internal","message":"POST only"}"#,
+        r#"{"ok":true}"#,
+        "<html>405</html>",
+        "",
+    ] {
+        assert_eq!(parse_mounts(body), None, "refused body: {body}");
+    }
+}

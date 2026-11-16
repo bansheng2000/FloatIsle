@@ -1,6 +1,9 @@
 // The DSH bridge card's regression assertions, kept out of the settings page script so that page
-// stays inside the file-size limit. Two scenarios: the healthy default, and a bridge whose plugin
-// answers with the full new field set but has nothing registered (clients: 0).
+// stays inside the file-size limit. Three scenarios: the healthy default, a bridge whose plugin
+// answers with the full new field set but has nothing registered (clients: 0), and an island whose
+// own listener on 47821 never came up.
+import { setDshBridgeScenario } from "./settingsMocks";
+
 type Check = (condition: unknown, message: string) => void;
 
 const bridgeGroup = () =>
@@ -21,8 +24,10 @@ export function checkHealthyBridge(check: Check): void {
     "DSH's main process and its renderer children are reported apart");
   check(rowText("桥实例").includes("4 份") && rowText("桥实例").includes("同一个进程里被加载了 4 次") && !rowText("桥实例").includes("客户端连接"),
     "Bridge copies use the plugin's own words, not four connected clients");
-  check(bridge?.textContent?.includes("正常") && bridge?.textContent?.includes("本版浮岛未实现接收端（47821）"),
-    "A healthy bridge still calls out the island's own missing event receiver");
+  check(bridge?.textContent?.includes("正常") && rowText("会话").includes("已收 3 条") && rowText("会话").includes("最近：task ·"),
+    "A healthy bridge reports what the island's own receiver has taken, and what arrived last");
+  check(rowText("挂载会话").includes("s2") && rowDescription("挂载会话") === "hub 在 1 秒前收到这条上报",
+    "The mounted page's session comes from /mounted, with the hub's own age for it");
 }
 
 export function checkEmptyBridge(check: Check): void {
@@ -35,4 +40,32 @@ export function checkEmptyBridge(check: Check): void {
     "The bridge row spells out that zero copies means no events arrive");
   check(!bridgeGroup()?.querySelector(".dsh-bridge__badge--ok") && !bridgeGroup()?.textContent?.includes("正常"),
     "Nothing on the card calls an empty bridge healthy");
+  check(rowText("会话").includes("已收 0 条") && rowText("会话").includes("还没有收到事件")
+    && rowText("挂载会话").includes("没有客户端上报 presence"),
+    "A listening receiver with no report shows zero events and says nobody reported presence");
+}
+
+export function checkReceiverDown(check: Check): void {
+  const note = bridgeGroup()?.querySelector<HTMLElement>(".dsh-bridge__note--attention");
+  check(note?.textContent?.includes("接收端未运行：127.0.0.1:47821 is already in use"),
+    "A listener that failed to bind says so with the reason it failed");
+  check(rowDescription("会话") === "未运行" && rowText("挂载会话").includes("插件未提供页面挂载（HTTP 405）"),
+    "With no listener the sessions row says so, and the mount read is reported as refused, never as empty");
+}
+
+/** Runs every bridge scenario in turn; each one needs the page to remount so the card probes again. */
+export async function checkBridgeScenarios(
+  check: Check,
+  openPage: (category: string) => Promise<unknown>,
+  settle: () => Promise<unknown>,
+): Promise<void> {
+  checkHealthyBridge(check);
+  for (const [scenario, verify] of [["noClients", checkEmptyBridge], ["receiverDown", checkReceiverDown]] as const) {
+    setDshBridgeScenario(scenario);
+    await openPage("agents");
+    await openPage("agentConnect");
+    await settle();
+    verify(check);
+  }
+  setDshBridgeScenario("ok");
 }

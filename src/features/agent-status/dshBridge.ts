@@ -52,24 +52,63 @@ export type DshBridgeStatus = {
   httpStatus: number | null;
   error: string | null;
   report: DshBridgeReport;
+  /** Every page's mount report, or null when the plugin refused `GET /_task-notify/mounted`. */
+  mounts: DshMount[] | null;
+  /** Why the mount read failed, verbatim, when `mounts` is null. */
+  mountsError: string | null;
   /** The `/status` body (or whatever answered), already truncated by the native side. */
   raw: string | null;
+};
+
+/**
+ * One page's entry from `/_task-notify/mounted`. Pages are never merged here: two windows can
+ * hold two different sessions, and the card must not pretend they are one.
+ */
+export type DshMount = {
+  clientId: string | null;
+  mountedSessionId: string | null;
+  visible: boolean | null;
+  focused: boolean | null;
+  stale: boolean | null;
+  reportedAt: string | null;
+  receivedAt: string | null;
+  /** Milliseconds since the hub took the report; the only clock worth trusting for freshness. */
+  ageMs: number | null;
 };
 
 /** One read of the bridge: the process snapshot, the plugin manifest and one GET on 47822. */
 // The command wrapper lives in api.ts, which is the only module allowed to import invoke.
 
 /**
- * Whether the plugin is telling us it cannot deliver event notices. The island has no
- * receiver on 47821 yet, so this is true on every healthy install; the line that explains
- * it disappears by itself once the receiver exists, because the error goes away.
+ * The presence a plugin window posts to the island's own listener on 47821. Mirrors Presence in
+ * src-tauri/src/agent_status/event_receiver.rs; the older deployed plugin sends `sessionId`
+ * instead of `mountedSessionId`, and the native side folds that into the same field.
  */
-export function eventChannelGap(report: DshBridgeReport): boolean {
-  return report.lastEventError?.includes("47821") ?? false;
-}
+export type DshPresence = {
+  clientId: string | null;
+  visible: boolean | null;
+  focused: boolean | null;
+  mountedSessionId: string | null;
+  reportedAt: string | null;
+};
+
+/** The island's listener on 47821: whether it runs, and the last presence it read. */
+export type DshReceiverStatus = {
+  port: number;
+  listening: boolean;
+  /** Why the listener could not bind, when it did not. */
+  error: string | null;
+  presence: DshPresence | null;
+  presences: number;
+  lastPresenceAtMs: number | null;
+  events: number;
+  rejected: number;
+  lastEventAtMs: number | null;
+  lastEventType: string | null;
+};
 
 /** Pastes into a chat or an issue: the state, the four numbers, and the raw body. */
-export function dshBridgeDiagnostics(status: DshBridgeStatus): string {
+export function dshBridgeDiagnostics(status: DshBridgeStatus, receiver?: DshReceiverStatus | null): string {
   const { processes, plugin, report } = status;
   const main = processes.mainPids.join(", ") || "none";
   // The start time is kept in milliseconds for machines and in UTC for the person pasting
@@ -81,6 +120,17 @@ export function dshBridgeDiagnostics(status: DshBridgeStatus): string {
   const bridge = report.selfDescribing
     ? `clients=${report.clients} pid=${report.pid} epoch=${report.epoch}`
     : "not self-describing (old plugin)";
+  const listener = receiver
+    ? `receiver: port=${receiver.port} listening=${receiver.listening} presences=${receiver.presences} events=${receiver.events} rejected=${receiver.rejected} error=${receiver.error ?? "none"}`
+    : "receiver: not read";
+  const mounts = status.mounts
+    ? status.mounts
+        .map((mount) => `${mount.clientId ?? "?"}:${mount.mountedSessionId ?? "none"}${mount.stale ? " stale" : ""}`)
+        .join(", ")
+    : `refused (${status.mountsError ?? "unknown"})`;
+  const mounted = receiver
+    ? `mounted: session=${receiver.presence?.mountedSessionId ?? "none"} visible=${receiver.presence?.visible ?? "?"} focused=${receiver.presence?.focused ?? "?"} reportedAt=${receiver.presence?.reportedAt ?? "none"} lastPresenceAt=${receiver.lastPresenceAtMs ?? "never"}`
+    : "mounted: not read";
   return [
     `state: ${status.state}`,
     `endpoint: ${status.endpoint} reachable=${status.reachable} http=${status.httpStatus ?? "none"}`,
@@ -89,6 +139,9 @@ export function dshBridgeDiagnostics(status: DshBridgeStatus): string {
     `bridge: ${bridge}`,
     `sessions: running=${report.running.length} recentCount=${report.recent} lastEventAt=${report.lastEventAt ?? "never"}`,
     `events: sent=${report.eventsSent ?? "?"} failed=${report.eventsFailed ?? "?"} lastError=${report.lastEventError ?? "none"}`,
+    `mounts: ${mounts}`,
+    listener,
+    mounted,
     `error: ${status.error ?? "none"}`,
     `raw: ${status.raw ?? "(no body)"}`,
   ].join("\n");

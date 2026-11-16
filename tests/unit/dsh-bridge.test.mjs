@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dshBridgeDiagnostics, eventChannelGap } from "../../src/features/agent-status/dshBridge.ts";
+import { dshBridgeDiagnostics } from "../../src/features/agent-status/dshBridge.ts";
 
 const processes = { mainPids: [20832], childCount: 8, startedAt: 1_763_190_000_000, exe: "E:\\dsh.exe" };
 const plugin = { version: "0.12.0", profile: "desktop" };
@@ -14,11 +14,23 @@ const status = (overrides = {}) => ({
   report: report(), raw: '{"ok":true}', ...overrides,
 });
 
-test("the island's own missing event receiver is read out of the plugin's last error", () => {
-  assert.equal(eventChannelGap(report({ lastEventError: "connect ECONNREFUSED 127.0.0.1:47821" })), true);
-  // The line disappears by itself once the receiver exists, because the error goes away.
-  assert.equal(eventChannelGap(report()), false);
-  assert.equal(eventChannelGap(report({ lastEventError: "ECONNREFUSED 127.0.0.1:47822" })), false);
+const receiver = (overrides = {}) => ({
+  port: 47821, listening: true, error: null, presences: 42, events: 3, rejected: 0,
+  presence: { clientId: "20832-1", visible: true, focused: true, mountedSessionId: "s2", reportedAt: "2026-11-16T07:10:00.000Z" },
+  lastPresenceAtMs: Date.parse("2026-11-16T07:10:00.000Z"), lastEventAtMs: null, lastEventType: "task", ...overrides,
+});
+
+test("the receiver's own numbers and the mounted session go into the pasted diagnostics", () => {
+  const listening = dshBridgeDiagnostics(status(), receiver());
+  assert.ok(listening.includes("receiver: port=47821 listening=true presences=42 events=3 rejected=0 error=none"), listening);
+  assert.ok(listening.includes("mounted: session=s2 visible=true focused=true"), listening);
+  // A listener that never bound reports its reason, and claims no session.
+  const down = dshBridgeDiagnostics(status(), receiver({ listening: false, error: "47821 in use", presence: null, lastPresenceAtMs: null }));
+  assert.ok(down.includes("listening=false presences=42 events=3 rejected=0 error=47821 in use"), down);
+  assert.ok(down.includes("mounted: session=none"), down);
+  // When the receiver has not been read at all, say so instead of printing empties.
+  const unread = dshBridgeDiagnostics(status());
+  assert.ok(unread.includes("receiver: not read") && unread.includes("mounted: not read"), unread);
 });
 
 test("a bridge with no registered client reads as its own state, not as OK", () => {

@@ -23,20 +23,21 @@ let clipboardSettings = { enabled: true, captureImages: true, maxItems: 100, sho
 // gave on 2026-11-16 06:0x: the full self-describing field set, but `clients: 0` with an empty
 // `clientList`, which the card must never show as OK. Only the epoch value is a stand-in — it is
 // a random runtime id, not something a test can read off the wire.
-export type DshBridgeScenario = "ok" | "noClients";
+export type DshBridgeScenario = "ok" | "noClients" | "receiverDown";
 let dshBridgeScenario: DshBridgeScenario = "ok";
 export function setDshBridgeScenario(next: DshBridgeScenario): void {
   dshBridgeScenario = next;
 }
 const DSH_EXE = String.raw`E:\Programs\DeepSeek Harness\DeepSeek Harness.exe`;
-const dshBridgeStatus = () =>
-  dshBridgeScenario === "noClients"
+const dshBridgeStatus = () => {
+  const status = dshBridgeScenario === "noClients"
     ? {
         state: "noClients",
         processes: { mainPids: [3304], childCount: 8, startedAt: Date.parse("2026-11-16T06:09:19+08:00"), exe: DSH_EXE },
         plugin: { version: "0.12.1", profile: "desktop" },
         endpoint: "127.0.0.1:47822", reachable: true, httpStatus: 200, error: null,
         report: { pid: 19680, epoch: "e-noclients", clients: 0, clientIds: [], running: [], recent: 0, lastEventAt: "2026-11-16T06:20:37.000Z", eventsSent: 0, eventsFailed: 0, lastEventError: "connect ECONNREFUSED 127.0.0.1:47821", listening: true, selfDescribing: true },
+        mounts: [], mountsError: null,
         raw: `{"ok":true,"running":[],"pending":[],"clients":0,"clientList":[],"pid":19680,"epoch":"e-noclients","stats":{"enabled":true,"listening":true,"eventsSent":0,"eventsFailed":0,"lastEventAt":"2026-11-16T06:20:37.000Z","lastEventError":"connect ECONNREFUSED 127.0.0.1:47821","heartbeats":114}}`,
       }
     : {
@@ -47,8 +48,29 @@ const dshBridgeStatus = () =>
         plugin: { version: "0.12.0", profile: "desktop" },
         endpoint: "127.0.0.1:47822", reachable: true, httpStatus: 200, error: null,
         report: { pid: 20832, epoch: "e1", clients: 4, clientIds: ["20832-1"], running: ["s1", "s2"], recent: 3, lastEventAt: "2026-11-15T13:59:36.830Z", eventsSent: 203, eventsFailed: 2059, lastEventError: "connect ECONNREFUSED 127.0.0.1:47821", listening: true, selfDescribing: true },
+        mounts: [{ clientId: "20832-1", mountedSessionId: "s2", visible: true, focused: true, stale: false, reportedAt: "2026-11-16T07:10:00.000Z", receivedAt: "2026-11-16T07:10:00.500Z", ageMs: 1200 }],
+        mountsError: null,
         raw: `{"ok":true}`,
       };
+  // A plugin that does not serve /_task-notify/mounted at all: the refusal must be visible, not read
+  // as "no page has a session".
+  return dshBridgeScenario === "receiverDown" ? { ...status, mounts: null, mountsError: "HTTP 405" } : status;
+};
+
+
+// The island's own listener on 47821. Healthy: one client has reported that session s2 is the
+// mounted one. "noClients" and "receiverDown" remove that report and then the whole listener.
+const dshReceiverStatus = () =>
+  dshBridgeScenario === "ok"
+    ? {
+        port: 47821, listening: true, error: null, presences: 42, events: 3, rejected: 0,
+        presence: { clientId: "20832-1", visible: true, focused: true, mountedSessionId: "s2", reportedAt: "2026-11-16T07:10:00.000Z" },
+        lastPresenceAtMs: Date.parse("2026-11-16T07:10:00.000Z"),
+        lastEventAtMs: Date.parse("2026-11-16T07:09:40.000Z"), lastEventType: "task",
+      }
+    : dshBridgeScenario === "noClients"
+      ? { port: 47821, listening: true, error: null, presences: 0, events: 0, rejected: 0, presence: null, lastPresenceAtMs: null, lastEventAtMs: null, lastEventType: null }
+      : { port: 47821, listening: false, error: "127.0.0.1:47821 is already in use", presences: 0, events: 0, rejected: 0, presence: null, lastPresenceAtMs: null, lastEventAtMs: null, lastEventType: null };
 
 mockIPC((command, payload) => {
   commands.push(command);
@@ -78,6 +100,7 @@ mockIPC((command, payload) => {
     // The DSH bridge healthy: a self-describing plugin, four copies in one process, and the
     // island's own missing event receiver still visible in the plugin's last error.
     case "probe_dsh_bridge": return dshBridgeStatus();
+    case "dsh_receiver_status": return dshReceiverStatus();
     case "copy_text_to_clipboard": return null;
     case "get_qq_mail_state": return mailboxes;
     case "connect_qq_mail":

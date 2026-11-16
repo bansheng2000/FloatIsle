@@ -6,8 +6,8 @@ import { SettingsLinkButton } from "../../components/settings/SettingsLinkButton
 import { SettingsRow } from "../../components/settings/SettingsRow";
 import { SettingsToggleRow } from "../../components/settings/SettingsToggleRow";
 import { useTranslation } from "../../i18n";
-import { probeDshBridge } from "./api";
-import { dshBridgeDiagnostics, eventChannelGap, type DshBridgeStatus } from "./dshBridge";
+import { probeDshBridge, probeDshReceiver } from "./api";
+import { dshBridgeDiagnostics, type DshBridgeStatus, type DshReceiverStatus } from "./dshBridge";
 import "./DshBridgeSection.css";
 
 /** An ISO timestamp as local time; the raw string stays for the diagnostics block. */
@@ -30,6 +30,7 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
   const t = useTranslation();
   const text = t.settings.dshBridge;
   const [status, setStatus] = useState<DshBridgeStatus | null>(null);
+  const [receiver, setReceiver] = useState<DshReceiverStatus | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -37,7 +38,9 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
   const read = useCallback(async () => {
     setBusy(true);
     try {
-      setStatus(await probeDshBridge());
+      const [bridge, listener] = await Promise.all([probeDshBridge(), probeDshReceiver()]);
+      setStatus(bridge);
+      setReceiver(listener);
       setError("");
     } catch (failure) {
       setError(String(failure));
@@ -61,7 +64,7 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
   const copy = async () => {
     if (!status) return;
     try {
-      await copyTextToClipboard(dshBridgeDiagnostics(status));
+      await copyTextToClipboard(dshBridgeDiagnostics(status, receiver));
       setCopied(true);
     } catch (failure) {
       setError(String(failure));
@@ -88,12 +91,36 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
                 ? text.hints.noClients
                 : text.hints.ok;
 
+  // Which page holds which session comes from the plugin's own mount list: the receiver's
+  // presence is only a fallback for a plugin that pushes instead of answering a read.
+  const mounts = status?.mounts ?? null;
+  const liveMounts = mounts?.filter((mount) => mount.stale !== true && mount.mountedSessionId) ?? [];
+  const presence = receiver?.presence;
+  const mountedId = liveMounts[0]?.mountedSessionId ?? presence?.mountedSessionId ?? null;
+  const mountedFreshness = liveMounts[0]?.ageMs ?? null;
+  const listenerTime = receiver?.lastPresenceAtMs ? localTime(new Date(receiver.lastPresenceAtMs).toISOString()) : "";
+  const eventTime = receiver?.lastEventAtMs ? localTime(new Date(receiver.lastEventAtMs).toISOString()) : "";
+
+  // The sessions row carries the listener: how many events arrived, what kind came last, and when
+  // nothing is listening it says so instead of showing a zero.
+  const channelLine = !receiver
+    ? text.receiverUnread
+    : !receiver.listening
+      ? text.receiverOff
+      : [
+          text.eventsReceived(receiver.events),
+          receiver.rejected > 0 ? text.eventsRejected(receiver.rejected) : "",
+          receiver.lastEventType ? text.lastEvent(receiver.lastEventType, eventTime) : text.noEventsYet,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
   const footer = error ? (
     <span className="dsh-bridge__note dsh-bridge__note--error" role="alert">{text.failed(error)}</span>
-  ) : report && eventChannelGap(report) ? (
+  ) : receiver && !receiver.listening ? (
     <span className="dsh-bridge__note dsh-bridge__note--attention" role="status">
       <CircleAlert size={13} strokeWidth={2.4} aria-hidden="true" />
-      {text.eventGap}
+      {text.receiverDown(receiver.error ?? text.receiverDownUnknown)}
     </span>
   ) : undefined;
 
@@ -168,8 +195,32 @@ export function DshBridgeSection({ agentShowDsh, onAgentShowDshChange }: {
         />
         <SettingsRow
           title={text.sessions}
-          description={report?.lastEventAt ? text.recent(localTime(report.lastEventAt)) : text.recentNever}
+          description={channelLine}
           control={<span className="dsh-bridge__value">{text.running(report?.running.length ?? 0)}</span>}
+        />
+        <SettingsRow
+          title={text.mountedSession}
+          description={
+            mountedId && mountedFreshness !== null
+              ? text.presenceAge(Math.round(mountedFreshness / 1000))
+              : mounts && mounts.length > 0
+                ? text.presenceStale(mounts.length)
+                : presence && listenerTime
+                  ? text.presenceAt(listenerTime)
+                  : undefined
+          }
+          control={
+            mountedId ? (
+              <span className="dsh-bridge__value">
+                {mountedId}
+                {liveMounts.length > 1 ? <span className="dsh-bridge__aside">{text.presenceMore(liveMounts.length - 1)}</span> : null}
+              </span>
+            ) : mounts === null && status?.mountsError ? (
+              <span className="dsh-bridge__value dsh-bridge__value--missing">{text.mountsRefused(status.mountsError)}</span>
+            ) : (
+              <span className="dsh-bridge__value dsh-bridge__value--missing">{text.noPresence}</span>
+            )
+          }
         />
       </SettingsGroup>
       <SettingsGroup title={text.sourceTitle}>

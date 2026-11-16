@@ -39,9 +39,21 @@ export type SettingsDshBridgeText = {
   bridgeUnavailable: string;
   bridgeEmptyHint: string;
   running: (count: number) => string;
-  recent: (when: string) => string;
-  recentNever: string;
-  eventGap: string;
+  receiverUnread: string;
+  eventsReceived: (count: number) => string;
+  eventsRejected: (count: number) => string;
+  receiverOff: string;
+  receiverDown: (error: string) => string;
+  receiverDownUnknown: string;
+  noEventsYet: string;
+  lastEvent: (kind: string, when: string) => string;
+  mountedSession: string;
+  noPresence: string;
+  presenceAt: (when: string) => string;
+  presenceAge: (seconds: number) => string;
+  presenceMore: (count: number) => string;
+  presenceStale: (count: number) => string;
+  mountsRefused: (error: string) => string;
 };
 
 export const zhCN: SettingsDshBridgeText = {
@@ -85,9 +97,21 @@ export const zhCN: SettingsDshBridgeText = {
   bridgeUnavailable: "旧版插件不提供",
   bridgeEmptyHint: "0 份：插件进程在，但没有实例注册到桥，事件不会到达。",
   running: (count) => `${count} 个会话在跑`,
-  recent: (when) => `最近事件：${when}`,
-  recentNever: "最近事件：无",
-  eventGap: "事件通道：本版浮岛未实现接收端（47821），插件发的事件目前全部失败。",
+  receiverUnread: "接收端未读取",
+  eventsReceived: (count) => `已收 ${count} 条`,
+  eventsRejected: (count) => `拒收 ${count}`,
+  receiverOff: "未运行",
+  receiverDown: (error) => `接收端未运行：${error}`,
+  receiverDownUnknown: "原因未知",
+  noEventsYet: "还没有收到事件",
+  lastEvent: (kind, when) => `最近：${kind} · ${when}`,
+  mountedSession: "挂载会话",
+  noPresence: "没有客户端上报 presence",
+  presenceAt: (when) => `最近上报：${when}`,
+  presenceAge: (seconds) => `hub 在 ${seconds} 秒前收到这条上报`,
+  presenceMore: (count) => `另有 ${count} 页`,
+  presenceStale: (count) => `${count} 页上报过，但目前都超过 60 秒没有回声`,
+  mountsRefused: (error) => `插件未提供页面挂载（${error}）`,
 };
 
 export const en: SettingsDshBridgeText = {
@@ -131,7 +155,19 @@ export const en: SettingsDshBridgeText = {
   bridgeUnavailable: "Not provided by the old plugin",
   bridgeEmptyHint: "0 copies: the plugin process is up, but nothing is registered with the bridge, so no event arrives.",
   running: (count) => (count === 1 ? "1 session running" : `${count} sessions running`),
-  recent: (when) => `last event: ${when}`,
-  recentNever: "last event: never",
-  eventGap: "Event channel: this build of the island has no receiver on 47821, so the plugin's event notices currently all fail.",
+  receiverUnread: "receiver not read",
+  eventsReceived: (count) => (count === 1 ? "1 received" : `${count} received`),
+  eventsRejected: (count) => (count === 1 ? "1 refused" : `${count} refused`),
+  receiverOff: "Not running",
+  receiverDown: (error) => `Receiver not running: ${error}`,
+  receiverDownUnknown: "reason unknown",
+  noEventsYet: "no event received yet",
+  lastEvent: (kind, when) => `latest: ${kind} · ${when}`,
+  mountedSession: "Mounted session",
+  noPresence: "no client reported presence yet",
+  presenceAt: (when) => `reported at ${when}`,
+  presenceAge: (seconds) => (seconds === 1 ? "the hub took this report 1 second ago" : `the hub took this report ${seconds} seconds ago`),
+  presenceMore: (count) => (count === 1 ? "1 more page" : `${count} more pages`),
+  presenceStale: (count) => (count === 1 ? "1 page reported, but nothing heard from it for 60 seconds" : `${count} pages reported, but nothing heard from them for 60 seconds`),
+  mountsRefused: (error) => `the plugin does not offer page mounts (${error})`,
 };
