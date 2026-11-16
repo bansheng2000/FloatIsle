@@ -63,6 +63,34 @@ fn a_fresh_listener_reports_its_ephemeral_port_and_an_empty_state() {
 }
 
 #[test]
+fn a_presence_event_lands_in_the_same_slot_as_a_presence_post() {
+    let receiver = listener();
+    let body = r#"{"type":"presence","clientId":"page-e2e","visible":true,"focused":true,"mountedSessionId":null,"ts":"2026-11-16T08:03:00.000Z"}"#;
+    let (code, answer) = post(receiver.status().port, "/_task-notify/event", body);
+    assert_eq!(code, 200);
+    assert_eq!(answer, "{\"ok\":true}");
+
+    let status = receiver.status();
+    let presence = status.presence.clone().unwrap_or_default();
+    assert_eq!(presence.client_id.as_deref(), Some("page-e2e"));
+    assert_eq!(presence.mounted_session_id, None);
+    assert_eq!(presence.reported_at.as_deref(), Some("2026-11-16T08:03:00.000Z"));
+    assert_eq!(status.events, 1);
+    assert_eq!(status.presences, 1);
+    assert_eq!(status.last_event_type.as_deref(), Some("presence"));
+
+    // A presence event without the mounted key is the one shape the bridge refuses.
+    let (code, answer) = post(
+        receiver.status().port,
+        "/_task-notify/event",
+        r#"{"type":"presence","clientId":"page-e2e","visible":true}"#,
+    );
+    assert_eq!(code, 400);
+    assert!(answer.contains("mountedSessionId"));
+    assert_eq!(receiver.status().presence, status.presence);
+}
+
+#[test]
 fn a_presence_post_is_read_into_the_mounted_session() {
     let receiver = listener();
     let body = r#"{"clientId":"19680-1","visible":true,"focused":false,"mountedSessionId":"session-abc","reportedAt":"2026-11-16T07:20:00Z"}"#;

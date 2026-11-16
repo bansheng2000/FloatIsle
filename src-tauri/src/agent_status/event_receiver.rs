@@ -130,13 +130,19 @@ impl Shared {
                 Ok((200, "{\"ok\":true}".to_string()))
             }
             ("POST", "/event") => {
-                let (kind, session) = event_from(&request.body)?;
+                let (kind, presence) = event_from(&request.body)?;
                 {
                     let mut state = self.state();
                     state.events += 1;
                     state.last_event_at_ms = now_ms();
                     state.last_event_type = Some(kind);
-                    let _ = session;
+                    // The plugin sends presence through `/event` too, but only when it
+                    // changes; the periodic copy goes to the hub, not here.
+                    if let Some(presence) = presence {
+                        state.presence = Some(presence);
+                        state.presences += 1;
+                        state.last_presence_at_ms = now_ms();
+                    }
                 }
                 Ok((200, "{\"ok\":true}".to_string()))
             }
@@ -260,7 +266,7 @@ fn presence_from(body: &[u8]) -> Result<Presence, (u16, &'static str)> {
 }
 
 /// The plugin's event body: `type` (or `kind`) and the session it belongs to.
-fn event_from(body: &[u8]) -> Result<(String, Option<String>), (u16, &'static str)> {
+fn event_from(body: &[u8]) -> Result<(String, Option<Presence>), (u16, &'static str)> {
     let value: Value = serde_json::from_slice(body).map_err(|_| (400, "Body is not JSON."))?;
     let kind = value
         .get("type")
@@ -269,12 +275,12 @@ fn event_from(body: &[u8]) -> Result<(String, Option<String>), (u16, &'static st
         .map(str::trim)
         .filter(|kind| !kind.is_empty())
         .ok_or((400, "Event has no type."))?;
-    let session = value
-        .get("sid")
-        .or_else(|| value.get("sessionId"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    Ok((kind.to_string(), session))
+    let presence = if kind == "presence" {
+        Some(presence_from(body)?)
+    } else {
+        None
+    };
+    Ok((kind.to_string(), presence))
 }
 
 fn now_ms() -> Option<u64> {
