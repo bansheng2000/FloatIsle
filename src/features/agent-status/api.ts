@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentEffortLabels } from "./effortLabels";
 import type { DshBridgeStatus, DshReceiverStatus } from "./dshBridge";
+import type { MagpieUsage, SessionTokens } from "./dshSpend";
 
 // 与 src-tauri/src/agent_status/snapshot.rs 中的 AgentTaskStatus、AgentStatusSnapshot，以及 agent_status/mod.rs 中的 AgentHooksInstallResult 对应。
 export type AgentProvider = "codex" | "claudeCode" | "dsh";
@@ -232,6 +233,14 @@ export function probeDshBridge() {
 /** The island's own listener on 47821: whether it runs, and the last presence it read. */
 export function probeDshReceiver() {
   return invoke<DshReceiverStatus>("dsh_receiver_status");
+}
+
+export function readDshSessionTokens() {
+  return invoke<SessionTokens>("dsh_session_tokens");
+}
+
+export function probeMagpieUsage() {
+  return invoke<MagpieUsage>("probe_magpie_usage");
 }
 
 export function getAgentHooksState() {

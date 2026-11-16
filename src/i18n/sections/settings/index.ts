@@ -22,6 +22,7 @@ import type { SettingsSaveText } from "./save";
 import type { SettingsSoundsText } from "./sounds";
 import type { SettingsTodoFileText } from "./todoFile";
 import type { SettingsDshBridgeText } from "./dshBridge";
+import type { SettingsDshUsageText } from "./dshUsageText";
 import * as fileShelf from "./fileShelf.ts";
 import * as modules from "./modules.ts";
 import * as messageSources from "./messageSources.ts";
@@ -46,6 +47,7 @@ import * as save from "./save.ts";
 import * as sounds from "./sounds.ts";
 import * as todoFile from "./todoFile.ts";
 import * as dshBridge from "./dshBridge.ts";
+import { dshUsageEn, dshUsageZh } from "./dshUsageText.ts";
 
 export type SettingsText = {
   fileShelf: SettingsFileShelfText;
@@ -92,6 +94,7 @@ export type SettingsText = {
   save: SettingsSaveText;
   todoFile: SettingsTodoFileText;
   dshBridge: SettingsDshBridgeText;
+  dshUsage: SettingsDshUsageText;
   sounds: SettingsSoundsText;
 };
 
@@ -139,6 +142,7 @@ export const zhCN: SettingsText = {
   save: save.zhCN,
   todoFile: todoFile.zhCN,
   dshBridge: dshBridge.zhCN,
+  dshUsage: dshUsageZh,
   sounds: sounds.zhCN,
 };
 
@@ -186,5 +190,6 @@ export const en: SettingsText = {
   save: save.en,
   todoFile: todoFile.en,
   dshBridge: dshBridge.en,
+  dshUsage: dshUsageEn,
   sounds: sounds.en,
 };

@@ -21,6 +21,7 @@ pub(crate) mod process_times;
 pub(crate) mod process_tree;
 pub(crate) mod registry;
 pub(crate) mod shell_hook;
+pub(crate) mod sqlite;
 pub(crate) mod taskbar;
 pub(crate) mod uia_list;
 pub(crate) mod uia_tabs;

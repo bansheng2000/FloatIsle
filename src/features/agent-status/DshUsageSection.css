@@ -1,0 +1,22 @@
+.dsh-usage__value {
+  font-variant-numeric: tabular-nums;
+  color: var(--settings-text-secondary);
+  white-space: nowrap;
+}
+
+.dsh-usage__note {
+  margin: 6px 2px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--settings-text-tertiary);
+}
+
+.dsh-usage__note--error {
+  color: var(--settings-text-danger, #e5534b);
+}
+
+@media (forced-colors: active) {
+  .dsh-usage__note--error {
+    color: CanvasText;
+  }
+}

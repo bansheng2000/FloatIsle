@@ -16,6 +16,8 @@ mod dsh_sessions;
 pub(crate) mod dsh_usage;
 mod editor_terminal;
 pub(crate) mod event_receiver;
+pub(crate) mod magpie_usage;
+pub(crate) mod usage_ledger;
 mod focus;
 mod focus_log;
 mod hooks_state;
@@ -502,6 +504,8 @@ macro_rules! tauri_commands {
             crate::agent_status::dsh_usage::get_dsh_usage,
             crate::agent_status::dsh_bridge::probe_dsh_bridge,
             crate::agent_status::event_receiver::dsh_receiver_status,
+            crate::agent_status::usage_ledger::dsh_session_tokens,
+            crate::agent_status::magpie_usage::probe_magpie_usage,
             crate::agent_status::reply_marker::get_reply_marker_state,
             crate::agent_status::reply_marker::set_reply_marker,
             crate::agent_status::sound_packs::list_sound_packs,

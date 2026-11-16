@@ -12,6 +12,7 @@ import { settingsCategoryFor } from "../../src/windows/settings/categories";
 import { I18nProvider, LOCALE_STORAGE_KEY } from "../../src/i18n";
 import { commands, mailCalls, REPLY_MARKER, replyMarkerCalls, translationShortcutCalls } from "./settingsMocks";
 import { checkBridgeScenarios } from "./dshBridgeChecks";
+import { checkUsageScenarios } from "./dshUsageChecks";
 
 const query = new URLSearchParams(location.search);
 const automated = query.has("test");
@@ -95,9 +96,10 @@ if (!automated) {
       // General has two more for the two island timers the owner asked for (2026-11-11): collapsing
       // the open island and tucking the collapsed one.
       const rowCount = panel.querySelectorAll(".settings-row").length;
-      // Six of Connection's rows are the read-only DSH bridge card plus its source switch; the
-      // spare one above today's ten is for an agent that reports an extra row.
-      const maxRows = category === "general" ? 10 : category === "appearance" ? 9 : category === "agentConnect" ? 11 : 8;
+      // Six of Connection's rows are the read-only DSH bridge card plus its source switch, and
+      // three more are the usage card's session/spend/quota figures; the spare one above today's
+      // thirteen is for an agent that reports an extra row.
+      const maxRows = category === "general" ? 10 : category === "appearance" ? 9 : category === "agentConnect" ? 14 : 8;
       if (category === "general") {
         const timers = [...panel.querySelectorAll<HTMLInputElement>("input[role='spinbutton']")];
         const labels = timers.map((input) => panel.querySelector(`label[for='${CSS.escape(input.id)}']`)?.textContent ?? "");
@@ -260,6 +262,7 @@ if (!automated) {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
     // The card only probes when it mounts, so every scenario leaves the page and comes back.
     await checkBridgeScenarios(check, openPage, () => act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); }));
+    await checkUsageScenarios(check, openPage, () => act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); }));
 
     await openPage("agents"); await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
     const hooksLink = [...document.querySelectorAll<HTMLButtonElement>(".editor-panel .settings-link-button")].find((button) => button.textContent === "安装/修复");

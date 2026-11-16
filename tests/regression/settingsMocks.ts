@@ -72,6 +72,41 @@ const dshReceiverStatus = () =>
       ? { port: 47821, listening: true, error: null, presences: 0, events: 0, rejected: 0, presence: null, lastPresenceAtMs: null, lastEventAtMs: null, lastEventType: null }
       : { port: 47821, listening: false, error: "127.0.0.1:47821 is already in use", presences: 0, events: 0, rejected: 0, presence: null, lastPresenceAtMs: null, lastEventAtMs: null, lastEventType: null };
 
+// The three usage figures, each from its own source. "noMagpie" removes only the gateway
+// answers; "noLedger" removes only the token ledger, so a test can prove the rows stay
+// independent rather than collapsing together.
+export type DshUsageScenario = "all" | "noMagpie" | "noLedger";
+let dshUsageScenario: DshUsageScenario = "all";
+export function setDshUsageScenario(next: DshUsageScenario): void {
+  dshUsageScenario = next;
+}
+
+const SESSION_TOKENS = {
+  available: true, session: "s2", input: 1200, cacheRead: 3400, cacheWrite: 88, output: 950,
+  calls: 6, source: "usage.sqlite", error: null,
+};
+
+const dshSessionTokens = () =>
+  dshUsageScenario === "noLedger"
+    ? { ...SESSION_TOKENS, available: false, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, calls: 0,
+        error: "账本不存在：C:\\Users\\demo\\.dsh\\bot\\usage.sqlite" }
+    : SESSION_TOKENS;
+
+const magpieUsage = () =>
+  dshUsageScenario === "noMagpie"
+    ? { base: "http://127.0.0.1:3425", reachable: false, error: "connect ECONNREFUSED 127.0.0.1:3425",
+        spend: null, windows: [], balances: [], readAt: null }
+    : {
+        base: "http://127.0.0.1:3425", reachable: true, error: null,
+        spend: { cost: 11.190596045999968, period: "30d", calls: 7428, errors: 24, unpriced: 3 },
+        windows: [
+          { name: "5 hours", kind: "plan", remaining: 86, used: 14, resetsAt: "2026-11-16T21:00:00.000Z" },
+          { name: "7 days", kind: "plan", remaining: 90, used: 10, resetsAt: "2026-11-20T00:00:00.000Z" },
+          { name: "Month", kind: "plan", remaining: 89, used: 11, resetsAt: "2026-12-01T00:00:00.000Z" },
+        ],
+        balances: ["¥0.00"], readAt: "2026-11-16T08:30:00.000Z",
+      };
+
 mockIPC((command, payload) => {
   commands.push(command);
   const args = (payload ?? {}) as Record<string, unknown>;
@@ -101,6 +136,8 @@ mockIPC((command, payload) => {
     // island's own missing event receiver still visible in the plugin's last error.
     case "probe_dsh_bridge": return dshBridgeStatus();
     case "dsh_receiver_status": return dshReceiverStatus();
+    case "dsh_session_tokens": return dshSessionTokens();
+    case "probe_magpie_usage": return magpieUsage();
     case "copy_text_to_clipboard": return null;
     case "get_qq_mail_state": return mailboxes;
     case "connect_qq_mail":
