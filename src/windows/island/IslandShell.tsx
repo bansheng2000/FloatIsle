@@ -60,6 +60,8 @@ type IslandShellProps = {
   mediaState: MediaState;
   agentVisualState: AgentVisualState;
   agentStatusLabel: string;
+  /** A session waiting for the user's approval also lights the todo dot. */
+  waitingAttention?: boolean;
   /** Modules switched on; the header and collapsed bar hide the rest. */
   features: IslandFeatures;
   /** Files on the shelf for the collapsed bar, or null when it does not show them. */
@@ -114,6 +116,7 @@ export function IslandShell({
   mediaState,
   agentVisualState,
   agentStatusLabel,
+  waitingAttention,
   features,
   shelfCount,
   quotaAlert = null,
@@ -247,6 +250,7 @@ export function IslandShell({
             isDetached={isDetached}
             agentVisualState={agentVisualState}
             agentStatusLabel={agentStatusLabel}
+            waitingAttention={waitingAttention}
             qqNotificationCount={qqNotificationCount}
             wechatPending={wechatPending}
             onPageChange={onPageChange}

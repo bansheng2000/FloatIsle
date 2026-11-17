@@ -6,6 +6,8 @@ export const UPDATE_TODO_ID = "focusd-island-update-todo";
 export type UpdateTodoState = {
   stage: string;
   dismissed: boolean;
+  /** Latched once a version was found; a later download failure keeps the todo so it can be retried. */
+  found?: boolean;
 };
 
 export function isUpdateTodo(todo: { kind?: "update" }): boolean {
@@ -31,7 +33,9 @@ export function syncUpdateTodo(
     !state.dismissed &&
     (state.stage === "available" ||
       state.stage === "downloading" ||
-      state.stage === "ready");
+      state.stage === "ready" ||
+      // A failed download/check keeps the todo so the row's Update action can retry.
+      (state.stage === "error" && state.found === true));
 
   if (!shouldShow) {
     return rest.length === todos.length ? todos : rest;

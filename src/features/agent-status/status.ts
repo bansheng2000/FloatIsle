@@ -52,7 +52,12 @@ export function withoutHiddenProviders(snapshot: AgentStatusSnapshot, shown: Ses
 }
 
 export function isAgentAttentionPhase(phase: AgentTaskPhase) {
-  return phase === "failed" || phase === "stale";
+  return phase === "failed" || phase === "stale" || phase === "waiting";
+}
+
+/** True when any shown session is paused waiting for the user's approval. */
+export function hasWaitingSession(snapshot: AgentStatusSnapshot): boolean {
+  return listAgentStatuses(snapshot).some((entry) => entry.status.phase === "waiting");
 }
 
 /**
@@ -90,9 +95,9 @@ export function getAgentStatusLabel(snapshot: AgentStatusSnapshot, t: Translatio
   const attention = entries.find((entry) => isAgentAttentionPhase(entry.status.phase));
 
   if (attention) {
-    return attention.status.phase === "stale"
-      ? t.agent.stale(attention.label)
-      : t.agent.failed(attention.label);
+    if (attention.status.phase === "stale") return t.agent.stale(attention.label);
+    if (attention.status.phase === "waiting") return t.agent.push.waiting(attention.label);
+    return t.agent.failed(attention.label);
   }
 
   const running = entries.find((entry) => entry.status.phase === "running");

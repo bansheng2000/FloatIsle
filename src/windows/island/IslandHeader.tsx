@@ -5,6 +5,7 @@ import type { PageButtonStyle, PageDot } from "../../features/appearance/types";
 import { Bell, Bot, CircleDot, Minus, RotateCcw, Settings } from "lucide-react";
 import type { AgentVisualState } from "../../features/agent-status/status";
 import type { MessageSource } from "../../features/messages/messagePreview";
+import { useUpdateAttention } from "../../features/updater/useUpdateAttention";
 import { useTranslation } from "../../i18n";
 import { isPageEnabled, type IslandFeatures } from "./features";
 import type { IslandPage } from "./types";
@@ -21,6 +22,8 @@ type IslandHeaderProps = {
   isDetached: boolean;
   agentVisualState: AgentVisualState;
   agentStatusLabel: string;
+  /** A session waiting for the user's approval also lights the todo dot. */
+  waitingAttention?: boolean;
   qqNotificationCount: number;
   wechatPending: boolean;
   onPageChange: (page: IslandPage) => void;
@@ -51,6 +54,7 @@ export function IslandHeader({
   isDetached,
   agentVisualState,
   agentStatusLabel,
+  waitingAttention,
   qqNotificationCount,
   wechatPending,
   onPageChange,
@@ -64,6 +68,10 @@ export function IslandHeader({
   pageActions,
 }: IslandHeaderProps) {
   const t = useTranslation();
+  const updateAttention = useUpdateAttention();
+  const todoAttention = updateAttention || Boolean(waitingAttention);
+  const todoDotHints = [updateAttention ? t.island.updatePending : null, waitingAttention ? t.agent.phase.waiting : null].filter(Boolean);
+  const todoDotLabel = todoDotHints.length ? `${t.island.todoList} · ${todoDotHints.join(" · ")}` : t.island.todoList;
   const showIcons = pageButtonStyle === "icon";
   const AgentIcon = showIcons ? Bot : CircleDot;
   const messageBadgeLabel = t.messages.badge(qqNotificationCount, wechatPending);
@@ -136,7 +144,7 @@ export function IslandHeader({
                 draggingDot === dot ? "dot-button--dragging" : "",
               ].filter(Boolean).join(" ")}
               type="button"
-              aria-label={dotLabels[dot]}
+              aria-label={dot === "todo" ? todoDotLabel : dotLabels[dot]}
               aria-current={page === dot ? "page" : undefined}
               data-tip={t.island.pageNames[dot]}
               {...dotProps(dot)}
@@ -149,6 +157,7 @@ export function IslandHeader({
               }}
             >
               {showIcons && <Icon size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />}
+              {dot === "todo" && todoAttention && <span className="island-message-button__dot island-update-dot" aria-hidden="true" />}
             </button>
           );
         })}

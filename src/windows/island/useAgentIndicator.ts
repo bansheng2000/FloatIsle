@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { getAgentStatusLabel, getAgentVisualState, withoutHiddenProviders } from "../../features/agent-status/status";
+import { getAgentStatusLabel, getAgentVisualState, hasWaitingSession, withoutHiddenProviders } from "../../features/agent-status/status";
 import type { AgentStatusSnapshot } from "../../features/agent-status/api";
 import type { IslandSettings } from "../../features/appearance/types";
 import type { useTranslation } from "../../i18n";
@@ -18,5 +18,7 @@ export function useAgentIndicator(
   );
   const agentVisualState = useMemo(() => (settings.agentStatusEnabled ? getAgentVisualState(shownAgentStatus, activeAgentSessionCount) : "idle"), [shownAgentStatus, activeAgentSessionCount, settings.agentStatusEnabled]);
   const agentStatusLabel = useMemo(() => getAgentStatusLabel(shownAgentStatus, t, activeAgentSessionCount), [shownAgentStatus, activeAgentSessionCount, t]);
-  return { agentVisualState, agentStatusLabel };
+  // A session waiting for the user also lights the todo dot, like a pending update does.
+  const waitingAttention = useMemo(() => (settings.agentStatusEnabled ? hasWaitingSession(shownAgentStatus) : false), [shownAgentStatus, settings.agentStatusEnabled]);
+  return { agentVisualState, agentStatusLabel, waitingAttention };
 }

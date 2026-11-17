@@ -93,6 +93,16 @@ test("a list without the update todo is returned unchanged when not ready", () =
   );
 });
 
+test("a failed download keeps the update todo when a version was found, so it can be retried", () => {
+  const first = syncUpdateTodo([], { stage: "available", dismissed: false }, "title", 1);
+  // 3.2.3 rule: a failed download/check must not drop the todo; the row's Update button retries.
+  assert.equal(syncUpdateTodo(first, { stage: "error", dismissed: false, found: true }, "title", 2), first);
+  // A check that failed before anything was found has no todo to keep.
+  assert.deepEqual(plain(syncUpdateTodo([], { stage: "error", dismissed: false, found: false }, "title")), []);
+  // Dismissal still wins over the latched found flag.
+  assert.deepEqual(plain(syncUpdateTodo(first, { stage: "error", dismissed: true, found: true }, "title")), []);
+});
+
 test("withoutUpdateTodo strips only the system todo for persistence", () => {
   const todos = [todo("a"), { ...todo(UPDATE_TODO_ID), kind: "update" }, todo("b")];
   assert.deepEqual(plain(withoutUpdateTodo(todos)), [todos[0], todos[2]]);

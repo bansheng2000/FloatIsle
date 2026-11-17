@@ -175,7 +175,7 @@ export function IslandApp() {
     collapseIsland,
   );
 
-  const { agentVisualState, agentStatusLabel } = useAgentIndicator(agentStatus, settings, activeAgentSessionCount, t);
+  const { agentVisualState, agentStatusLabel, waitingAttention } = useAgentIndicator(agentStatus, settings, activeAgentSessionCount, t);
 
   const { openTranslator } = useIslandTranslation(
     settings.translationEnabled,
@@ -222,6 +222,7 @@ export function IslandApp() {
         mediaState={media.mediaState}
         agentVisualState={agentVisualState}
         agentStatusLabel={agentStatusLabel}
+        waitingAttention={waitingAttention}
         features={features}
         shelfCount={settings.shelfEnabled && settings.shelfShowCount ? fileShelf.items.length : null}
         quotaAlert={quotaAlert}

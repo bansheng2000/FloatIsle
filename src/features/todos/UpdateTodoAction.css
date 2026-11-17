@@ -1,5 +1,14 @@
+.todo-start--update {
+  position: relative;
+}
+
 .todo-start--busy svg {
   animation: todo-start-spin 900ms linear infinite;
+}
+
+/* The update dot shares the message dot's geometry but uses the update accent. */
+.todo-start--update .island-update-dot {
+  background: var(--update-dot-color, #f0b64a);
 }
 
 @keyframes todo-start-spin {

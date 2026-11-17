@@ -12,6 +12,7 @@ import {
   requestUpdateAction,
   type DownloadEvent,
 } from "./api";
+import { nextCheckDelayMs } from "./updateSchedule";
 
 export type UpdateStage =
   | "idle"
@@ -34,6 +35,8 @@ export type UpdateState = {
   detail: string;
   /** The user hid the update todo; the settings panel still offers the restart. */
   dismissed: boolean;
+  /** Latched once a new version is seen; cleared only on install or dismissal. Drives the attention dot. */
+  found: boolean;
 };
 
 // Only the main window owns the update: the standalone settings window can be
@@ -49,6 +52,7 @@ const initialState: UpdateState = {
   total: 0,
   detail: "",
   dismissed: false,
+  found: false,
 };
 
 let state: UpdateState = initialState;
@@ -57,6 +61,9 @@ const listeners = new Set<() => void>();
 let proxy: string | null = null;
 let initialized = false;
 let startupCheckStarted = false;
+// Periodic check bookkeeping: a failed check retries sooner than the steady sweep.
+let lastCheckFailed = false;
+let checkTimer: ReturnType<typeof setTimeout> | null = null;
 
 // The translation window shares this bundle but stays out of the update flow,
 // otherwise every startup would check and download twice.
@@ -135,21 +142,52 @@ async function initialize() {
   if (configured) void runStartupUpdate();
 }
 
+/** Schedule the next automatic check; failures retry sooner than the steady sweep. */
+function scheduleNextCheck() {
+  if (checkTimer !== null) clearTimeout(checkTimer);
+  const delay = nextCheckDelayMs(lastCheckFailed);
+  checkTimer = setTimeout(() => {
+    checkTimer = null;
+    // Only the owning main window checks; never schedule while a check/download is running.
+    if (!busy(state.stage)) void periodicCheck();
+  }, delay);
+  // In a host that exposes a Node-style timer, keep it from holding the process open.
+  const maybeNodeTimer = checkTimer as unknown as { unref?: () => void };
+  maybeNodeTimer.unref?.();
+}
+
 async function findUpdate() {
   setState({ nextVersion: "", downloaded: 0, total: 0, detail: "", dismissed: false, stage: "checking" });
   try {
     const found = await checkUpdate(proxy);
+    lastCheckFailed = false;
     if (!found) {
-      setState({ stage: "latest" });
+      // Keep the latched `found`: a later check reporting "latest" must not
+      // blink off the dot nor disturb an already-downloaded package. Only a
+      // first check with nothing found settles on "latest".
+      if (!state.found) setState({ stage: "latest" });
+      scheduleNextCheck();
       return false;
     }
-    setState({ stage: "available", nextVersion: found.version });
+    setState({ stage: "available", nextVersion: found.version, found: true });
+    scheduleNextCheck();
     return true;
   } catch (error) {
     console.error("Failed to check for updates", error);
+    lastCheckFailed = true;
     setState({ stage: "error", detail: errorReason(error) });
+    scheduleNextCheck();
     return false;
   }
+}
+
+/** A background check that only downloads; it never installs or restarts the app. */
+async function periodicCheck() {
+  if (state.stage === "disabled" || busy(state.stage)) {
+    scheduleNextCheck();
+    return;
+  }
+  if (await findUpdate()) await downloadFound();
 }
 
 /** Downloads the found update without installing it; installing waits for the user. */

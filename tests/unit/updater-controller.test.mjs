@@ -10,6 +10,7 @@ const transpile = (path) => ts.transpileModule(
 ).outputText;
 const source = transpile("../../src/features/updater/updaterController.ts");
 const apiSource = transpile("../../src/features/updater/api.ts");
+const scheduleSource = transpile("../../src/features/updater/updateSchedule.ts");
 
 class Channel {
   onmessage = () => {};
@@ -53,10 +54,17 @@ async function controller({
   const api = {};
   runInNewContext(apiSource, { exports: api, require: (name) => mocks[name] });
   mocks["./api"] = api;
+  const schedule = {};
+  runInNewContext(scheduleSource, { exports: schedule, require: (name) => mocks[name] });
+  mocks["./updateSchedule"] = schedule;
   runInNewContext(source, {
     exports,
     window: { location: { search: windowKind ? `?window=${windowKind}` : "" } },
     URLSearchParams,
+    // Automatic re-check is scheduled on a timer; keep it inert during these
+    // scenarios so a periodic sweep never races the assertions.
+    setTimeout: () => 0,
+    clearTimeout: () => {},
     require: (name) => {
       assert.ok(Object.hasOwn(mocks, name), `Unexpected import: ${name}`);
       return mocks[name];

@@ -17,12 +17,21 @@ const snapshot = (codex, claudeCode) => ({
   claudeCode: { phase: claudeCode, updatedAt: 1 },
 });
 
-test("failed and stale phases need attention", () => {
+test("failed, stale and waiting phases need attention", () => {
   assert.equal(isAgentAttentionPhase("failed"), true);
   assert.equal(isAgentAttentionPhase("stale"), true);
+  // A DSH session waiting for the user's approval is an attention state.
+  assert.equal(isAgentAttentionPhase("waiting"), true);
   for (const phase of ["idle", "running", "completed"]) {
     assert.equal(isAgentAttentionPhase(phase), false, phase);
   }
+});
+
+test("a waiting session lights the island and its label asks the user to decide", () => {
+  assert.equal(getAgentVisualState(snapshot("idle", "waiting")), "attention");
+  assert.equal(getAgentStatusLabel(snapshot("idle", "waiting"), t), t.agent.push.waiting("Claude Code"));
+  // Attention still outranks a running session.
+  assert.equal(getAgentVisualState(snapshot("running", "waiting")), "attention");
 });
 
 test("attention outranks running, which outranks idle", () => {

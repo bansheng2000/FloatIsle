@@ -12,6 +12,8 @@ export type IslandText = {
   resetPositionLabel: string;
   editor: string;
   todoList: string;
+  /** Appended to the todo dot's accessible name while an update is pending. */
+  updatePending: string;
   music: string;
   clipboardHistory: string;
   shelf: string;
@@ -38,6 +40,7 @@ export const zhCN: IslandText = {
   resetPositionLabel: "回到主屏顶部居中",
   editor: "岛屿编辑",
   todoList: "任务清单",
+  updatePending: "有更新待安装",
   music: "Music",
   clipboardHistory: "剪贴板历史",
   shelf: "文件中转",
@@ -62,6 +65,7 @@ export const en: IslandText = {
   resetPositionLabel: "Reset island to the top center of the primary screen",
   editor: "Island editor",
   todoList: "Tasks",
+  updatePending: "Update pending",
   music: "Music",
   clipboardHistory: "Clipboard history",
   shelf: "File shelf",

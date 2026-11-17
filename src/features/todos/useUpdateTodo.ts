@@ -7,13 +7,13 @@ import type { TodoItem } from "./types";
 export function useUpdateTodo(todos: TodoItem[], setTodos: Dispatch<SetStateAction<TodoItem[]>>) {
   // Byte progress belongs to the row action, not the whole island's todo state.
   const signal = useSyncExternalStore(subscribeToUpdate, () => {
-    const { stage, dismissed } = getUpdateState();
-    return `${stage}|${dismissed}`;
+    const { stage, dismissed, found } = getUpdateState();
+    return `${stage}|${dismissed}|${found}`;
   });
-  const [stage, dismissed] = signal.split("|");
+  const [stage, dismissed, found] = signal.split("|");
   const title = useTranslation().settings.project.update.updateTodo;
 
   useEffect(() => {
-    setTodos((current) => syncUpdateTodo(current, { stage, dismissed: dismissed === "true" }, title));
-  }, [stage, dismissed, title, setTodos, todos]);
+    setTodos((current) => syncUpdateTodo(current, { stage, dismissed: dismissed === "true", found: found === "true" }, title));
+  }, [stage, dismissed, found, title, setTodos, todos]);
 }
