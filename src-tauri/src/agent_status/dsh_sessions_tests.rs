@@ -1,4 +1,5 @@
 use super::*;
+use crate::agent_status::dsh_desktop;
 use serde_json::json;
 
 const ID: &str = "session-00000000-0000-4000-8000-000000000001";
@@ -125,7 +126,15 @@ fn plant(root: &std::path::Path, id: &str, bytes: &[u8]) {
 }
 
 fn listed_ids(root: &std::path::Path, app_dir: Option<&std::path::Path>) -> Vec<String> {
-    list_from_root(root, now_millis(), 2 * 60 * 60 * 1000, None, app_dir)
+    listed_ids_with(root, app_dir, true)
+}
+
+fn listed_ids_with(
+    root: &std::path::Path,
+    app_dir: Option<&std::path::Path>,
+    fallback: bool,
+) -> Vec<String> {
+    list_from_root(root, now_millis(), 2 * 60 * 60 * 1000, None, app_dir, fallback)
         .into_iter()
         .map(|session| session.session_id)
         .collect()
@@ -157,10 +166,18 @@ fn lists_a_checkpoint_past_the_old_cap() {
 fn drops_a_checkpoint_past_the_new_cap_and_notes_it_in_the_log() {
     let root = temp_root("over");
     let log_dir = temp_root("over-log");
-    let id = "session-00000000-0000-4000-8000-0000000008m1";
+    let id = "session-00000000-0000-4000-8000-00000000c8a1";
     let size = 8 * 1024 * 1024 + 2048;
     plant(&root, id, &checkpoint_bytes(size));
-    assert!(listed_ids(&root, Some(&log_dir)).is_empty());
+    assert!(
+        listed_ids_with(&root, Some(&log_dir), false).is_empty(),
+        "without source-log recovery a checkpoint past the cap lists nothing"
+    );
+    assert_eq!(
+        listed_ids(&root, Some(&log_dir)),
+        vec![id.to_string()],
+        "the source log behind it still brings the session back"
+    );
     let text = fs::read_to_string(log_dir.join("agent-sessions.log")).expect("log");
     assert!(text.contains("too-large"), "{text}");
     assert!(text.contains(&format!("{size} bytes")), "{text}");
@@ -177,7 +194,10 @@ fn notes_an_unparsable_checkpoint_and_still_lists_the_others() {
     let bad = "session-00000000-0000-4000-8000-0000000fffff";
     plant(&root, good, &checkpoint_bytes(120_000));
     plant(&root, bad, b"{ not json");
-    assert_eq!(listed_ids(&root, Some(&log_dir)), vec![good.to_string()]);
+    assert_eq!(
+        listed_ids_with(&root, Some(&log_dir), false),
+        vec![good.to_string()]
+    );
     let text = fs::read_to_string(log_dir.join("agent-sessions.log")).expect("log");
     assert!(text.contains("invalid-json"), "{text}");
     assert!(text.contains("10 bytes"), "{text}");
@@ -215,4 +235,89 @@ fn the_parse_cache_stays_within_its_budget_and_drops_the_least_recently_used() {
     make_room(&mut entries, 1);
     assert_eq!(entries.len(), 3, "a small entry needs no eviction");
     assert!(cache_state().0 <= CACHE_BYTES);
+}
+
+#[test]
+fn a_shard_folder_name_decodes_to_the_working_directory() {
+    assert_eq!(
+        cwd_from_shard("--D-~6587~6863-Bot--").as_deref(),
+        Some("D:\\文档\\Bot")
+    );
+    assert_eq!(
+        cwd_from_shard("--C-Users-LY-.dsh-bot-workspace--").as_deref(),
+        Some("C:\\Users\\LY\\.dsh\\bot\\workspace")
+    );
+    assert_eq!(cwd_from_shard("shard-1"), None);
+}
+
+#[test]
+fn a_session_without_a_checkpoint_comes_back_from_its_source_log() {
+    let root = temp_root("recover");
+    let id = "session-00000000-0000-4000-8000-0000000beef1";
+    let shard = root.join("sessions/--D-~6587~6863-Bot--").join(id);
+    fs::create_dir_all(&shard).expect("shard");
+    fs::write(shard.join("session.v4.jsonl.zstd"), b"zstd").expect("source");
+    assert_eq!(
+        listed_ids_with(&root, None, false),
+        Vec::<String>::new(),
+        "with recovery off a missing checkpoint lists nothing"
+    );
+    let sessions = list_from_root(&root, now_millis(), 2 * 60 * 60 * 1000, None, None, true);
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].session_id, id);
+    assert_eq!(sessions[0].cwd.as_deref(), Some("D:\\文档\\Bot"));
+    assert_eq!(sessions[0].title.as_deref(), Some("Bot"));
+    assert_eq!(sessions[0].phase, "completed");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn the_same_session_in_two_shards_is_listed_once_with_the_newer_log() {
+    let root = temp_root("dup");
+    let id = "session-00000000-0000-4000-8000-0000000d0d01";
+    for (shard, seconds) in [("--D-~6587~6863-Bot--", 60u64), ("--D-~6587~6863-Bot-lead--", 10)] {
+        let dir = root.join("sessions").join(shard).join(id);
+        fs::create_dir_all(&dir).expect("shard");
+        let path = dir.join("session.v4.jsonl.zstd");
+        fs::write(&path, b"zstd").expect("source");
+        let stamp = std::time::SystemTime::now() - std::time::Duration::from_secs(seconds);
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .and_then(|file| file.set_modified(stamp))
+            .expect("touch");
+    }
+    let sessions = list_from_root(&root, now_millis(), 2 * 60 * 60 * 1000, None, None, true);
+    assert_eq!(sessions.len(), 1, "one row per session id");
+    assert_eq!(sessions[0].title.as_deref(), Some("lead"), "the newer log wins");
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Not part of the suite: `cargo test --release -- --ignored --nocapture bench_source_scan`
+/// reports what scanning every shard for checkpoint-less sessions costs on this machine.
+#[test]
+#[ignore]
+fn bench_source_scan() {
+    let home = crate::system::windows_home_dir().expect("home");
+    let root = dsh_desktop::roots(&home, std::env::var_os("APPDATA").map(std::path::PathBuf::from))
+        .into_iter()
+        .map(|(root, _)| root)
+        .find(|root| root.join("sessions").is_dir())
+        .expect("a harness root with sessions");
+    let now = now_millis();
+    let mut runs: Vec<f64> = Vec::new();
+    let mut found = 0usize;
+    for _ in 0..20 {
+        let start = std::time::Instant::now();
+        let rows = list_from_logs(&root, &HashSet::new(), now, 2 * 60 * 60 * 1000, None);
+        runs.push(start.elapsed().as_secs_f64() * 1000.0);
+        found = rows.len();
+    }
+    runs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    println!(
+        "source-log scan: rows={found} min={:.2}ms median={:.2}ms max={:.2}ms",
+        runs[0],
+        runs[runs.len() / 2],
+        runs[runs.len() - 1]
+    );
 }

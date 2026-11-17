@@ -2,7 +2,7 @@
 //! or activates a session: projection checkpoints may lag the live host by its write interval.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env, fs,
     io::Read,
     path::{Path, PathBuf},
@@ -256,12 +256,123 @@ pub(super) fn parse_checkpoint(
     })
 }
 
+/// The shard folder names encode the working directory Claude-style: `--D-~6587~6863-Bot--` is
+/// `D:\文档\Bot`. Anything unexpected decodes to nothing and the row falls back to its short id.
+fn cwd_from_shard(name: &str) -> Option<String> {
+    let inner = name.strip_prefix("--")?.strip_suffix("--")?;
+    let mut chars = inner.chars();
+    let drive = chars.next().filter(char::is_ascii_alphabetic)?;
+    let mut cwd = String::from(drive);
+    cwd.push(':');
+    let rest: Vec<char> = chars.collect();
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index] {
+            '-' => {
+                cwd.push('\\');
+                index += 1;
+            }
+            '~' => {
+                let hex: String = rest.iter().skip(index + 1).take(4).collect();
+                let code = u32::from_str_radix(&hex, 16).ok()?;
+                cwd.push(char::from_u32(code)?);
+                index += 5;
+            }
+            other => {
+                cwd.push(other);
+                index += 1;
+            }
+        }
+    }
+    Some(cwd)
+}
+
+/// Conversations whose projection checkpoint is gone still have their source log on disk. Only the
+/// log's mtime, size and folder name are used: no decompression, so listing stays inside the same
+/// budget as reading checkpoints. Such rows are marked completed until a checkpoint shows up again.
+fn list_from_logs(
+    root: &Path,
+    listed: &HashSet<String>,
+    now: i64,
+    window_ms: i64,
+    exe: Option<&str>,
+) -> Vec<AgentSessionSummary> {
+    let mut newest: HashMap<String, (i64, Option<String>)> = HashMap::new();
+    for shard in fs::read_dir(root.join("sessions")).into_iter().flatten().flatten() {
+        let cwd = cwd_from_shard(&shard.file_name().to_string_lossy());
+        for entry in fs::read_dir(shard.path()).into_iter().flatten().flatten() {
+            let Some(id) = entry.file_name().to_str().map(str::to_string) else {
+                continue;
+            };
+            if !is_session_id(&id) || listed.contains(&id) {
+                continue;
+            }
+            let mut modified: Option<i64> = None;
+            for version in [3, 4] {
+                let path = entry.path().join(format!("session.v{version}.jsonl.zstd"));
+                let at = fs::metadata(&path)
+                    .ok()
+                    .and_then(|meta| meta.modified().ok())
+                    .and_then(system_time_to_unix_millis);
+                if let Some(at) = at {
+                    if modified.is_none_or(|old| at > old) {
+                        modified = Some(at);
+                    }
+                }
+            }
+            let Some(at) = modified.filter(|at| now.saturating_sub(*at) <= window_ms) else {
+                continue;
+            };
+            let newer = newest.get(&id).is_none_or(|(old, _)| at > *old);
+            if newer {
+                newest.insert(id, (at, cwd.clone()));
+            }
+        }
+    }
+    let mut rows: Vec<_> = newest.into_iter().collect();
+    rows.sort_by_key(|(_, (at, _))| std::cmp::Reverse(*at));
+    rows.into_iter()
+        .take(MAX_CHECKPOINTS)
+        .map(|(id, (updated_at, cwd))| AgentSessionSummary {
+            provider: "dsh",
+            title: cwd.as_deref().and_then(folder_title).or_else(|| shorten(&id, 20)),
+            cwd,
+            session_id: id,
+            model: None,
+            effort: None,
+            phase: "completed",
+            last_message: None,
+            reply_marker: None,
+            reply_asks: false,
+            updated_at,
+            host: Some(SessionHost {
+                name: "DeepSeek Harness".to_string(),
+                exe: exe.map(str::to_string),
+                kind: "app",
+            }),
+            turn_started_at: None,
+            owner_prompt_at: None,
+            last_prompt: None,
+            current_tool: None,
+            permission_mode: None,
+            subagents: 0,
+            background_tasks: 0,
+            compacting: false,
+            todos: None,
+            closed: exe.is_none(),
+            remote_host: None,
+            context_tokens: None,
+        })
+        .collect()
+}
+
 pub(super) fn list_from_root(
     root: &Path,
     now: i64,
     window_ms: i64,
     exe: Option<&str>,
     app_dir: Option<&Path>,
+    fallback: bool,
 ) -> Vec<AgentSessionSummary> {
     let dir = root.join("storages/session_projcache/sessions");
     let mut paths: Vec<_> = fs::read_dir(dir)
@@ -279,7 +390,7 @@ pub(super) fn list_from_root(
         })
         .collect();
     paths.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
-    paths
+    let mut sessions: Vec<AgentSessionSummary> = paths
         .into_iter()
         .take(MAX_CHECKPOINTS)
         .filter_map(|(modified, path)| {
@@ -319,7 +430,16 @@ pub(super) fn list_from_root(
             }
             Some(summary)
         })
-        .collect()
+        .collect();
+    if fallback {
+        let listed: HashSet<String> = sessions
+            .iter()
+            .map(|session| session.session_id.clone())
+            .collect();
+        sessions.extend(list_from_logs(root, &listed, now, window_ms, exe));
+    }
+    sessions.sort_by_key(|session| std::cmp::Reverse(session.updated_at));
+    sessions
 }
 
 fn merge_session(
@@ -340,6 +460,18 @@ pub(super) fn list_sessions(
     window_ms: i64,
     app_dir: Option<&Path>,
 ) -> Vec<AgentSessionSummary> {
+    list_sessions_with(home, now, window_ms, app_dir, true)
+}
+
+/// `fallback: false` skips source-log recovery, which is what the tests use to prove the recovery
+/// is the thing that finds a session whose projection checkpoint has gone.
+pub(super) fn list_sessions_with(
+    home: &Path,
+    now: i64,
+    window_ms: i64,
+    app_dir: Option<&Path>,
+    fallback: bool,
+) -> Vec<AgentSessionSummary> {
     let mut sessions: HashMap<String, AgentSessionSummary> = HashMap::new();
     for (root, owner) in super::dsh_desktop::roots(home, env::var_os("APPDATA").map(PathBuf::from))
     {
@@ -348,7 +480,7 @@ pub(super) fn list_sessions(
             .as_deref()
             .map(super::dsh_desktop::name)
             .unwrap_or(owner);
-        for mut session in list_from_root(&root, now, window_ms, exe.as_deref(), app_dir) {
+        for mut session in list_from_root(&root, now, window_ms, exe.as_deref(), app_dir, fallback) {
             if let Some(host) = &mut session.host {
                 host.name = name.to_string();
             }
