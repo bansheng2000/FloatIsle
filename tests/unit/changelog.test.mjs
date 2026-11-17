@@ -27,3 +27,20 @@ test("every release note in docs/releases has a changelog entry in both language
     assert.ok(entries.every((entry) => entry.items.length > 0));
   }
 });
+
+test("upstream notes live in their own folder and stay off our timeline", () => {
+  const own = readdirSync("docs/releases").filter((name) => /^v.+\.md$/.test(name));
+  assert.ok(own.includes("v261117.8.9.md"), "our release note sits at the top level");
+  assert.ok(!own.includes("v3.0.8.md"), "upstream notes must not sit on our timeline");
+  const upstream = readdirSync("docs/releases/upstream").filter((name) => /^v.+\.md$/.test(name));
+  assert.ok(upstream.includes("v3.0.8.md"), "the upstream note is kept, folded away");
+  const build = (dir, names) => Object.fromEntries(names.map((name) => [`${dir}/${name}`, readFileSync(`${dir}/${name}`, "utf8")]));
+  const ours = buildChangelog(build("docs/releases", own), "zh-CN");
+  assert.deepEqual(ours.map((entry) => entry.version), ["261117.8.9"]);
+  assert.ok(compareVersionsDescending("261117.8.9", "3.0.8") < 0, "our version sorts ahead of 3.0.8");
+  for (const locale of ["zh-CN", "en"]) {
+    const folded = buildChangelog(build("docs/releases/upstream", upstream), locale);
+    assert.equal(folded.length, upstream.length, `${locale}: every upstream note still parses`);
+    assert.ok(folded.every((entry) => entry.items.length > 0));
+  }
+});

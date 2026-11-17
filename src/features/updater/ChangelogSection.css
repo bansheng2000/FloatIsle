@@ -38,3 +38,10 @@
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 11px;
 }
+
+/* 主时间线的页脚：可并排放两个链接（显示全部版本 / 展开上游历史）。 */
+.changelog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}

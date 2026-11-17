@@ -11,6 +11,11 @@ export type SettingsProjectText = {
   changelog: string;
   changelogAll: (count: number) => string;
   changelogLess: string;
+  /** Upstream (MIT, 3.0.8 and earlier) notes, folded away from our own timeline. */
+  upstreamTitle: string;
+  upstreamAttribution: string;
+  upstreamShow: (count: number) => string;
+  upstreamHide: string;
   /** Where the project lives; the only outbound link About keeps. */
   repository: string;
   repositoryHint: string;
@@ -40,6 +45,10 @@ export const zhCN: SettingsProjectText = {
   changelog: "更新日志",
   changelogAll: (count) => `显示全部 ${count} 个版本`,
   changelogLess: "只看最近几个版本",
+  upstreamTitle: "上游历史（3.0.8 及更早）",
+  upstreamAttribution: "这是 fly-island 3.0.8（MIT, Copyright (c) 2026 flyl1u and contributors）的发布说明原文，只作历史留存，不是本项目的功能清单。",
+  upstreamShow: (count) => `展开上游历史（${count} 个版本）`,
+  upstreamHide: "收起上游历史",
   author: "GitHub",
   openFailed: "暂时没能打开浏览器，请再试一次。",
   update: {
@@ -64,6 +73,10 @@ export const en: SettingsProjectText = {
   changelog: "Changelog",
   changelogAll: (count) => `Show all ${count} versions`,
   changelogLess: "Show recent versions only",
+  upstreamTitle: "Upstream history (3.0.8 and earlier)",
+  upstreamAttribution: "The original release notes of fly-island 3.0.8 (MIT, Copyright (c) 2026 flyl1u and contributors). Kept for the record only; they are not a feature list of this project.",
+  upstreamShow: (count) => `Show upstream history (${count} versions)`,
+  upstreamHide: "Hide upstream history",
   author: "About the author",
   openFailed: "Couldn't open your browser. Please try again.",
   update: {
