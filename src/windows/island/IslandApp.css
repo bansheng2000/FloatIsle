@@ -31,6 +31,14 @@
   --island-pulse-brightness: 100%;
   --island-background-color: #2F2F37;
   --todo-background-color: #f8f4e9;
+  /* Text drawn on the island takes its ink from the island background's own brightness, not
+     from the theme. A light background gets dark text and a dark one gets light text. The stage's
+     inline style supplies the live value; this is the fallback for a stage without one. */
+  --island-ink-rgb: 241, 240, 246;
+  --text-1: rgba(var(--island-ink-rgb), 0.96);
+  --text-2: rgba(var(--island-ink-rgb), 0.68);
+  --text-3: rgba(var(--island-ink-rgb), 0.54);
+  --text-placeholder: rgba(var(--island-ink-rgb), 0.42);
   --glass-intensity: 0.72;
   --glass-mask-opacity: 0.53;
   --glass-tint-color: rgba(47, 47, 55, 0.53);

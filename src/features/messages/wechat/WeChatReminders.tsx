@@ -1,7 +1,7 @@
 import { MessageCard } from "../MessageCard";
 import { useTranslation } from "../../../i18n";
 import type { ReactNode } from "react";
-import { Power } from "lucide-react";
+import { Power, Trash2 } from "lucide-react";
 import { MessageSourceIcon } from "../MessageSourceIcon";
 import "./WeChatReminders.css";
 import type { WeChatRemindersController } from "./useWeChatReminders";
@@ -10,15 +10,19 @@ export { useWeChatReminders } from "./useWeChatReminders";
 export type { WeChatRemindersController };
 
 export function WeChatReminderControls({ controller, compact = false }: { controller: WeChatRemindersController; compact?: boolean }) {
-  const { snapshot, busy, actionError, setEnabled } = controller;
+  const { snapshot, busy, actionError, setEnabled, clear } = controller;
   const t = useTranslation();
+  const hasReminders = snapshot.messages.length > 0 || snapshot.pending;
   return <div className={`qq-panel__controls${compact ? " qq-panel__controls--compact" : ""}`}>
+    <div className="qq-panel__control-row">
+    {compact && <button className="icon-button wechat-reminders-clear" type="button" aria-label={t.wechat.clear} title={t.wechat.clear} disabled={busy || !hasReminders} onClick={() => void clear()}><Trash2 size={16} strokeWidth={1.8} /></button>}
     {compact ? <button className="icon-button message-receiver-toggle" type="button" role="switch" aria-checked={snapshot.enabled} aria-label={t.wechat.receive} disabled={busy} onClick={() => void setEnabled(!snapshot.enabled)}><Power size={15} strokeWidth={1.8} /></button> : <label className="qq-panel__toggle">
       <span>{t.messages.wechatReminders}</span>
       <span className="message-status" data-state={snapshot.status} role="status" aria-label={t.wechat.status[snapshot.status]} />
       <input type="checkbox" role="switch" aria-label={t.wechat.receive} checked={snapshot.enabled} disabled={busy}
         onChange={(event) => void setEnabled(event.currentTarget.checked)} />
     </label>}
+    </div>
     {!compact && (actionError || snapshot.error) && <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>}
   </div>;
 }

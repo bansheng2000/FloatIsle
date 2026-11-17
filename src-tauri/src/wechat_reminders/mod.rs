@@ -184,6 +184,20 @@ impl ReminderState {
         true
     }
 
+    /// Mark every in-app reminder read and clear the attention dot. Mirrors clearing QQ
+    /// notifications: only this app's buffered state is touched, never the WeChat client itself.
+    /// Returns true when something actually changed, so callers can skip a pointless publish.
+    fn clear_reminders(&mut self) -> bool {
+        if self.snapshot.messages.is_empty() && !self.snapshot.pending {
+            return false;
+        }
+        self.snapshot.messages.clear();
+        self.snapshot.pending = false;
+        self.last_signal_at = None;
+        self.snapshot.revision += 1;
+        true
+    }
+
     fn apply(&mut self, generation: u64, signal: ReminderSignal, now: u64) -> bool {
         if !self.snapshot.enabled || self.generation != generation {
             return false;
@@ -331,6 +345,14 @@ pub fn set_wechat_reminders_enabled(
             hide_minimized_taskbar.is_some_and(|hidden| state.set_hide_minimized_taskbar(hidden));
         enabled_changed || preview_changed || taskbar_changed
     })
+}
+
+/// Mark all in-app WeChat reminders read: clears the buffered previews and the attention dot.
+/// Only this application's state is affected; the WeChat client's own unread badges are not
+/// reachable through a public API and are deliberately left alone.
+#[tauri::command]
+pub fn clear_wechat_reminders() -> Result<ReminderSnapshot, String> {
+    configure(|state| state.clear_reminders())
 }
 
 #[tauri::command]
@@ -707,6 +729,7 @@ macro_rules! tauri_commands {
         $next!([$($done)*
             crate::wechat_reminders::get_wechat_reminder_state,
             crate::wechat_reminders::set_wechat_reminders_enabled,
+            crate::wechat_reminders::clear_wechat_reminders,
             crate::wechat_reminders::set_wechat_message_preview_enabled,
             crate::wechat_reminders::set_wechat_minimized_taskbar_hidden,
             crate::wechat_reminders::open_wechat,

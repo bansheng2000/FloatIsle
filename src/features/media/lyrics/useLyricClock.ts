@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MediaState } from "../api";
 import { lineIndexAt, msUntilNextLine, playbackPosition, type LyricLine } from "./lrc";
+import { lyricClockRefreshKey } from "./lyricClockRefresh";
 
 /**
  * Lines show this much before their time. Windows reports the player's position a little late,
@@ -27,10 +28,13 @@ export function useLyricClock(lines: LyricLine[] | null, mediaState: MediaState,
     return () => window.clearTimeout(timer);
   }, [wait, now]);
 
-  // A new position from the player (seek, pause, resume) is read at once.
+  // A new position from the player (seek, pause, resume) is read at once. Lines arriving on the
+  // collapsed flip are a boundary too: without it a stale `now` would show the line from before
+  // the island was expanded.
+  const refreshKey = lyricClockRefreshKey(Boolean(lines), mediaState.updatedAt, mediaState.playbackStatus, offsetMs);
   useEffect(() => {
     setNow(Date.now());
-  }, [mediaState.updatedAt, mediaState.playbackStatus, offsetMs]);
+  }, [refreshKey]);
 
   return { index: lines ? lineIndexAt(lines, linePosition) : -1, position, playing };
 }

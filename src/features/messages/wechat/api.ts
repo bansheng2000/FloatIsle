@@ -41,6 +41,11 @@ export function setWeChatMessagePreviewEnabled(enabled: boolean) {
   return invoke<ReminderSnapshot>("set_wechat_message_preview_enabled", { enabled });
 }
 
+/** Mark every in-app WeChat reminder read and clear the attention dot. */
+export function clearWeChatReminders() {
+  return invoke<ReminderSnapshot>("clear_wechat_reminders");
+}
+
 export function setWeChatMinimizedTaskbarHidden(hidden: boolean) {
   return invoke<ReminderSnapshot>("set_wechat_minimized_taskbar_hidden", { hidden });
 }

@@ -154,6 +154,34 @@ fn previews_keep_the_newest_twenty_and_do_not_replay_after_switching_off() {
     assert!(state.snapshot.pending);
 }
 
+#[test]
+fn clearing_reminders_drops_buffered_messages_and_the_attention_dot() {
+    let mut state = ReminderState::default();
+    state.set_enabled(true);
+    state.set_preview_enabled(true);
+    let generation = state.generation;
+    let process = test_process(4);
+    assert!(state.receive_previews(generation, process, vec![preview("one")], 1000));
+    assert!(state.snapshot.pending);
+    assert_eq!(state.snapshot.messages.len(), 1);
+
+    let revision = state.snapshot.revision;
+    assert!(state.clear_reminders());
+    assert!(state.snapshot.messages.is_empty());
+    assert!(!state.snapshot.pending);
+    assert!(state.last_signal_at.is_none());
+    assert_eq!(state.snapshot.revision, revision + 1);
+
+    // Clearing again is a no-op: no spurious publish, no revision burn.
+    let after = state.snapshot.revision;
+    assert!(!state.clear_reminders());
+    assert_eq!(state.snapshot.revision, after);
+
+    // A later flash can raise a fresh reminder after a clear.
+    assert!(state.apply(state.generation, ReminderSignal::Attention, 2000));
+    assert!(state.snapshot.pending);
+}
+
 fn preview(body: &str) -> ChatPreview {
     ChatPreview {
         key: "test-chat".into(),

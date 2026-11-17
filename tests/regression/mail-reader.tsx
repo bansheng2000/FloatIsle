@@ -56,6 +56,11 @@ mockIPC((command, payload) => {
       previewEnabled: state === "wechatPreview", previewStatus: state === "wechatPreview" ? "ready" : "off", hideMinimizedTaskbar: false,
       messages: state === "wechatPreview" && args.enabled ? [wechatMessage] : [],
     };
+    case "clear_wechat_reminders": return {
+      revision: ++revision, enabled: true, status: "listening", pending: false,
+      lastAttentionAt: null, error: null,
+      previewEnabled: true, previewStatus: "ready", hideMinimizedTaskbar: false, messages: [],
+    };
     default: return null;
   }
 }, { shouldMockEvents: true });
@@ -94,8 +99,11 @@ try {
     const launch = document.querySelector<HTMLButtonElement>('.message-card__surface');
     check(view! === "wechat" && launch?.querySelector('.message-card__name')?.textContent === "微信" && launch.textContent?.includes("有新提醒") && launch.querySelector("time"),
       "微信普通提醒显示品牌、时间和提醒正文卡片");
-    check(!document.querySelector('.qq-panel__header button[aria-label="打开微信"]') && document.querySelectorAll('.qq-panel__header .qq-panel__toolbar button').length === 1,
-      "微信标签顶栏只剩接收开关，没有右上角的打开箭头");
+    check(!document.querySelector('.qq-panel__header button[aria-label="打开微信"]')
+      && document.querySelectorAll('.qq-panel__header .qq-panel__toolbar button').length === 2
+      && document.querySelector('.qq-panel__header button[aria-label="全部标为已读并清空"]')
+      && document.querySelector('.qq-panel__header button[aria-label="接收微信提醒"]'),
+      "微信标签顶栏是接收开关加就地清空按钮，没有右上角的打开箭头");
     await act(async () => { launch!.click(); });
     check(calls.some(call => call.command === "open_wechat"), "点击微信图标调用已有的唤回命令");
     await click("接收微信提醒");
@@ -150,6 +158,15 @@ try {
     canOpenChat = false;
     await click("打开微信中的「项目群」会话");
     check(document.querySelector(".qq-panel__error")?.textContent?.includes("未能定位该会话"), "会话无法定位时提示已打开微信");
+    // The in-place clear button must actually invoke the native command and drop the buffered
+    // preview + attention dot, not just filter the UI. A UI-only filter would leave messages
+    // coming back on reconnect and the dot lit; this asserts the command round-trip instead.
+    await click("全部标为已读并清空");
+    check(calls.some(call => call.command === "clear_wechat_reminders")
+      && !document.querySelector('[aria-label="微信消息摘要"] [role="listitem"]')
+      && !document.querySelector('.wechat-launch--pending')
+      && document.querySelector('.qq-panel__empty')?.textContent?.includes("暂无提醒"),
+      "就地清空调用原生命令，消息列表与红点一起消失");
     await click("QQ 通知");
     check(view! === "qq" && document.querySelector('[aria-label="QQ 最近通知"]'), "切回 QQ 显示自己的通知列表");
     checkCards();

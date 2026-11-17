@@ -2,6 +2,7 @@ export type WechatText = {
   desktopOnly: string;
   receive: string;
   pause: string;
+  clear: string;
   open: string;
   /** Under the WeChat tab's icon, which opens WeChat. */
   clickToOpen: string;
@@ -27,6 +28,7 @@ export const zhCN: WechatText = {
   desktopOnly: "请在 Windows 桌面版中使用微信提醒。",
   receive: "接收微信提醒",
   pause: "暂停微信提醒",
+  clear: "全部标为已读并清空",
   open: "打开微信",
   clickToOpen: "点击打开微信",
   noReminders: "暂无提醒",
@@ -58,6 +60,7 @@ export const en: WechatText = {
   desktopOnly: "Use the Windows desktop app for WeChat reminders.",
   receive: "Receive WeChat reminders",
   pause: "Pause WeChat reminders",
+  clear: "Mark all as read and clear",
   open: "Open WeChat",
   clickToOpen: "Click to open WeChat",
   noReminders: "No reminders",
