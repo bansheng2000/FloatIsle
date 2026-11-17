@@ -21,10 +21,46 @@ use super::{
     window_focus::{self, SessionHints},
 };
 
-const MAX_CHECKPOINT_BYTES: u64 = 512 * 1024;
+/// A checkpoint grows with its conversation, so the old limit of 512 KiB dropped long sessions
+/// from the island without a trace. The cap now sits far above a normal checkpoint, and a file
+/// past it is reported in `agent-sessions.log` instead of disappearing.
+const MAX_CHECKPOINT_BYTES: u64 = 8 * 1024 * 1024;
+/// Parsed checkpoints kept in memory; past this the least recently used entry makes room, so one
+/// large conversation cannot empty the cache and force every checkpoint to be parsed again.
+const CACHE_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_CHECKPOINTS: usize = 512;
-type CachedJson = ((u64, Option<SystemTime>), Value);
+
+struct CachedJson {
+    stamp: (u64, Option<SystemTime>),
+    value: Value,
+    used: u64,
+}
+
 static CHECKPOINTS: Mutex<Option<HashMap<PathBuf, CachedJson>>> = Mutex::new(None);
+static CACHE_CLOCK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn next_use_tick() -> u64 {
+    CACHE_CLOCK.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Drops the least recently used entries until `incoming` more bytes fit.
+fn make_room(entries: &mut HashMap<PathBuf, CachedJson>, incoming: u64) {
+    let used_bytes = |entries: &HashMap<PathBuf, CachedJson>| {
+        entries.values().map(|entry| entry.stamp.0).sum::<u64>()
+    };
+    while entries.len() >= MAX_CHECKPOINTS || used_bytes(entries) + incoming > CACHE_BYTES {
+        let oldest = entries
+            .iter()
+            .min_by_key(|(_, entry)| entry.used)
+            .map(|(path, _)| path.clone());
+        match oldest {
+            Some(path) => {
+                entries.remove(&path);
+            }
+            None => break,
+        }
+    }
+}
 pub(super) const DESKTOP_APPS: &[&str] = super::dsh_desktop::APPS;
 
 /// Preserve the balance credential source priority; extra session locators do not select credentials.
@@ -42,30 +78,75 @@ pub(super) fn data_root(home: &Path) -> Option<PathBuf> {
 }
 
 pub(super) fn read_json(path: &Path, maximum: u64) -> Option<Value> {
-    let file = fs::File::open(path).ok()?;
-    let metadata = file.metadata().ok()?;
+    read_json_checked(path, maximum).ok()
+}
+
+/// Why a checkpoint could not be read as JSON.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ReadProblem {
+    /// Missing, locked, or read failed.
+    Open,
+    /// Larger than the cap in force.
+    TooLarge,
+    /// Present and under the cap, but not JSON.
+    Invalid,
+}
+
+impl ReadProblem {
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::Open => "unreadable",
+            Self::TooLarge => "too-large",
+            Self::Invalid => "invalid-json",
+        }
+    }
+}
+
+pub(super) fn read_json_checked(path: &Path, maximum: u64) -> Result<Value, ReadProblem> {
+    let file = fs::File::open(path).map_err(|_| ReadProblem::Open)?;
+    let metadata = file.metadata().map_err(|_| ReadProblem::Open)?;
     if metadata.len() > maximum {
-        return None;
+        return Err(ReadProblem::TooLarge);
     }
     let stamp = (metadata.len(), metadata.modified().ok());
     let mut cache = CHECKPOINTS.lock().unwrap_or_else(PoisonError::into_inner);
     let entries = cache.get_or_insert_with(HashMap::new);
-    if let Some((_, value)) = entries.get(path).filter(|(known, _)| *known == stamp) {
-        return Some(value.clone());
+    if let Some(entry) = entries.get_mut(path).filter(|entry| entry.stamp == stamp) {
+        entry.used = next_use_tick();
+        return Ok(entry.value.clone());
     }
     let mut text = String::new();
-    file.take(maximum + 1).read_to_string(&mut text).ok()?;
+    file.take(maximum + 1)
+        .read_to_string(&mut text)
+        .map_err(|_| ReadProblem::Open)?;
     if text.len() as u64 > maximum {
-        return None;
+        return Err(ReadProblem::TooLarge);
     }
-    let value: Value = serde_json::from_str(&text).ok()?;
-    if entries.len() >= MAX_CHECKPOINTS
-        || entries.values().map(|(stamp, _)| stamp.0).sum::<u64>() + stamp.0 > 8 * 1024 * 1024
-    {
-        entries.clear();
-    }
-    entries.insert(path.to_path_buf(), (stamp, value.clone()));
-    Some(value)
+    let value: Value = serde_json::from_str(&text).map_err(|_| ReadProblem::Invalid)?;
+    make_room(entries, stamp.0);
+    entries.insert(
+        path.to_path_buf(),
+        CachedJson {
+            stamp,
+            value: value.clone(),
+            used: next_use_tick(),
+        },
+    );
+    Ok(value)
+}
+
+/// Bytes of parsed checkpoints currently held, and their paths, oldest use first.
+#[cfg(test)]
+pub(super) fn cache_state() -> (u64, Vec<(PathBuf, u64)>) {
+    let mut cache = CHECKPOINTS.lock().unwrap_or_else(PoisonError::into_inner);
+    let entries = cache.get_or_insert_with(HashMap::new);
+    let bytes = entries.values().map(|entry| entry.stamp.0).sum();
+    let mut used: Vec<(PathBuf, u64)> = entries
+        .iter()
+        .map(|(path, entry)| (path.clone(), entry.used))
+        .collect();
+    used.sort_by_key(|(_, tick)| *tick);
+    (bytes, used)
 }
 
 pub(super) fn is_session_id(id: &str) -> bool {
@@ -180,6 +261,7 @@ pub(super) fn list_from_root(
     now: i64,
     window_ms: i64,
     exe: Option<&str>,
+    app_dir: Option<&Path>,
 ) -> Vec<AgentSessionSummary> {
     let dir = root.join("storages/session_projcache/sessions");
     let mut paths: Vec<_> = fs::read_dir(dir)
@@ -205,13 +287,15 @@ pub(super) fn list_from_root(
                 return None;
             }
             let id = path.file_stem()?.to_str()?;
-            let mut summary = parse_checkpoint(
-                &read_json(&path, MAX_CHECKPOINT_BYTES)?,
-                id,
-                modified,
-                now,
-                exe.is_some(),
-            )?;
+            let value = match read_json_checked(&path, MAX_CHECKPOINT_BYTES) {
+                Ok(value) => value,
+                Err(problem) => {
+                    let bytes = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                    super::checkpoint_log::note(app_dir, now, &path, problem.label(), bytes);
+                    return None;
+                }
+            };
+            let mut summary = parse_checkpoint(&value, id, modified, now, exe.is_some())?;
             // Deleted logs may leave a checkpoint. Only sessions with a corresponding source file
             // are listed. Checking existence does not read or decompress the conversation body.
             let exists = fs::read_dir(root.join("sessions"))
@@ -250,7 +334,12 @@ fn merge_session(
     }
 }
 
-pub(super) fn list_sessions(home: &Path, now: i64, window_ms: i64) -> Vec<AgentSessionSummary> {
+pub(super) fn list_sessions(
+    home: &Path,
+    now: i64,
+    window_ms: i64,
+    app_dir: Option<&Path>,
+) -> Vec<AgentSessionSummary> {
     let mut sessions: HashMap<String, AgentSessionSummary> = HashMap::new();
     for (root, owner) in super::dsh_desktop::roots(home, env::var_os("APPDATA").map(PathBuf::from))
     {
@@ -259,7 +348,7 @@ pub(super) fn list_sessions(home: &Path, now: i64, window_ms: i64) -> Vec<AgentS
             .as_deref()
             .map(super::dsh_desktop::name)
             .unwrap_or(owner);
-        for mut session in list_from_root(&root, now, window_ms, exe.as_deref()) {
+        for mut session in list_from_root(&root, now, window_ms, exe.as_deref(), app_dir) {
             if let Some(host) = &mut session.host {
                 host.name = name.to_string();
             }
@@ -273,7 +362,12 @@ pub(super) fn list_sessions(home: &Path, now: i64, window_ms: i64) -> Vec<AgentS
 
 pub(super) fn focus_desktop(id: Option<&str>) -> bool {
     let owner = crate::system::windows_home_dir().ok().and_then(|home| {
-        list_sessions(&home, super::snapshot::current_unix_millis(), i64::MAX)
+        list_sessions(
+            &home,
+            super::snapshot::current_unix_millis(),
+            i64::MAX,
+            None,
+        )
             .into_iter()
             .find(|session| Some(session.session_id.as_str()) == id)
             .and_then(|session| session.host)

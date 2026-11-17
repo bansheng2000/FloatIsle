@@ -85,3 +85,134 @@ fn merges_imported_sessions_by_id_and_retains_newest_owner() {
     );
     assert!(!sessions[ID].closed);
 }
+
+fn temp_root(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("dsh-ck-{name}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let _ = fs::create_dir_all(dir.join("storages/session_projcache/sessions"));
+    let _ = fs::create_dir_all(dir.join("sessions/shard-1"));
+    dir
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or_default()
+}
+
+/// A real-shaped checkpoint padded to exactly `size` bytes.
+fn checkpoint_bytes(size: usize) -> Vec<u8> {
+    let mut value = fixture();
+    value["record"]["rows"]["title"]["val"] = json!("");
+    let base = serde_json::to_vec(&value).expect("json").len();
+    value["record"]["rows"]["title"]["val"] = json!("x".repeat(size - base));
+    let bytes = serde_json::to_vec(&value).expect("json");
+    assert_eq!(bytes.len(), size);
+    bytes
+}
+
+fn plant(root: &std::path::Path, id: &str, bytes: &[u8]) {
+    fs::write(
+        root.join("storages/session_projcache/sessions")
+            .join(format!("{id}.json")),
+        bytes,
+    )
+    .expect("checkpoint");
+    let source = root.join("sessions/shard-1").join(id);
+    fs::create_dir_all(&source).expect("shard");
+    fs::write(source.join("session.v4.jsonl.zstd"), b"zstd").expect("source");
+}
+
+fn listed_ids(root: &std::path::Path, app_dir: Option<&std::path::Path>) -> Vec<String> {
+    list_from_root(root, now_millis(), 2 * 60 * 60 * 1000, None, app_dir)
+        .into_iter()
+        .map(|session| session.session_id)
+        .collect()
+}
+
+#[test]
+fn lists_a_checkpoint_just_under_the_old_cap() {
+    let root = temp_root("under");
+    let id = "session-00000000-0000-4000-8000-00000000c498";
+    plant(&root, id, &checkpoint_bytes(498_333));
+    assert_eq!(listed_ids(&root, None), vec![id.to_string()]);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn lists_a_checkpoint_past_the_old_cap() {
+    let root = temp_root("past");
+    let id = "session-00000000-0000-4000-8000-00000000c552";
+    plant(&root, id, &checkpoint_bytes(552_540));
+    assert_eq!(
+        listed_ids(&root, None),
+        vec![id.to_string()],
+        "a 552,540-byte checkpoint is what the 512 KiB cap used to drop"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn drops_a_checkpoint_past_the_new_cap_and_notes_it_in_the_log() {
+    let root = temp_root("over");
+    let log_dir = temp_root("over-log");
+    let id = "session-00000000-0000-4000-8000-0000000008m1";
+    let size = 8 * 1024 * 1024 + 2048;
+    plant(&root, id, &checkpoint_bytes(size));
+    assert!(listed_ids(&root, Some(&log_dir)).is_empty());
+    let text = fs::read_to_string(log_dir.join("agent-sessions.log")).expect("log");
+    assert!(text.contains("too-large"), "{text}");
+    assert!(text.contains(&format!("{size} bytes")), "{text}");
+    assert!(text.contains(&format!("{id}.json")), "{text}");
+    let _ = fs::remove_dir_all(&root);
+    let _ = fs::remove_dir_all(&log_dir);
+}
+
+#[test]
+fn notes_an_unparsable_checkpoint_and_still_lists_the_others() {
+    let root = temp_root("broken");
+    let log_dir = temp_root("broken-log");
+    let good = "session-00000000-0000-4000-8000-0000000abcde";
+    let bad = "session-00000000-0000-4000-8000-0000000fffff";
+    plant(&root, good, &checkpoint_bytes(120_000));
+    plant(&root, bad, b"{ not json");
+    assert_eq!(listed_ids(&root, Some(&log_dir)), vec![good.to_string()]);
+    let text = fs::read_to_string(log_dir.join("agent-sessions.log")).expect("log");
+    assert!(text.contains("invalid-json"), "{text}");
+    assert!(text.contains("10 bytes"), "{text}");
+    let _ = fs::remove_dir_all(&root);
+    let _ = fs::remove_dir_all(&log_dir);
+}
+
+#[test]
+fn the_parse_cache_stays_within_its_budget_and_drops_the_least_recently_used() {
+    let mut entries: HashMap<PathBuf, CachedJson> = HashMap::new();
+    let eight_mib = 8 * 1024 * 1024;
+    for index in 0..4u64 {
+        entries.insert(
+            PathBuf::from(format!("c:/cache/{index}.json")),
+            CachedJson {
+                stamp: (eight_mib, None),
+                value: json!({}),
+                used: index,
+            },
+        );
+    }
+    assert_eq!(entries.len(), 4);
+    make_room(&mut entries, eight_mib);
+    let bytes: u64 = entries.values().map(|entry| entry.stamp.0).sum();
+    assert!(
+        bytes + eight_mib <= CACHE_BYTES,
+        "room was not made: {bytes} + {eight_mib} > {CACHE_BYTES}"
+    );
+    assert!(
+        !entries.contains_key(&PathBuf::from("c:/cache/0.json")),
+        "the least recently used entry must go first"
+    );
+    assert!(entries.contains_key(&PathBuf::from("c:/cache/3.json")));
+
+    make_room(&mut entries, 1);
+    assert_eq!(entries.len(), 3, "a small entry needs no eviction");
+    assert!(cache_state().0 <= CACHE_BYTES);
+}

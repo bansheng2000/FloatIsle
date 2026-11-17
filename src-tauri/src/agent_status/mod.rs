@@ -3,6 +3,7 @@
 pub(crate) mod approval_hotkeys;
 mod background_tasks;
 mod claude_desktop_usage;
+mod checkpoint_log;
 mod claude_hooks;
 mod codex_hooks;
 mod codex_process;
@@ -277,6 +278,7 @@ pub async fn list_agent_sessions(
                 &home_dir,
                 current_unix_millis(),
                 window_ms,
+                Some(&app_dir),
             ));
             let is_active = |phase: &str| matches!(phase, "running" | "waiting");
             sessions.sort_by_key(|session| (!is_active(session.phase), -session.updated_at));
