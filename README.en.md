@@ -1,24 +1,24 @@
 <div align="center">
-  <img src="src-tauri/icons/mark.svg" alt="Fly Island logo" width="96" height="96">
+  <img src="src-tauri/icons/mark.svg" alt="FloatIsle logo" width="96" height="96">
 
-  <h1>Fly Island</h1>
+  <h1>FloatIsle</h1>
 
   <p>English · <a href="README.md">中文</a></p>
 
   <p>A Windows desktop productivity app that brings tasks, clipboard history, music, AI status, quick translation, and notifications to the top of your screen.</p>
 
+  <p>Built on <a href="https://github.com/flyl1u/fly-island">fly-island</a> 3.0.8 (MIT); new parts © 2026 FloatIsle.</p>
+
   <p>
-    <a href="https://island.flyliu.org/">Live Preview</a>
+    <a href="https://github.com/bansheng2000/FloatIsle">Source repository</a>
     ·
-    <a href="https://github.com/flyl1u/fly-island/releases/latest">Download Release</a>
+    <a href="https://github.com/bansheng2000/FloatIsle/issues">Report an issue</a>
     ·
-    <a href="https://github.com/flyl1u/fly-island/issues">Report an Issue</a>
-    ·
-    <a href="#community">Community</a>
+    <a href="#development-and-build">Development</a>
   </p>
 
   <p>
-    <img alt="Version" src="https://img.shields.io/github/v/release/flyl1u/fly-island?label=version">
+    <img alt="Version" src="https://img.shields.io/badge/version-261117.08.09-blue">
     <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078D4">
     <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB">
     <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB">
@@ -27,7 +27,7 @@
 
 ## What is this?
 
-FocuSD Island is a Windows desktop productivity app. Its floating island brings together tasks and daily notes, clipboard history, music controls, AI coding assistant status, quick translation, and message notifications.
+FloatIsle is a Windows desktop productivity app. Its floating island brings together tasks and daily notes, clipboard history, music controls, AI coding assistant status, quick translation, and message notifications.
 
 It runs as a lightweight, borderless, always-on-top floating island. Expand it when you need information, then return to the compact state and keep working.
 
@@ -37,11 +37,11 @@ During everyday work and study, I often write Todo Lists in Obsidian, open music
 
 Switching between all those windows reduces efficiency and makes it easier to lose focus. I wanted to bring these frequent actions into one lightweight place.
 
-I thought of the iPhone's Dynamic Island, which gathers notifications, timers, media controls, and other information into a small island, shortening the path for us to get information. Thus, fly-island was born.
+I thought of the iPhone's Dynamic Island, which gathers notifications, timers, media controls, and other information into a small island, shortening the path for us to get information. Thus, FloatIsle was born.
 
 ## Features
 
-FocuSD brings frequent actions from separate windows into one compact island:
+FloatIsle brings frequent actions from separate windows into one compact island:
 
 - **Tasks, daily notes, and archives**: manage today's tasks, mark them complete, set the active task, write a daily note, and browse saved days as cards or a timeline. Optionally carry unfinished tasks forward and save a day as Markdown.
 - **Text and image clipboard history**: search copied content and notes, favorite common items, add notes, remove entries, and copy an item back to the clipboard. Configure image capture, history size, and the global shortcut.
@@ -77,16 +77,6 @@ Expand the island to switch between tasks, music, clipboard, and messages. The s
 - Rust for windows, shortcuts, clipboard, media, and file capabilities
 - pnpm for dependency management and project scripts
 
-## Community
-
-Join the **fly-island user group on WeChat** to discuss the app, report problems, and share suggestions. Scan the QR code below with WeChat to join.
-
-<p align="center">
-  <img src="docs/assets/wechat-community.jpg" alt="QR code for the fly-island WeChat user group" width="360">
-</p>
-
-The QR code expires; the current image says it is **valid before November 18**. If it has expired, please [open an issue](https://github.com/flyl1u/fly-island/issues) to request an update.
-
 ## Development and build
 
 ### Build from source
@@ -94,8 +84,8 @@ The QR code expires; the current image says it is **valid before November 18**. 
 You need Windows 10/11, Node.js, pnpm, Rust, Visual Studio C++ Build Tools, and WebView2 Runtime.
 
 ```powershell
-git clone https://github.com/flyl1u/fly-island.git
-cd fly-island
+git clone https://github.com/bansheng2000/FloatIsle.git
+cd FloatIsle
 pnpm install
 pnpm tauri dev
 ```
@@ -114,14 +104,24 @@ pnpm tauri build
 
 The generated installers are placed in:
 
-- `src-tauri/target/release/bundle/nsis/fly-island_VERSION_x64-setup.exe`
-- `src-tauri/target/release/bundle/msi/fly-island_VERSION_x64_en-US.msi`
-
-You can also download the latest Windows x64 installers from [GitHub Releases](https://github.com/flyl1u/fly-island/releases/latest).
+- `src-tauri/target/release/bundle/nsis/FloatIsle_VERSION_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/FloatIsle_VERSION_x64_en-US.msi`
 
 ## Contributors
 
-Thanks to [@TixXin](https://github.com/TixXin) for the modular architecture and implementation in [PR #36](https://github.com/flyl1u/fly-island/pull/36). The local refactor adapts and reuses parts of that work on the current main branch; see the [provenance and validation notes](docs/architecture/refactor-plan.md).
+Thanks to [@TixXin](https://github.com/TixXin) for the modular architecture and implementation in the upstream [PR #36](https://github.com/flyl1u/fly-island/pull/36). The local refactor adapts and reuses parts of that work on the current main branch; see the [provenance and validation notes](docs/architecture/refactor-plan.md).
+
+## Credits and provenance
+
+FloatIsle is built on [fly-island](https://github.com/flyl1u/fly-island) **3.0.8**, under the MIT license:
+
+```
+MIT License
+
+Copyright (c) 2026 flyl1u and contributors
+```
+
+Copyright for the parts added or changed in this repository belongs to the FloatIsle contributors (© 2026 FloatIsle). The original license text is in [LICENSE](LICENSE) and has not been modified.
 
 ## License
 
@@ -131,10 +131,10 @@ Third-party dependencies and bundled assets retain their respective licenses. Se
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=flyl1u%2Ffly-island&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=bansheng2000%2FFloatIsle&type=date&legend=top-left">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=dark&legend=top-left" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=light&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=light&legend=top-left" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=bansheng2000/FloatIsle&type=date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=bansheng2000/FloatIsle&type=date&theme=light&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=bansheng2000/FloatIsle&type=date&theme=light&legend=top-left" />
   </picture>
 </a>

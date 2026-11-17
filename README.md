@@ -1,24 +1,24 @@
 <div align="center">
-  <img src="src-tauri/icons/mark.svg" alt="Fly Island logo" width="96" height="96">
+  <img src="src-tauri/icons/mark.svg" alt="FloatIsle logo" width="96" height="96">
 
-  <h1>Fly Island</h1>
+  <h1>FloatIsle</h1>
 
   <p><a href="README.en.md">English</a> · 中文</p>
 
   <p>一款 Windows 桌面效率工具，在屏幕顶部集中管理待办、剪贴板、音乐、AI 状态、快捷翻译和消息提醒。</p>
 
+  <p>基于 <a href="https://github.com/flyl1u/fly-island">fly-island</a> 3.0.8（MIT 协议）改造，新增部分 © 2026 FloatIsle。</p>
+
   <p>
-    <a href="https://island.flyliu.org/">在线预览</a>
+    <a href="https://github.com/bansheng2000/FloatIsle">源码仓库</a>
     ·
-    <a href="https://github.com/flyl1u/fly-island/releases/latest">下载 Release</a>
+    <a href="https://github.com/bansheng2000/FloatIsle/issues">反馈 Issue</a>
     ·
-    <a href="https://github.com/flyl1u/fly-island/issues">反馈 Issue</a>
-    ·
-    <a href="#用户交流群">用户交流群</a>
+    <a href="#开发与构建">开发与构建</a>
   </p>
 
   <p>
-    <img alt="Version" src="https://img.shields.io/github/v/release/flyl1u/fly-island?label=version">
+    <img alt="Version" src="https://img.shields.io/badge/version-261117.08.09-blue">
     <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078D4">
     <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB">
     <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB">
@@ -29,7 +29,7 @@
 
 一款 Windows 优先的灵动岛。集成微信、QQ、邮箱通知，剪贴板历史、快捷翻译、Codex状态灯、媒体控制、每日待办等功能
 
-fly-island 以轻量、无边框、始终置顶的悬浮岛形式运行，它会在需要时展开，用完后回到紧凑状态，减少为了获取一条信息而切换窗口的次数。
+FloatIsle 以轻量、无边框、始终置顶的悬浮岛形式运行，它会在需要时展开，用完后回到紧凑状态，减少为了获取一条信息而切换窗口的次数。
 
 ## 为什么做它
 
@@ -37,13 +37,13 @@ fly-island 以轻量、无边框、始终置顶的悬浮岛形式运行，它会
 
 在这些界面之间来回切换，不仅会降低效率，也容易让人分心，因此我开始思考：能不能把这些高频功能集成到一个足够轻量的地方？
 
-我想到了iPhone的灵动岛，它把消息通知、计时器、媒体控制等信息集中到一个小岛上，缩短了我们获取信息的路程。于是，fly-island 诞生了
+我想到了iPhone的灵动岛，它把消息通知、计时器、媒体控制等信息集中到一个小岛上，缩短了我们获取信息的路程。于是，FloatIsle 诞生了
 
 ## 功能
 
-fly-island 想解决的核心问题，是工作和学习过程中频繁的窗口切换。
+FloatIsle 想解决的核心问题，是工作和学习过程中频繁的窗口切换。
 
-fly-island 把分散在不同窗口中的高频操作放到一个可折叠、可展开的悬浮岛里：
+FloatIsle 把分散在不同窗口中的高频操作放到一个可折叠、可展开的悬浮岛里：
 
 - **图文剪贴板历史**：记录复制过的文本和图片，搜索内容或备注、收藏常用项、添加备注、删除记录，并一键复制回剪贴板。历史数量、图片记录和全局唤出快捷键均可设置。
 - **QQ、微信与 QQ 邮箱**：在同一行品牌导航中切换 QQ、微信和邮箱，工具按钮共用顶部一行；QQ 通知和邮箱各保留最近 20 项，邮件支持在岛内打开正文并返回列表。
@@ -79,16 +79,6 @@ fly-island 把分散在不同窗口中的高频操作放到一个可折叠、可
 - Rust：窗口、快捷键、剪贴板、媒体和文件等桌面能力
 - pnpm：依赖安装与项目脚本
 
-## 用户交流群
-
-欢迎加入 **fly-island 用户交流群**，交流使用体验、反馈问题和分享建议。使用微信扫描下方二维码即可入群。
-
-<p align="center">
-  <img src="docs/assets/wechat-community.jpg" alt="fly-island 微信用户交流群二维码" width="360">
-</p>
-
-二维码有有效期，当前图片标注为 **11 月 18 日前有效**；若已失效，可通过 [Issue](https://github.com/flyl1u/fly-island/issues) 反馈以便更新。
-
 ## 开发与构建
 
 ### 从源码构建
@@ -96,8 +86,8 @@ fly-island 把分散在不同窗口中的高频操作放到一个可折叠、可
 需要 Windows 10/11、Node.js、pnpm、Rust、Visual Studio C++ Build Tools 和 WebView2 Runtime。
 
 ```powershell
-git clone https://github.com/flyl1u/fly-island.git
-cd fly-island
+git clone https://github.com/bansheng2000/FloatIsle.git
+cd FloatIsle
 pnpm install
 pnpm tauri dev
 ```
@@ -116,16 +106,26 @@ pnpm tauri build
 
 构建完成后，安装包位于：
 
-- `src-tauri/target/release/bundle/nsis/fly-island_版本号_x64-setup.exe`
-- `src-tauri/target/release/bundle/msi/fly-island_版本号_x64_en-US.msi`
-
-也可以直接从 [GitHub Releases](https://github.com/flyl1u/fly-island/releases/latest) 下载 Windows x64 安装包。
+- `src-tauri/target/release/bundle/nsis/FloatIsle_版本号_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/FloatIsle_版本号_x64_en-US.msi`
 
 应用内更新（检查更新、签名与 `latest.json` 发布流程）见 [docs/updater.md](docs/updater.md)。
 
 ## 贡献致谢
 
-感谢 [@TixXin](https://github.com/TixXin) 在 [PR #36](https://github.com/flyl1u/fly-island/pull/36) 中提出的模块化架构方案与实现。本地重构在当前主线上适配并复用了其中部分代码，来源与验证记录见[改造说明](docs/architecture/refactor-plan.md)。
+感谢 [@TixXin](https://github.com/TixXin) 在上游 [PR #36](https://github.com/flyl1u/fly-island/pull/36) 中提出的模块化架构方案与实现。本地重构在当前主线上适配并复用了其中部分代码，来源与验证记录见[改造说明](docs/architecture/refactor-plan.md)。
+
+## 致谢与来源 / Credits
+
+FloatIsle 基于 [fly-island](https://github.com/flyl1u/fly-island) **3.0.8** 改造，遵循 MIT 协议：
+
+```
+MIT License
+
+Copyright (c) 2026 flyl1u and contributors
+```
+
+本仓库新增与修改部分的版权归 FloatIsle 贡献者所有（© 2026 FloatIsle）。原始许可证全文见 [LICENSE](LICENSE)，未作改动。
 
 ## 开源协议
 
@@ -135,10 +135,10 @@ pnpm tauri build
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=flyl1u%2Ffly-island&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=bansheng2000%2FFloatIsle&type=date&legend=top-left">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=dark&legend=top-left" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=light&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=light&legend=top-left" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=bansheng2000/FloatIsle&type=date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=bansheng2000/FloatIsle&type=date&theme=light&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=bansheng2000/FloatIsle&type=date&theme=light&legend=top-left" />
   </picture>
 </a>
