@@ -1,8 +1,11 @@
 // Reading saved settings, part 1 (normalizeSettings in settings.ts): the island's look and size.
 import { clamp } from "../../utils/number.ts";
-import { getColorSetting } from "../../utils/color.ts";
+import { getColorSetting, HEX_COLOR_PATTERN } from "../../utils/color.ts";
 import { DEFAULT_SETTINGS } from "./settingsDefaults.ts";
-import { normalizeExpandedScale } from "./settingsLimits.ts";
+import {
+  COLOR_SCHEMES, COLLAPSED_HEIGHT, COLLAPSED_WIDTH, ISLAND_FONT_SIZE, TEXTURES,
+  normalizeExpandedScale, oneOf,
+} from "./settingsLimits.ts";
 import type { IslandSettings, LegacyIslandSettings } from "./types";
 
 /** The look that can still be set: style, font, opacity, the two sizes and the three colours. */
@@ -25,6 +28,26 @@ export function normalizeLayoutSettings(settings: LegacyIslandSettings | null | 
       settings?.appearanceMode === "liquidGlass"
         ? settings.appearanceMode
         : "classic",
+    // E1 additions: a saved value outside the allowed set falls back to the dark/classic default.
+    colorScheme: oneOf(COLOR_SCHEMES, settings?.colorScheme, DEFAULT_SETTINGS.colorScheme),
+    texture: oneOf(TEXTURES, settings?.texture, DEFAULT_SETTINGS.texture),
+    islandFontSize: clamp(
+      Number(settings?.islandFontSize ?? DEFAULT_SETTINGS.islandFontSize),
+      ISLAND_FONT_SIZE.min,
+      ISLAND_FONT_SIZE.max,
+    ),
+    collapsedWidth: settings?.collapsedWidth
+      ? clamp(Number(settings.collapsedWidth), COLLAPSED_WIDTH.min, COLLAPSED_WIDTH.max)
+      : DEFAULT_SETTINGS.collapsedWidth,
+    collapsedHeight: clamp(
+      Number(settings?.collapsedHeight ?? DEFAULT_SETTINGS.collapsedHeight),
+      COLLAPSED_HEIGHT.min,
+      COLLAPSED_HEIGHT.max,
+    ),
+    pageTextColor:
+      typeof settings?.pageTextColor === "string" && HEX_COLOR_PATTERN.test(settings.pageTextColor)
+        ? settings.pageTextColor
+        : null,
     glassIntensity: clamp(
       Number(settings?.glassIntensity ?? DEFAULT_SETTINGS.glassIntensity),
       25,

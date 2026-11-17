@@ -22,6 +22,10 @@ export function getIslandStageStyle(
     "--island-expanded-scale-target": settings.expandedScale,
     "--collapsed-island-width": `${collapsedIslandWidth}px`,
     "--expanded-island-height": `${expandedIslandHeight}px`,
+    // (E1) User-tunable text size and collapsed height; the native window keeps its geometry.
+    "--island-font-size": `${settings.islandFontSize}px`,
+    "--island-font-ratio": settings.islandFontSize / 14,
+    "--collapsed-height-pct": settings.collapsedHeight / 100,
     // Unitless; IslandShell.css derives the collapsed, detached and inner panel radii from it.
     "--island-corner-radius-size": settings.islandCornerRadius,
     // The corner-shape of the island and every layer that inherits its radius (IslandShell.css).
@@ -57,5 +61,7 @@ export function getIslandStageStyle(
       glassMaskOpacity,
     ),
     "--todo-background-color": settings.todoBackgroundColor,
+    // (E1) ⑨ Only emit the override when set, so null keeps the theme's page text colour.
+    ...(settings.pageTextColor ? { "--page-text-color": settings.pageTextColor } : {}),
   }) as CSSProperties;
 }

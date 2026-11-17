@@ -46,6 +46,29 @@
   backdrop-filter: blur(calc(10px + var(--preview-glass) * 9px)) saturate(1.4);
 }
 
+/* (E1) ⑦ Texture preview: pure CSS, distinct looks so the chosen treatment is visible at a glance. */
+.island-preview__island--texture-liquidGlass {
+  background:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.24), transparent 40% 74%, rgba(255, 255, 255, 0.1)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent 30%),
+    var(--preview-fill);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 1px 0 0 rgba(116, 214, 255, 0.22),
+    inset -1px 0 0 rgba(255, 156, 224, 0.16);
+}
+
+.island-preview__island--texture-frosted {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 34%),
+    color-mix(in srgb, var(--preview-fill) 82%, rgba(255, 255, 255, 0.5));
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
 .island-preview__island--collapsed {
   min-width: 150px;
   /* In a narrow pane (the island's own settings page) the title is cut short, not the island. */

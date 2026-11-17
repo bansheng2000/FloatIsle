@@ -30,7 +30,7 @@ export function AppearanceSettingsPage({
       />
       <CollapsedLayoutEditor settings={settings} onSettingsChange={onSettingsChange} />
       <CollapsedIslandSection settings={settings} onSettingsChange={onSettingsChange} />
-      <ColorSettingsSection settings={settings} onSettingsChange={onSettingsChange} />
+      <ColorSettingsSection settings={settings} onSettingsChange={onSettingsChange} onPreviewIsland={requestPanelPreview} />
     </>
   );
 }

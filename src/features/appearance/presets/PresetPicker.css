@@ -1,0 +1,62 @@
+/* (E1) Preset list shared by the colour and whole-island preset pickers. */
+.preset-picker__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.preset-picker__name {
+  width: 8em;
+}
+
+.preset-picker__full {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.preset-picker__empty {
+  padding: 6px 0 2px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.preset-picker__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding-top: 8px;
+}
+
+.preset-picker__item {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-white-a10);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.preset-picker__apply,
+.preset-picker__remove {
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.preset-picker__apply {
+  padding: 4px 10px;
+}
+
+.preset-picker__remove {
+  padding: 4px 8px;
+  color: var(--text-3);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.preset-picker__apply:focus-visible,
+.preset-picker__remove:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}

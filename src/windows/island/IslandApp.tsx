@@ -191,6 +191,8 @@ export function IslandApp() {
       className={`stage stage--font-${settings.fontFamily}`}
       style={stageStyle}
       data-island-tuck-shape={settings.tuckShape}
+      data-color-scheme={settings.colorScheme}
+      data-texture={settings.texture}
     >
       <IslandShell
         qqMail={qqMail}
@@ -201,6 +203,7 @@ export function IslandApp() {
         page={page}
         expandedHeight={expandedIslandHeight}
         appearanceMode={settings.appearanceMode}
+        texture={settings.texture}
         nativeGlassState={nativeGlassState}
         isTucked={isTucked}
         positionLocked={settings.positionLocked}

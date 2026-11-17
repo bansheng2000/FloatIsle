@@ -217,7 +217,7 @@
 
 .island--collapsed {
   width: calc(var(--collapsed-island-width) * var(--island-collapsed-scale));
-  height: calc(38px * var(--island-collapsed-scale));
+  height: calc(38px * var(--collapsed-height-pct, 1) * var(--island-collapsed-scale));
   border-radius: 0 0 var(--island-shape-radius-collapsed) var(--island-shape-radius-collapsed);
   /* The island is a surface, not a link: only its small buttons show the hand. */
   cursor: default;
@@ -341,7 +341,7 @@
 
 .island__collapsed {
   width: var(--collapsed-island-width);
-  height: 38px;
+  height: calc(38px * var(--collapsed-height-pct, 1));
   margin-left: calc(var(--collapsed-island-width) / -2);
   display: flex;
   align-items: center;
@@ -411,6 +411,42 @@
 .island__content {
   min-height: 0;
   flex: 1;
+}
+
+/*
+ * (E1) ⑦ Surface treatments are pure CSS gradients — no backdrop-filter and no blur library, so the
+ * three textures stay cheap on a transparent, always-on-top window. They key off the new texture
+ * class rather than the legacy appearanceMode, which the paused glass flag still gates. The two
+ * decorative looks override the flat fill; classic keeps the base rule untouched.
+ */
+.island.island--texture-liquidGlass {
+  background:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.2), transparent 38% 74%, rgba(255, 255, 255, 0.08)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 28%),
+    var(--island-fill, var(--island-background-color));
+  box-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 1px 0 0 rgba(116, 214, 255, 0.22),
+    inset -1px 0 0 rgba(255, 156, 224, 0.16);
+}
+
+.island.island--texture-frosted {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 34%),
+    color-mix(in srgb, var(--island-fill, var(--island-background-color)) 82%, rgba(255, 255, 255, 0.5));
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+[data-color-scheme="light"] .island.island--texture-liquidGlass {
+  box-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 1px 0 0 rgba(11, 111, 168, 0.18),
+    inset -1px 0 0 rgba(192, 40, 60, 0.12);
 }
 
 @media (prefers-reduced-motion: reduce) {

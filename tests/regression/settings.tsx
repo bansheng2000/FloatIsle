@@ -8,13 +8,13 @@ import "../../src/styles/fonts.css";
 import "../../src/styles/base.css";
 import { SettingsWindow } from "../../src/windows/settings/SettingsWindow";
 import { DEFAULT_SETTINGS } from "../../src/features/appearance/settings";
+import { E1_COLOR_REFRESH_MIGRATION_KEY, E1_SORT_DEFAULT_MIGRATION_KEY } from "../../src/features/appearance/storage";
 import { settingsCategoryFor } from "../../src/windows/settings/categories";
 import { I18nProvider, LOCALE_STORAGE_KEY } from "../../src/i18n";
 import { commands, mailCalls, REPLY_MARKER, replyMarkerCalls, translationShortcutCalls } from "./settingsMocks";
 import { checkBridgeScenarios } from "./dshBridgeChecks";
 import { checkUsageScenarios } from "./dshUsageChecks";
 import { checkTuckShape } from "./tuckShapeChecks";
-
 const query = new URLSearchParams(location.search);
 const automated = query.has("test");
 Object.assign(globalThis, { isTauri: true, IS_REACT_ACT_ENVIRONMENT: automated });
@@ -29,7 +29,7 @@ window.addEventListener("beforeunload", restore);
 
 localStorage.setItem(LOCALE_STORAGE_KEY, query.get("locale") === "en" ? "en" : "zh-CN");
 // The checks below expect a customized look plus a General page choice that a reset must keep.
-if (automated) localStorage.setItem("focusd-island-settings", JSON.stringify({ opacity: 60, carryOverIncompleteTodos: false, autoTuck: true }));
+if (automated) { localStorage.setItem("focusd-island-settings", JSON.stringify({ opacity: 60, carryOverIncompleteTodos: false, autoTuck: true })); localStorage.setItem(E1_COLOR_REFRESH_MIGRATION_KEY, "1"); localStorage.setItem(E1_SORT_DEFAULT_MIGRATION_KEY, "1"); }
 else localStorage.removeItem("focusd-island-settings");
 localStorage.setItem("focusd-island-save-directory", "");
 localStorage.setItem("focusd-island-qq-notification-access-requested", "true");
@@ -39,7 +39,6 @@ localStorage.removeItem("focusd-island-agent-sounds");
 localStorage.removeItem("focusd-island-detached-settings");
 // The player order as the old Music page saved it.
 localStorage.setItem("focusd-island-music-sources", JSON.stringify([{ id: "Spotify.exe", label: "Spotify" }, { id: "QQMusic", label: "QQ音乐" }]));
-
 
 const root = createRoot(document.getElementById("root")!);
 const mount = () => root.render(<StrictMode><I18nProvider><SettingsWindow /></I18nProvider></StrictMode>);
@@ -100,7 +99,9 @@ if (!automated) {
       // Our own rows follow the four hook rows (status, Codex, Claude Code, reply marker); the
       // limit is ours plus one spare, and the exact row list below pins every row in order.
       const measuredRows = category === "agentConnect" ? rowCount - 4 : rowCount;
-      const maxRows = category === "general" ? 11 : category === "appearance" ? 9 : category === "agentConnect" ? 14 : 8;
+      // (E1) Appearance grew from 9 to 17 rows: colour scheme, texture, text size, collapsed width
+      // and height, page text colour, plus two preset pickers — all specified features, not padding.
+      const maxRows = category === "general" ? 11 : category === "appearance" ? 17 : category === "agentConnect" ? 14 : 8;
       if (category === "general") {
         const timers = [...panel.querySelectorAll<HTMLInputElement>("input[role='spinbutton']")];
         const labels = timers.map((input) => panel.querySelector(`label[for='${CSS.escape(input.id)}']`)?.textContent ?? "");
@@ -127,7 +128,6 @@ if (!automated) {
     }
     check(settingsCategoryFor("sounds") === "agents" && settingsCategoryFor("agentAlerts") === "agents" && settingsCategoryFor("agentApprovals") === "agents"
       && settingsCategoryFor("shelf") === "clipboard", "Old names of merged pages open the page they became");
-
 
     const storedSettings = () => JSON.parse(localStorage.getItem("focusd-island-settings") ?? "{}") as { opacity?: number; carryOverIncompleteTodos?: boolean };
     check(!document.querySelector(".appearance-reset"), "Reset appearance is not offered outside the appearance page");
@@ -177,8 +177,13 @@ if (!automated) {
     await click(".appearance-reset--danger");
     check(storedSettings().opacity === DEFAULT_SETTINGS.opacity, "Confirming resets the appearance");
     check(storedSettings().carryOverIncompleteTodos === false, "Resetting the appearance keeps todo settings");
-    check(!document.querySelector(".island-preview__island--glass") && ![...document.querySelectorAll<HTMLButtonElement>(".editor-panel button")].some((button) => button.textContent === "液态玻璃"),
-      "Liquid glass is paused: the preview stays classic and the choice is not offered");
+    // (E1) ⑦ Before: glass paused, no choice. After: textures selectable and visibly applied.
+    const btn = (t: string) => [...document.querySelectorAll<HTMLButtonElement>(".editor-panel button")].find((b) => b.textContent === t)!;
+    check(["液态玻璃", "磨砂玻璃", "深色", "浅色", "跟随系统"].every((t) => btn(t)), "Texture and colour-scheme choices are offered");
+    await act(async () => btn("液态玻璃").click());
+    check(document.querySelector(".island-preview__island--texture-liquidGlass"), "Liquid glass visibly changes the preview (not classic fallback)");
+    await act(async () => btn("磨砂玻璃").click());
+    check(document.querySelector(".island-preview__island--texture-frosted"), "Frosted glass visibly changes the preview");
     check(document.querySelectorAll("[title]").length === 0, "No hover tooltips anywhere in Settings");
     await openPage("general");
     const generalTitles = [...document.querySelectorAll<HTMLElement>(".editor-panel .settings-row__title")].map((title) => title.textContent);
@@ -204,12 +209,10 @@ if (!automated) {
     check((JSON.parse(localStorage.getItem("focusd-island-settings") ?? "{}") as { positionLocked?: boolean }).positionLocked === true
       && [...document.querySelectorAll<HTMLElement>(".settings-row")].find((row) => row.textContent?.includes("锁定小岛位置"))?.querySelector<HTMLInputElement>("[role='switch']")?.checked,
       "Locking the position is saved and stays on after changing pages");
-
     const agentPolls = () => commands.filter(command => command === "get_agent_status").length;
     const pollsAway = agentPolls();
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 1_200)); });
     check(agentPolls() === pollsAway, "Agent status is not polled while its page is closed");
-
     await act(async () => {
       localStorage.setItem("focusd-island-settings-focus", JSON.stringify({ section: "savePath", requestedAt: Date.now() }));
       window.dispatchEvent(new StorageEvent("storage", { key: "focusd-island-settings-focus", newValue: "x", storageArea: localStorage }));
@@ -242,9 +245,7 @@ if (!automated) {
       "Adding a mailbox sends the typed server and lists it");
     const saved = JSON.parse(localStorage.getItem("focusd-island-qq-mail-settings") ?? "{}") as { accounts?: { email: string; host: string }[] };
     check(saved.accounts?.some((account) => account.email === "new@example.edu.cn" && account.host === "imap.example.edu.cn"),
-      "The typed server is saved with the mailbox");
-
-    // AI Agent has its own group: sessions and alerts on one page, the hooks on the other.
+      "The typed server is saved with the mailbox");    // AI Agent has its own group: sessions and alerts on one page, the hooks on the other.
     const agentGroup = [...document.querySelectorAll<HTMLElement>(".settings-sidebar__group")].find((group) => group.getAttribute("aria-label") === "AI Agent");
     check([...(agentGroup?.querySelectorAll(".settings-sidebar__item") ?? [])].map((item) => item.textContent).join("|") === "会话与提醒|连接", "AI Agent is its own sidebar group with two pages: sessions and alerts, connection");
     await openPage("agentConnect");
@@ -283,7 +284,6 @@ if (!automated) {
     check((JSON.parse(localStorage.getItem("focusd-island-agent-sounds") ?? "{}") as { enabled?: boolean }).enabled === false, "Switching agent sounds off is saved");
     const approvalSwitch = agentRow("在岛上允许或拒绝 Agent 的操作")?.querySelector<HTMLInputElement>("[role='switch']");
     check(approvalSwitch && !approvalSwitch.checked, "Approving on the island sits on the sessions page, off by default");
-
     // Settings → Music → Player order: the saved order, new players added after it, each one's
     // state, and moving a row saves the old format.
     await openPage("music"); await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });

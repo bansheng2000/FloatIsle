@@ -73,6 +73,8 @@ export function useCollapsedTodo(
     const itemText = collapsedItem === "agent"
       ? AGENT_ICON_TEXT + agentTitle
       : collapsedItem === "lyrics" ? LYRICS_WIDTH_TEXT : collapsedItem === "todo" ? todoText : null;
+    // (E1) An explicit width wins over the text-derived one; 0 keeps the old behaviour.
+    if (settings.collapsedWidth > 0) return Math.round(settings.collapsedWidth);
     const text = settings.showCollapsedText ? itemText ?? (settings.showTitle ? "fly-island" : "") : "";
     return alignCollapsedIslandWidth(
       getCollapsedIslandWidth(text, coverWanted && collapsedItem === "lyrics" ? COVER_WIDTH
@@ -80,7 +82,7 @@ export function useCollapsedTodo(
       window.innerWidth,
       window.devicePixelRatio,
     );
-  }, [agentTitle, collapsedItem, collapsedTaskTitle, collapsedTodoCount, coverWanted, settings.showCollapsedText, settings.showTitle, t, timer]);
+  }, [agentTitle, collapsedItem, collapsedTaskTitle, collapsedTodoCount, coverWanted, settings.collapsedWidth, settings.showCollapsedText, settings.showTitle, t, timer]);
 
   return { collapsedTaskTitle, collapsedTodoCount, collapsedItem, collapsedIslandWidth };
 }

@@ -3,7 +3,7 @@ import { DEFAULT_LYRICS_SETTINGS } from "../media/lyrics/lyricsSettings.ts";
 import {
   DEFAULT_AGENT_VISIBLE_ROWS, DEFAULT_AUTO_TUCK_RETRACT_DELAY_MS, DEFAULT_CLIPBOARD_VISIBLE_ROWS, DEFAULT_HOVER_COLLAPSE_DELAY_MS,
   DEFAULT_HOVER_EXPAND_DELAY_MS, DEFAULT_ISLAND_CORNER_RADIUS, DEFAULT_MAX_PANEL_HEIGHT, DEFAULT_SHELF_ITEMS, DEFAULT_TASK_TEXT_COLOR,
-  DEFAULT_AGENT_USAGE_REFRESH_MS,
+  DEFAULT_AGENT_USAGE_REFRESH_MS, COLLAPSED_HEIGHT, COLLAPSED_WIDTH, ISLAND_FONT_SIZE,
   AUTO_COLLAPSE_SECONDS, COLLAPSED_ITEMS, COLLAPSED_SLOTS, PAGE_DOTS, TUCK_DELAY_SECONDS,
 } from "./settingsLimits.ts";
 import type { IslandSettings } from "./types";
@@ -14,7 +14,13 @@ import type { IslandSettings } from "./types";
 export const DEFAULT_SETTINGS: IslandSettings = {
   topEdgeLayoutVersion: 1,
   appearanceMode: "classic",
+  // E1 defaults: the dark set and the classic solid fill keep the long-standing look.
+  colorScheme: "dark",
+  texture: "classic",
   fontFamily: "system",
+  islandFontSize: ISLAND_FONT_SIZE.default,
+  collapsedWidth: COLLAPSED_WIDTH.default,
+  collapsedHeight: COLLAPSED_HEIGHT.default,
   pageButtonStyle: "icon",
   glassIntensity: 72,
   opacity: 100,
@@ -30,7 +36,7 @@ export const DEFAULT_SETTINGS: IslandSettings = {
   agentVisibleRows: DEFAULT_AGENT_VISIBLE_ROWS,
   agentHostDisplay: "icon",
   agentSessionView: "list",
-  agentSessionSort: "status",
+  agentSessionSort: "recent",
   agentSessionGroup: "computer",
   agentArchiveMotion: "slide",
   agentCardEffects: "off",
@@ -57,6 +63,7 @@ export const DEFAULT_SETTINGS: IslandSettings = {
   agentRemindSeconds: 0,
   agentQuotaAlertPercent: 80,
   taskTextColor: DEFAULT_TASK_TEXT_COLOR,
+  pageTextColor: null,
   pulseColor: "#3ae489",
   pulseBrightness: 100,
   islandBackgroundColor: "#000000",

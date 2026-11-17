@@ -29,15 +29,15 @@
 }
 
 .agent-quota__agent--claudeCode {
-  --quota-base: #d97757;
+  --quota-base: var(--quota-claude);
 }
 
 .agent-quota__agent--codex {
-  --quota-base: #4f8ff7;
+  --quota-base: var(--quota-codex);
 }
 
 .agent-quota__agent--dsh {
-  --quota-base: #43b4a5;
+  --quota-base: var(--quota-dsh);
   min-width: 0;
   flex-shrink: 1;
 }
@@ -91,6 +91,12 @@
 .quota-rings__fill {
   stroke: var(--quota-color);
   stroke-linecap: round;
+}
+
+/* (E1) Unknown usage: a full ring in the source's fixed identification colour, dimmed
+   so it reads as "unknown" rather than "100% left". */
+.quota-rings__fill--unknown {
+  stroke-opacity: 0.35;
 }
 
 /* The hover card's wrapper sits in the row like the rings it wraps. */

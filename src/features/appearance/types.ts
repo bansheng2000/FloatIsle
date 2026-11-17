@@ -3,6 +3,12 @@ export type TranslationTarget = "window" | "island";
 export type AppearanceMode = "classic" | "liquidGlass";
 export type IslandFont = "system" | "pixel";
 export type PageButtonStyle = "capsule" | "icon";
+/** (E1) Which palette the three windows use: the dark set, an independent light set, or the OS setting. */
+export type ColorScheme = "dark" | "light" | "system";
+/** (E1) Surface treatment. Classic is a solid fill; the other two are pure-CSS imitations, no real blur. */
+export type Texture = "classic" | "liquidGlass" | "frosted";
+/** (E1) A named appearance snapshot. `kind` lets colour and whole-island presets share one list. */
+export type AppearancePresetKind = "colors" | "appearance";
 /** Shape of the island's corners: CSS `corner-shape: squircle`, or a circular arc. */
 export type IslandCornerShape = "squircle" | "round";
 /** Which monitor the island sits on: the primary one, or it follows the pointer or the foreground window there. */
@@ -51,7 +57,17 @@ export type PageDot = "todo" | "music" | "clipboard" | "shelf" | "translation";
 export type IslandSettings = {
   topEdgeLayoutVersion: 1;
   appearanceMode: AppearanceMode;
+  /** (E1) Palette for all three windows. Kept separate from the legacy appearanceMode. */
+  colorScheme: ColorScheme;
+  /** (E1) Surface treatment; the primary style switch, appearanceMode stays for compatibility. */
+  texture: Texture;
   fontFamily: IslandFont;
+  /** (E1) Island text size in px, 12–20 (14 default). */
+  islandFontSize: number;
+  /** (E1) Explicit collapsed width in px (0 = derive from content, 280–360 when set). */
+  collapsedWidth: number;
+  /** (E1) Collapsed height as a percentage of the derived height (80–120, 100 default). */
+  collapsedHeight: number;
   pageButtonStyle: PageButtonStyle;
   glassIntensity: number;
   opacity: number;
@@ -109,6 +125,8 @@ export type IslandSettings = {
   /** Claude's or Codex's usage reaching this percent pops up once, and again when it resets; 0: never. */
   agentQuotaAlertPercent: number;
   taskTextColor: string;
+  /** (E1) Text colour on the expanded page, independent of icons and controls. null follows the theme. */
+  pageTextColor: string | null;
   pulseColor: string;
   pulseBrightness: number;
   islandBackgroundColor: string;

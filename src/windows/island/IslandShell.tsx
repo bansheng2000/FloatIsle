@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import type { AgentSession } from "../../features/agent-status/session";
 import type { QuotaAlert } from "../../features/agent-status/quotaAlerts";
 import type { AgentVisualState } from "../../features/agent-status/status";
-import type { AppearanceMode, CollapsedItem, CollapsedSlot, PageButtonStyle, PageDot } from "../../features/appearance/types";
+import type { AppearanceMode, CollapsedItem, CollapsedSlot, PageButtonStyle, PageDot, Texture } from "../../features/appearance/types";
 import type { MediaState } from "../../features/media/api";
 import { latestMessagePreview, type MessageSource } from "../../features/messages/messagePreview";
 import type { MailController } from "../../features/messages/mail/MailPanel";
@@ -33,6 +33,8 @@ type IslandShellProps = {
   /** The open page's height (unscaled); a change resizes the shape around the panel. */
   expandedHeight: number;
   appearanceMode: AppearanceMode;
+  /** (E1) ⑦ The chosen surface treatment, primary over the legacy appearanceMode. */
+  texture: Texture;
   nativeGlassState: NativeGlassState;
   isTucked: boolean;
   positionLocked: boolean;
@@ -95,6 +97,7 @@ export function IslandShell({
   page,
   expandedHeight,
   appearanceMode,
+  texture,
   nativeGlassState,
   isTucked,
   positionLocked,
@@ -157,6 +160,7 @@ export function IslandShell({
     `island--${mode}`,
     `island--${page}`,
     `island--appearance-${effectiveAppearanceMode}`,
+    `island--texture-${texture}`,
     isPreparing && !isExpanded ? "island--preparing" : "",
     isDetached ? "island--detached" : "island--docked",
     isTucked ? "island--tucked" : "",

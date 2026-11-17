@@ -291,6 +291,32 @@
   background: var(--color-white-a10);
 }
 
+/* (E1) ⑧ Capsule page buttons: draw the Agent button as a state-coloured pill. */
+.island__agent-button--capsule {
+  width: 30px;
+  height: 22px;
+  margin: -3px;
+  border: 1px solid var(--agent-pill-color);
+  background: color-mix(in srgb, var(--agent-pill-color) 22%, transparent);
+}
+
+.island__agent-button--capsule.island__agent-button--idle {
+  --agent-pill-color: var(--color-agent-idle);
+}
+
+.island__agent-button--capsule.island__agent-button--running {
+  --agent-pill-color: var(--color-agent-running);
+}
+
+.island__agent-button--capsule.island__agent-button--attention {
+  --agent-pill-color: var(--color-warning);
+}
+
+.island__agent-button--capsule:hover,
+.island__agent-button--capsule.island__agent-button--active {
+  background: color-mix(in srgb, var(--agent-pill-color) 40%, transparent);
+}
+
 .island__agent-button .island__agent-status-icon {
   transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1.25), color 160ms ease, filter 160ms ease;
 }

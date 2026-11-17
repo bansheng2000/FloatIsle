@@ -11,6 +11,24 @@ export type SettingsAppearanceText = {
   pageButtons: string;
   capsules: string;
   icons: string;
+  /** (E1) ⑤ Palette choice across all three windows. */
+  colorScheme: string;
+  schemeDark: string;
+  schemeLight: string;
+  schemeSystem: string;
+  /** (E1) ⑦ Surface treatment choice. */
+  texture: string;
+  textureFrosted: string;
+  /** (E1) ② Island text size and collapsed dimensions. */
+  fontSize: string;
+  collapsedWidth: string;
+  collapsedHeight: string;
+  /** (E1) ⑩ Whole-island appearance presets. */
+  presetsTitle: string;
+  presetSave: string;
+  presetNamePlaceholder: string;
+  presetEmpty: string;
+  presetDelete: string;
   /** The island preview at the top of the page: sample content and the two captions. */
   preview: {
     label: string;
@@ -59,6 +77,20 @@ export const zhCN: SettingsAppearanceText = {
   pageButtons: "页面按钮",
   capsules: "胶囊",
   icons: "图标",
+  colorScheme: "配色",
+  schemeDark: "深色",
+  schemeLight: "浅色",
+  schemeSystem: "跟随系统",
+  texture: "质感",
+  textureFrosted: "磨砂玻璃",
+  fontSize: "字号",
+  collapsedWidth: "收起宽度",
+  collapsedHeight: "收起高度",
+  presetsTitle: "外观预设",
+  presetSave: "保存当前外观",
+  presetNamePlaceholder: "预设名称",
+  presetEmpty: "还没有外观预设",
+  presetDelete: "删除预设",
   preview: {
     label: "按当前设置画出的岛屿",
     collapsed: "折叠",
@@ -104,6 +136,20 @@ export const en: SettingsAppearanceText = {
   pageButtons: "Page buttons",
   capsules: "Capsules",
   icons: "Icons",
+  colorScheme: "Colour scheme",
+  schemeDark: "Dark",
+  schemeLight: "Light",
+  schemeSystem: "Follow system",
+  texture: "Texture",
+  textureFrosted: "Frosted glass",
+  fontSize: "Text size",
+  collapsedWidth: "Collapsed width",
+  collapsedHeight: "Collapsed height",
+  presetsTitle: "Appearance presets",
+  presetSave: "Save current appearance",
+  presetNamePlaceholder: "Preset name",
+  presetEmpty: "No appearance presets yet",
+  presetDelete: "Delete preset",
   preview: {
     label: "The island with the current settings",
     collapsed: "Collapsed",

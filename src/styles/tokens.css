@@ -53,6 +53,11 @@
   --color-badge: #ff453a;
   --color-focus-ring: rgba(143, 216, 255, 0.88);
   --color-focus-ring-soft: rgba(143, 216, 255, 0.72);
+  /* (E1) Fixed identification colour per quota source. Kept as tokens so a light theme
+     can retune each one without touching the ring component. */
+  --quota-claude: #d97757;
+  --quota-codex: #4f8ff7;
+  --quota-dsh: #43b4a5;
 
   /* Radii */
   --radius-sm: 6px;
@@ -91,6 +96,51 @@
   --space-lg: 10px;
   --space-xl: 12px;
   --space-2xl: 14px;
+}
+
+/*
+ * (E1) ⑤ Light palette: an INDEPENDENT set, tuned for light surfaces rather than a white recolour.
+ * Applied on the document root (three windows) or on the island stage by main.tsx / IslandApp.
+ * The translucent "white-aXX" overlay tokens are redefined as dark overlays here, so every rule
+ * that already references them gains a light-theme contrast partner without per-rule branching.
+ */
+[data-color-scheme="light"] {
+  --color-text: #1b1b20;
+  --color-text-strong: rgba(24, 24, 30, 0.92);
+  --color-text-muted: rgba(24, 24, 30, 0.74);
+  --color-text-subtle: rgba(24, 24, 30, 0.62);
+  --color-page-text: #1b1b20;
+  --color-surface-dark: #f4f2ec;
+
+  --text-1: rgba(24, 24, 30, 0.96);
+  --text-2: rgba(24, 24, 30, 0.72);
+  /* 0.62 so --text-3 clears 4.5:1 on both light surfaces (measured 4.75 / 4.95). */
+  --text-3: rgba(24, 24, 30, 0.62);
+  --text-placeholder: rgba(24, 24, 30, 0.46);
+
+  --color-white-a04: rgba(0, 0, 0, 0.05);
+  --color-white-a06: rgba(0, 0, 0, 0.07);
+  --color-white-a08: rgba(0, 0, 0, 0.09);
+  --color-white-a09: rgba(0, 0, 0, 0.1);
+  --color-white-a10: rgba(0, 0, 0, 0.12);
+  --color-white-a12: rgba(0, 0, 0, 0.14);
+  --color-white-a16: rgba(0, 0, 0, 0.18);
+  --color-white-a18: rgba(0, 0, 0, 0.2);
+
+  --color-ink: #1f1b16;
+  --color-ink-muted: rgba(31, 27, 22, 0.58);
+
+  --color-accent: #0b6fa8;
+  --color-sky: #276788;
+  --color-success: #1c7a4d;
+  --color-danger: #a12b43;
+  --color-warning: #8a5a00;
+  --color-focus-ring: rgba(11, 111, 168, 0.9);
+  --color-focus-ring-soft: rgba(11, 111, 168, 0.72);
+  --color-badge: #c0283c;
+  --quota-claude: #b4532f;
+  --quota-codex: #2f6fd0;
+  --quota-dsh: #2b8a7b;
 }
 
 /* Where the browser draws superellipse corners, the continuous scale uses them. */

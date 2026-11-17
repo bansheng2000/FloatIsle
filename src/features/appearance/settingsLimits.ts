@@ -1,5 +1,16 @@
 // The ranges and choices island settings are kept within, and the fallbacks they rest on.
-import type { AgentSessionGroup, AgentSessionSort, CollapsedItem, CollapsedSlot, PageDot, TuckShape } from "./types";
+import type { AgentSessionGroup, AgentSessionSort, CollapsedItem, CollapsedSlot, ColorScheme, PageDot, Texture, TuckShape } from "./types";
+
+/** (E1) Themes across all three windows; the OS setting resolves to dark or light at draw time. */
+export const COLOR_SCHEMES: readonly ColorScheme[] = ["dark", "light", "system"];
+/** (E1) Surface treatments, all pure CSS with no real blur. */
+export const TEXTURES: readonly Texture[] = ["classic", "liquidGlass", "frosted"];
+/** (E1) Island text size, px. Kept conservative so fixed chrome heights still fit. */
+export const ISLAND_FONT_SIZE = { min: 12, max: 20, default: 14 } as const;
+/** (E1) Explicit collapsed width; 0 means derive it from the content as before. */
+export const COLLAPSED_WIDTH = { min: 280, max: 360, default: 0 } as const;
+/** (E1) Collapsed height as a percentage of the derived height. */
+export const COLLAPSED_HEIGHT = { min: 80, max: 120, default: 100 } as const;
 
 export const AGENT_SESSION_SORTS: readonly AgentSessionSort[] = ["status", "recent", "firstSeen"];
 export const AGENT_SESSION_GROUPS: readonly AgentSessionGroup[] = ["computer", "project", "none"];

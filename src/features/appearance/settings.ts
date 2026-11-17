@@ -27,7 +27,12 @@ export { DEFAULT_SETTINGS } from "./settingsDefaults.ts";
  */
 export const APPEARANCE_SETTING_KEYS = [
   "appearanceMode",
+  "colorScheme",
+  "texture",
   "fontFamily",
+  "islandFontSize",
+  "collapsedWidth",
+  "collapsedHeight",
   "pageButtonStyle",
   "glassIntensity",
   "opacity",
@@ -37,12 +42,23 @@ export const APPEARANCE_SETTING_KEYS = [
   "islandCornerShape",
   "maxPanelHeight",
   "taskTextColor",
+  "pageTextColor",
   "pulseColor",
   "pulseBrightness",
   "islandBackgroundColor",
   "todoBackgroundColor",
   "showTitle",
   "showCollapsedText",
+] as const satisfies readonly (keyof IslandSettings)[];
+
+/** (E1) The colour-only subset, for colour presets that must not change sizes or layout. */
+export const COLOR_SETTING_KEYS = [
+  "taskTextColor",
+  "pageTextColor",
+  "pulseColor",
+  "pulseBrightness",
+  "islandBackgroundColor",
+  "todoBackgroundColor",
 ] as const satisfies readonly (keyof IslandSettings)[];
 
 type AppearanceSettings = Pick<IslandSettings, (typeof APPEARANCE_SETTING_KEYS)[number]>;
@@ -53,6 +69,17 @@ export function withAppearanceFrom(settings: IslandSettings, source: IslandSetti
     APPEARANCE_SETTING_KEYS.map((key) => [key, source[key]]),
   ) as AppearanceSettings;
 
+  return { ...settings, ...appearance };
+}
+
+/** (E1) Apply a possibly-partial snapshot: only appearance keys actually present are copied. */
+export function applyAppearanceSnapshot(
+  settings: IslandSettings,
+  snapshot: Partial<IslandSettings>,
+): IslandSettings {
+  const appearance = Object.fromEntries(
+    APPEARANCE_SETTING_KEYS.filter((key) => snapshot[key] !== undefined).map((key) => [key, snapshot[key]]),
+  ) as Partial<AppearanceSettings>;
   return { ...settings, ...appearance };
 }
 

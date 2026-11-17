@@ -21,7 +21,12 @@
   -webkit-text-stroke: 0.3px currentColor;
 }
 
+/* (E1) Scale the island's reading text with the chosen size (14px baseline = ratio 1).
+   Fixed chrome (icon buttons, status dots, bar height) keeps its size so native hit geometry stays put. */
 .stage {
+  --island-font-size: 14px;
+  --island-font-ratio: 1;
+  --collapsed-height-pct: 1;
   --island-collapsed-scale-target: 1;
   --island-expanded-scale-target: 1;
   --collapsed-island-width: 340px;
@@ -35,6 +40,9 @@
      from the theme. A light background gets dark text and a dark one gets light text. The stage's
      inline style supplies the live value; this is the fallback for a stage without one. */
   --island-ink-rgb: 241, 240, 246;
+  /* (E1) ⑨ Expanded-page text colour; inline style overrides this when the user sets one.
+     Solid fallback so the panel's alpha variants compose to the original ink levels. */
+  --page-text-color: rgb(var(--island-ink-rgb));
   --text-1: rgba(var(--island-ink-rgb), 0.96);
   --text-2: rgba(var(--island-ink-rgb), 0.68);
   --text-3: rgba(var(--island-ink-rgb), 0.54);
@@ -105,6 +113,11 @@
   border-radius: var(--island-panel-radius, 10px);
   corner-shape: var(--island-corner-shape, round);
   border: 0;
+  /* (E1) ⑨ Only text follows pageTextColor; icons, checkboxes and progress bars keep their own colour. */
+  --text-1: color-mix(in srgb, var(--page-text-color) 96%, transparent);
+  --text-2: color-mix(in srgb, var(--page-text-color) 68%, transparent);
+  --text-3: color-mix(in srgb, var(--page-text-color) 54%, transparent);
+  --text-placeholder: color-mix(in srgb, var(--page-text-color) 42%, transparent);
 }
 
 .island--appearance-liquidGlass .editor-panel {

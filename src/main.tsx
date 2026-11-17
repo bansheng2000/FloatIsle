@@ -10,8 +10,29 @@ import { I18nProvider } from "./i18n";
 import { trackIslandTopEdge } from "./windows/island/topEdge";
 import { installSameWindowStorageEvents } from "./lib/sameWindowStorageEvents";
 import { bootTodoFile } from "./features/todos/fileSync";
+import { loadSettings } from "./features/appearance/storage";
+import { resolveColorScheme } from "./features/appearance/colorScheme";
 
 const windowKind = new URLSearchParams(window.location.search).get("window");
+
+/**
+ * (E1) ⑤ The palette and texture live on the document root so the island, settings and translation
+ * windows all follow one choice. The island stage repeats them for its own CSS layers; here the
+ * root attributes drive the shared tokens. A "system" choice tracks the OS at draw time.
+ */
+function applyWindowTheme() {
+  const settings = loadSettings();
+  const lightQuery = window.matchMedia("(prefers-color-scheme: light)");
+  const paint = (prefersLight: boolean) => {
+    document.documentElement.dataset.colorScheme = resolveColorScheme(settings.colorScheme, prefersLight);
+    document.documentElement.dataset.texture = settings.texture;
+  };
+  paint(lightQuery.matches);
+  lightQuery.addEventListener("change", (event) => {
+    if (settings.colorScheme === "system") paint(event.matches);
+  });
+}
+applyWindowTheme();
 
 if (windowKind === null) {
   trackIslandTopEdge();

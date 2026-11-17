@@ -1,10 +1,11 @@
 import type { TodoItem } from "../../features/todos/types";
 import type { AgentSessionView } from "../../features/appearance/types";
+import { COLLAPSED_WIDTH } from "../../features/appearance/settingsLimits.ts";
 import { clamp } from "../../utils/number.ts";
 import { getCollapsedTextUnits, getTodoTitleLineCount } from "../../utils/text.ts";
 
-export const MIN_COLLAPSED_ISLAND_WIDTH = 280;
-export const MAX_COLLAPSED_ISLAND_WIDTH = 340;
+export const MIN_COLLAPSED_ISLAND_WIDTH = COLLAPSED_WIDTH.min;
+export const MAX_COLLAPSED_ISLAND_WIDTH = COLLAPSED_WIDTH.max;
 export const MIN_COLLAPSED_TEXT_UNITS = 2;
 export const MAX_COLLAPSED_TEXT_UNITS = 12;
 // The todo page with two rows: the island's padding, header and gap (86), the notebook's padding

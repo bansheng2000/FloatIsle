@@ -102,7 +102,16 @@ export function IslandHeader({
         {features.agents ? (
           // The status light doubles as the way into the Agent page.
           <button
-            className={`island__agent-button${page === "agents" ? " island__agent-button--active" : ""}`}
+            className={[
+              "island__agent-button",
+              page === "agents" ? "island__agent-button--active" : "",
+              // (E1) ⑧ With capsule page buttons, the Agent button is a state-coloured pill too.
+              pageButtonStyle === "capsule"
+                ? `island__agent-button--capsule island__agent-button--${agentVisualState}`
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             type="button"
             data-tip={t.island.agentPage}
             aria-label={`${agentStatusLabel} · ${t.agent.sessions.open}`}
