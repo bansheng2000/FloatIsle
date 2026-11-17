@@ -69,7 +69,7 @@ export function useMail(canPreview: boolean) {
 
   const snapshot = mailboxes.find((mailbox) => mailbox.email === selectedEmail) ?? mailboxes[0] ?? EMPTY_SNAPSHOT;
   const email = snapshot.email;
-  const { setEnabled: setMailboxEnabled, refresh: refreshMailbox } = accounts;
+  const { setEnabled: setMailboxEnabled, refresh: refreshMailbox, markRead } = accounts;
 
   const setEnabled = useCallback((enabled: boolean) =>
     email ? setMailboxEnabled(email, enabled) : Promise.resolve(false), [email, setMailboxEnabled]);
@@ -93,12 +93,23 @@ export function useMail(canPreview: boolean) {
     }
   }, [clearPreview, email, readerAccount, setActionError, t]);
 
+  /** Marks every unread message of the shown mailbox read, one server call at a time. */
+  const markAllRead = useCallback(async () => {
+    if (!email) return false;
+    const unread = snapshot.items.filter((item) => item.unread);
+    let ok = true;
+    for (const item of unread) {
+      if (!await markRead(email, item.id)) ok = false;
+    }
+    return ok;
+  }, [email, markRead, snapshot.items]);
+
   const previewBox = previewWindow ? mailboxes.find((mailbox) => mailbox.email === previewWindow.email) : undefined;
   const preview = canPreview && previewWindow && previewBox?.enabled && previewBox.status === "connected"
     ? previewBox.items.find((item) => item.id === previewWindow.id && item.unread) ?? null : null;
 
   return {
-    ...accounts, ...reader, snapshot, setEnabled, refresh, selectMailbox, readMail, openMail,
+    ...accounts, ...reader, snapshot, setEnabled, refresh, selectMailbox, readMail, openMail, markAllRead,
     /** Reading a mail: the island gives the panel more height. */
     wantsTallPanel: Boolean(reader.selectedMail),
     preview, previewAccount: preview ? previewWindow?.email ?? null : null,

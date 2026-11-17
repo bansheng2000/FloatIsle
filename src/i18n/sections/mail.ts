@@ -10,6 +10,7 @@ export type MailText = {
   back: string;
   openWeb: string;
   markRead: string;
+  markAllRead: string;
   attachments: (count: number) => string;
   saveAttachment: string;
   attachmentSaved: string;
@@ -80,6 +81,7 @@ export const zhCN: MailText = {
   back: "返回列表",
   openWeb: "在网页打开",
   markRead: "标为已读",
+  markAllRead: "全部标为已读",
   attachments: (count: number) => `附件（${count}）`,
   saveAttachment: "保存",
   attachmentSaved: "已保存",
@@ -150,6 +152,7 @@ export const en: MailText = {
   back: "Back to list",
   openWeb: "Open in browser",
   markRead: "Mark as read",
+  markAllRead: "Mark all as read",
   attachments: (count: number) => `Attachments (${count})`,
   saveAttachment: "Save",
   attachmentSaved: "Saved",

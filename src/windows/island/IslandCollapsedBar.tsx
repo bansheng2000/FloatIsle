@@ -20,7 +20,7 @@ import type { WeChatRemindersController } from "../../features/messages/wechat/W
 import { useTranslation } from "../../i18n";
 import { TodoCountdown } from "../../features/todos/TodoCountdown";
 import type { TodoTimer } from "../../features/todos/timer";
-import { collapsedOpenPage } from "./collapsedOpenPage";
+import { collapsedClickTarget, type CollapsedClickZone } from "./collapsedOpenPage";
 import type { IslandPage } from "./types";
 import { useWindowDragGesture } from "./useWindowDragGesture";
 import "./IslandCollapsedBar.css";
@@ -109,7 +109,8 @@ export function IslandCollapsedBar({
     `island__pulse--agent-${agentVisualState}`,
   ].join(" ");
   const shownAgent = collapsedItem === "agent" ? agentSession : null;
-  const openTarget = collapsedOpenPage(collapsedItem, Boolean(shownAgent), page);
+  const openZone = (zone: CollapsedClickZone) =>
+    onOpenPage(collapsedClickTarget(zone, page, Boolean(shownAgent)));
 
   // The text and the status icons, placed in the order Settings → Appearance arranged.
   const slots: Record<CollapsedSlot, ReactNode> = {
@@ -142,7 +143,7 @@ export function IslandCollapsedBar({
                   if (opened === false) onOpenMessages(source);
                 });
               } else {
-                onOpenPage(openTarget);
+                openZone("text");
               }
             }
           }}
@@ -198,7 +199,7 @@ export function IslandCollapsedBar({
       </button>
       ),
     shelf: shelfCount !== null && shelfCount > 0 && (
-      <button className="island-shelf-count" type="button" aria-label={t.island.shelfCount(shelfCount)} onClick={() => onOpenPage("shelf")}>
+      <button className="island-shelf-count" type="button" aria-label={t.island.shelfCount(shelfCount)} onClick={() => openZone("shelf")}>
         <Inbox size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
         <span>{shelfCount}</span>
       </button>
@@ -209,7 +210,7 @@ export function IslandCollapsedBar({
         isPlaying={isMusicPlaying}
         audioPeak={mediaState.audioPeak}
         label={t.island.openMusic}
-        onClick={() => onOpenPage("music")}
+        onClick={() => openZone("music")}
       />
       ),
     agents: agentSessionCount === null ? (
@@ -229,7 +230,7 @@ export function IslandCollapsedBar({
         aria-label={t.agent.sessions.activeCount(agentSessionCount)}
         onClick={(event) => {
           event.stopPropagation();
-          onOpenPage("agents");
+          openZone("agent");
         }}
       >
         {agentSessionCount}
@@ -244,7 +245,7 @@ export function IslandCollapsedBar({
       inert={isExpanded}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
-          onOpenPage(openTarget);
+          openZone("text");
         }
       }}
     >

@@ -9,9 +9,10 @@
 | `BetterNCMII.dll`（x64）、`BetterNCMII86.dll`（x86） | BetterNCM（现名 chromatic） | 1.3.4 | GPL-3.0 | https://github.com/std-microblock/chromatic/tree/1.3.4 |
 | `InfLink-rs.plugin` | InfLink-rs | v3.4.0 | GPL-3.0 | https://github.com/apoint123/inflink-rs/tree/v3.4.0 |
 
-许可证全文见 `LICENSE-GPL-3.0.txt`。
+源代码书面要约（GPLv3 §6b，含校验值与确切 tag）见 `docs/SOURCE-OFFER.md`；许可证全文见 `LICENSE-GPL-3.0.txt`。
 
 These files are shipped unmodified from the upstream releases above and are verified against the
 pinned sizes and SHA-256 hashes before installation. They are distributed alongside the island
-(mere aggregation); the island does not link them. Source code is available at the links above;
+(mere aggregation); the island does not link them. The written source offer (GPLv3 §6b, with
+hashes and exact tags) is in `docs/SOURCE-OFFER.md`; source code is available at the links above;
 the full license text is in `LICENSE-GPL-3.0.txt`.

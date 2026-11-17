@@ -45,3 +45,55 @@
   color: var(--color-text);
   opacity: 0.8;
 }
+
+/* Archive action sits just before the drag handle of each player row. */
+.music-sources__archive,
+.music-sources__restore {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--color-text-subtle);
+  background: transparent;
+  border: 0;
+  border-radius: var(--corner-sm);
+  cursor: pointer;
+}
+
+.music-sources__archive:hover,
+.music-sources__restore:hover {
+  color: var(--color-text);
+  background: var(--color-white-a08);
+}
+
+.music-sources__archived {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-white-a08);
+}
+
+.music-sources__archived-title {
+  margin: 0 0 4px;
+  padding: 0 14px;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+
+.music-sources__archived-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.music-sources__archived-row {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px 6px 14px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}

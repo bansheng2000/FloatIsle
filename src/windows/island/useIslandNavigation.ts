@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { readLastPage, writeLastPage } from "./lastPage";
 import type { IslandMode, IslandPage } from "./types";
 
 /** Collapsed / expanded / tucked mode and the open page of the island. */
@@ -10,8 +11,14 @@ export function useIslandNavigation() {
   const [isPeekTuck, setIsPeekTuck] = useState(false);
   // How long a peeking island waits after the cursor leaves; null keeps the minimize default.
   const [peekRetractDelayMs, setPeekRetractDelayMs] = useState<number | null>(null);
-  const [page, setPage] = useState<IslandPage>("todo");
+  // Restored from storage; a page whose module is off is corrected by useIslandFeatures.
+  const [page, setPage] = useState<IslandPage>(readLastPage);
   const clipboardShortcutToggleAt = useRef(0);
+
+  // Remember the page the island is showing so the next launch reopens it.
+  useEffect(() => {
+    writeLastPage(page);
+  }, [page]);
 
   const setIslandMode = useCallback((nextMode: IslandMode) => {
     setMode(nextMode);

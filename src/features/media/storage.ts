@@ -72,3 +72,44 @@ export function saveMusicSourcePriority(priority: KnownMediaSource[]) {
     // Ignore storage write failures (private mode, quota, etc.).
   }
 }
+
+/** Players the user archived: they stay out of the order until restored. */
+export const MUSIC_SOURCE_ARCHIVE_STORAGE_KEY = "focusd-island-music-archived";
+export const MUSIC_SOURCE_ARCHIVE_SAVED_EVENT = "focusd-island-music-archived-saved";
+
+export function loadArchivedMusicSources(): KnownMediaSource[] {
+  try {
+    const stored = window.localStorage.getItem(MUSIC_SOURCE_ARCHIVE_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as Partial<KnownMediaSource>[];
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
+    return parsed
+      .filter(
+        (source): source is KnownMediaSource =>
+          typeof source?.id === "string" &&
+          source.id.length > 0 &&
+          typeof source.label === "string",
+      )
+      .filter((source) => {
+        if (seen.has(source.id)) return false;
+        seen.add(source.id);
+        return true;
+      })
+      .map((source) => ({ id: source.id, label: source.label }));
+  } catch {
+    return [];
+  }
+}
+
+export function saveArchivedMusicSources(archived: KnownMediaSource[]) {
+  try {
+    window.localStorage.setItem(
+      MUSIC_SOURCE_ARCHIVE_STORAGE_KEY,
+      JSON.stringify(archived),
+    );
+    window.dispatchEvent(new Event(MUSIC_SOURCE_ARCHIVE_SAVED_EVENT));
+  } catch {
+    // Ignore storage write failures (private mode, quota, etc.).
+  }
+}

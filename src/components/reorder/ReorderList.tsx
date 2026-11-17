@@ -10,6 +10,8 @@ export type ReorderRow<T extends string> = {
   hint?: string;
   /** Shown before the name, such as the item's icon. */
   icon?: ReactNode;
+  /** Optional control shown before the drag handle, e.g. an archive action. */
+  action?: ReactNode;
 };
 
 /**
@@ -51,6 +53,7 @@ export function ReorderList<T extends string>({
             <span className="reorder-list__name">{row.name}</span>
             {row.hint && <span className="reorder-list__hint">{row.hint}</span>}
           </span>
+          {row.action}
           <button
             className="reorder-list__handle"
             type="button"

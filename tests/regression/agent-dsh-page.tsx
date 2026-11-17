@@ -14,6 +14,11 @@ const now = Date.now();
 const focusCalls: Record<string, unknown>[] = [];
 mockIPC((command, payload) => {
   if (command === "focus_agent_window") { focusCalls.push((payload ?? {}) as Record<string, unknown>); return true; }
+  // A DSH click first asks the bridge to switch pages; with no browser page in this fixture the
+  // switch reports no delivery, so the click falls through to the window-focus command below.
+  if (command === "jump_dsh_session") {
+    return { delivered: false, reason: "no-page", status: 200, body: "" };
+  }
   if (command === "list_agent_effort_labels") return {};
   return null;
 });

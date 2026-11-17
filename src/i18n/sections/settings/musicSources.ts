@@ -8,6 +8,9 @@ export type SettingsMusicSourcesText = {
   open: string;
   notOpen: string;
   moveLabel: (name: string) => string;
+  archive: (name: string) => string;
+  archivedTitle: string;
+  restore: (name: string) => string;
 };
 
 export const zhCN: SettingsMusicSourcesText = {
@@ -19,6 +22,9 @@ export const zhCN: SettingsMusicSourcesText = {
   open: "已打开",
   notOpen: "没有打开",
   moveLabel: (name) => `调整"${name}"的顺序，可以拖动或按上下方向键`,
+  archive: (name) => `归档"${name}"，归档后岛不再跟随它`,
+  archivedTitle: "已归档的播放器",
+  restore: (name) => `恢复"${name}"到播放器顺序末尾`,
 };
 
 export const en: SettingsMusicSourcesText = {
@@ -30,4 +36,7 @@ export const en: SettingsMusicSourcesText = {
   open: "Open",
   notOpen: "Not open",
   moveLabel: (name) => `Reorder "${name}": drag, or press the up and down arrow keys`,
+  archive: (name) => `Archive "${name}": the island stops following it`,
+  archivedTitle: "Archived players",
+  restore: (name) => `Restore "${name}" to the end of the order`,
 };

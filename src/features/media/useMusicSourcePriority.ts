@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MediaState } from "./api";
-import { MUSIC_SOURCE_PRIORITY_SAVED_EVENT, MUSIC_SOURCE_PRIORITY_STORAGE_KEY, loadMusicSourcePriority, saveMusicSourcePriority, type KnownMediaSource } from "./storage";
+import { appendSessions, archiveMusicSource, restoreMusicSource } from "./musicSourceArchive";
+import {
+  MUSIC_SOURCE_ARCHIVE_SAVED_EVENT,
+  MUSIC_SOURCE_ARCHIVE_STORAGE_KEY,
+  MUSIC_SOURCE_PRIORITY_SAVED_EVENT,
+  MUSIC_SOURCE_PRIORITY_STORAGE_KEY,
+  loadArchivedMusicSources,
+  loadMusicSourcePriority,
+  saveArchivedMusicSources,
+  saveMusicSourcePriority,
+  type KnownMediaSource,
+} from "./storage";
 
 /** The user's preferred media source order; newly seen sessions are appended and the order is persisted. */
 export function useMusicSourcePriority(sessions: MediaState["sessions"]) {
   const [musicSourcePriority, setMusicSourcePriority] = useState<
     KnownMediaSource[]
   >(loadMusicSourcePriority);
+  const [archivedSources, setArchivedSources] = useState<KnownMediaSource[]>(
+    loadArchivedMusicSources,
+  );
 
   const reorderMusicSource = useCallback(
     (sourceId: string, targetId: string) => {
@@ -54,24 +68,35 @@ export function useMusicSourcePriority(sessions: MediaState["sessions"]) {
     );
   }, []);
 
+  /** Archive a player: it leaves the order and the island stops following it. */
+  const archiveSource = useCallback((sourceId: string) => {
+    const next = archiveMusicSource(musicSourcePriority, archivedSources, sourceId);
+    if (next.priority === musicSourcePriority && next.archived === archivedSources) return;
+    setMusicSourcePriority(next.priority);
+    setArchivedSources(next.archived);
+  }, [musicSourcePriority, archivedSources]);
+
+  /** Restore an archived player to the end of the order. */
+  const restoreSource = useCallback((sourceId: string) => {
+    const next = restoreMusicSource(musicSourcePriority, archivedSources, sourceId);
+    setMusicSourcePriority(next.priority);
+    setArchivedSources(next.archived);
+  }, [musicSourcePriority, archivedSources]);
+
   useEffect(() => {
     if (sessions.length === 0) {
       return;
     }
-
-    setMusicSourcePriority((current) => {
-      const known = new Set(current.map((source) => source.id));
-      const additions = sessions
-        .filter((session) => !known.has(session.id))
-        .map((session) => ({ id: session.id, label: session.label }));
-
-      return additions.length > 0 ? [...current, ...additions] : current;
-    });
-  }, [sessions]);
+    setMusicSourcePriority((current) => appendSessions(current, archivedSources, sessions));
+  }, [sessions, archivedSources]);
 
   useEffect(() => {
     saveMusicSourcePriority(musicSourcePriority);
   }, [musicSourcePriority]);
+
+  useEffect(() => {
+    saveArchivedMusicSources(archivedSources);
+  }, [archivedSources]);
 
   // The island and Settings > Music both edit the order, in two windows or (Settings inside the
   // island) in one. A saved order that matches this copy changes nothing, so the two copies do
@@ -80,17 +105,34 @@ export function useMusicSourcePriority(sessions: MediaState["sessions"]) {
     const sync = () => {
       const stored = loadMusicSourcePriority();
       setMusicSourcePriority((current) => (JSON.stringify(current) === JSON.stringify(stored) ? current : stored));
+      const storedArchive = loadArchivedMusicSources();
+      setArchivedSources((current) => (JSON.stringify(current) === JSON.stringify(storedArchive) ? current : storedArchive));
     };
     const syncFromOtherWindow = (event: StorageEvent) => {
-      if (event.key === MUSIC_SOURCE_PRIORITY_STORAGE_KEY) sync();
+      if (
+        event.key === MUSIC_SOURCE_PRIORITY_STORAGE_KEY ||
+        event.key === MUSIC_SOURCE_ARCHIVE_STORAGE_KEY
+      ) {
+        sync();
+      }
     };
     window.addEventListener("storage", syncFromOtherWindow);
     window.addEventListener(MUSIC_SOURCE_PRIORITY_SAVED_EVENT, sync);
+    window.addEventListener(MUSIC_SOURCE_ARCHIVE_SAVED_EVENT, sync);
     return () => {
       window.removeEventListener("storage", syncFromOtherWindow);
       window.removeEventListener(MUSIC_SOURCE_PRIORITY_SAVED_EVENT, sync);
+      window.removeEventListener(MUSIC_SOURCE_ARCHIVE_SAVED_EVENT, sync);
     };
   }, []);
 
-  return { musicSourcePriority, reorderMusicSource, removeMusicSource, setMusicSourceOrder };
+  return {
+    musicSourcePriority,
+    archivedSources,
+    reorderMusicSource,
+    removeMusicSource,
+    setMusicSourceOrder,
+    archiveSource,
+    restoreSource,
+  };
 }

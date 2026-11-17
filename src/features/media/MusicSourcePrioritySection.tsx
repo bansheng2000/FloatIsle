@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Info } from "lucide-react";
+import { Archive, Info, RotateCcw } from "lucide-react";
 import { ReorderList } from "../../components/reorder/ReorderList";
 import { SettingsGroup } from "../../components/settings/SettingsGroup";
 import { useTranslation } from "../../i18n";
@@ -43,7 +43,13 @@ function useLiveMediaSessions() {
 export function MusicSourcePrioritySection() {
   const text = useTranslation().settings.musicSources;
   const live = useLiveMediaSessions();
-  const { musicSourcePriority, setMusicSourceOrder } = useMusicSourcePriority(live);
+  const {
+    musicSourcePriority,
+    archivedSources,
+    setMusicSourceOrder,
+    archiveSource,
+    restoreSource,
+  } = useMusicSourcePriority(live);
 
   return (
     <SettingsGroup
@@ -70,11 +76,41 @@ export function MusicSourcePrioritySection() {
               name: source.label,
               hint: text[state],
               icon: <span className={`music-sources__dot music-sources__dot--${state}`} aria-hidden="true" />,
+              action: (
+                <button
+                  className="icon-button music-sources__archive"
+                  type="button"
+                  aria-label={text.archive(source.label)}
+                  onClick={() => archiveSource(source.id)}
+                >
+                  <Archive size={15} strokeWidth={1.7} aria-hidden="true" />
+                </button>
+              ),
             };
           })}
           onReorder={setMusicSourceOrder}
           moveLabel={text.moveLabel}
         />
+      )}
+      {archivedSources.length > 0 && (
+        <div className="music-sources__archived">
+          <p className="music-sources__archived-title">{text.archivedTitle}</p>
+          <ul className="music-sources__archived-list">
+            {archivedSources.map((source) => (
+              <li key={source.id} className="music-sources__archived-row">
+                <span>{source.label}</span>
+                <button
+                  className="icon-button music-sources__restore"
+                  type="button"
+                  aria-label={text.restore(source.label)}
+                  onClick={() => restoreSource(source.id)}
+                >
+                  <RotateCcw size={15} strokeWidth={1.7} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </SettingsGroup>
   );
