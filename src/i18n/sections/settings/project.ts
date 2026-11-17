@@ -30,7 +30,7 @@ export type SettingsProjectText = {
 export const zhCN: SettingsProjectText = {
   title: "关于 FloatIsle",
   appName: "FloatIsle",
-  versionChip: (version) => `v${version}`,
+  versionChip: (version) => version,
   description: "屏幕顶部的 AI 与开发控制台：DSH、Claude Code、Codex 的会话状态与额度用量，外加待办、剪贴板、音乐和翻译。数据全部本地读取，不上传。",
   repository: "GitHub",
   repositoryHint: "源码、更新记录与问题反馈",
@@ -54,7 +54,7 @@ export const zhCN: SettingsProjectText = {
 export const en: SettingsProjectText = {
   title: "About the island",
   appName: "FloatIsle",
-  versionChip: (version) => `v${version}`,
+  versionChip: (version) => version,
   description: "The AI and dev console at the top of the screen: DSH, Claude Code and Codex sessions with quota and spend, next to todos, clipboard, music and translation. Everything is read locally; nothing is uploaded.",
   repository: "GitHub",
   repositoryHint: "Source, release notes and issue reports",

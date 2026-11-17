@@ -3,6 +3,7 @@ import { SettingsGroup } from "../../components/settings/SettingsGroup";
 import { SettingsLinkButton } from "../../components/settings/SettingsLinkButton";
 import { useLocale, useTranslation } from "../../i18n";
 import { buildChangelog, inlineParts } from "./changelogParse";
+import { versionLabel } from "./versionLabel";
 import "./ChangelogSection.css";
 
 // 构建时把每个版本的发布说明原文打进前端：发布说明就是更新日志，不需要另写一份。
@@ -29,8 +30,8 @@ export function ChangelogSection() {
       </SettingsLinkButton>
     ) : undefined}>
       {shown.map((entry) => (
-        <section key={entry.version} className="changelog-entry" aria-label={`v${entry.version}`}>
-          <h3 className="changelog-entry__version">v{entry.version}</h3>
+        <section key={entry.version} className="changelog-entry" aria-label={versionLabel(entry.version)}>
+          <h3 className="changelog-entry__version">{versionLabel(entry.version)}</h3>
           <ul className="changelog-entry__list">
             {entry.items.map((item, index) => (
               <li key={index} className={`changelog-entry__item changelog-entry__item--depth-${item.depth}`}><Inline text={item.text} /></li>

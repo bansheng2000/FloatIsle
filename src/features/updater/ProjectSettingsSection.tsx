@@ -6,6 +6,7 @@ import markUrl from "../../../src-tauri/icons/mark.svg";
 import { ProjectLink } from "./ProjectLink";
 import { PROJECT_REPO_URL } from "./projectLinks";
 import { getUpdateState, subscribeToUpdate } from "./updaterController";
+import { versionLabel } from "./versionLabel";
 import "./ProjectSettingsSection.css";
 
 /** Settings → About, first: the island's mark, name, version and what it does. */
@@ -20,7 +21,7 @@ export function ProjectIdentitySection() {
         <div className="about-identity__body">
           <div className="about-identity__heading">
             <p className="about-identity__name">{t.settings.project.appName}</p>
-            {version && <span className="about-identity__version">{t.settings.project.versionChip(version)}</span>}
+            {version && <span className="about-identity__version">{t.settings.project.versionChip(versionLabel(version))}</span>}
           </div>
           <p className="about-identity__description">{t.settings.project.description}</p>
         </div>
