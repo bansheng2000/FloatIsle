@@ -1266,7 +1266,7 @@ dependencies = [
 
 [[package]]
 name = "floatisle"
-version = "3.0.8"
+version = "261117.8.9"
 dependencies = [
  "arboard",
  "base64 0.22.1",
