@@ -2,7 +2,7 @@ use tauri::PhysicalPosition;
 
 use super::geometry::*;
 use super::glass::parse_hex_color;
-use super::passthrough::point_in_notch;
+use super::passthrough::{point_in_notch, tucked_hot_zone_contains};
 use super::state::*;
 
 fn state(mode: IslandMode, scale: f64, expanded_height: f64) -> IslandWindowState {
@@ -333,4 +333,44 @@ fn the_island_follows_only_when_asked_and_only_while_collapsed() {
         )),
         "an open panel stays under the pointer"
     );
+}
+
+#[test]
+fn tuck_shape_parses_with_a_thread_fallback() {
+    assert_eq!(TuckShape::from_value("thread"), TuckShape::Thread);
+    assert_eq!(TuckShape::from_value("hidden"), TuckShape::Hidden);
+    assert_eq!(TuckShape::from_value("edge"), TuckShape::Edge);
+    assert_eq!(TuckShape::from_value("nonsense"), TuckShape::Thread);
+    assert_eq!(IslandWindowState::default().tuck_shape, TuckShape::Thread);
+}
+
+#[test]
+fn each_tuck_shape_holds_a_distinct_visible_strip() {
+    let thread = tucked_visible_height(TuckShape::Thread);
+    let hidden = tucked_visible_height(TuckShape::Hidden);
+    let edge = tucked_visible_height(TuckShape::Edge);
+    assert_eq!(hidden, 0.0);
+    assert!(thread > hidden && thread < edge, "thread between hidden and edge");
+    // A thinner strip pushes the window further up, never down: offsets stay monotonic.
+    let offset_hidden = tucked_top_offset(TuckShape::Hidden, 0.89, 1.0);
+    let offset_thread = tucked_top_offset(TuckShape::Thread, 0.89, 1.0);
+    let offset_edge = tucked_top_offset(TuckShape::Edge, 0.89, 1.0);
+    assert!(offset_hidden < offset_thread, "hidden sits higher than thread");
+    assert!(offset_thread < offset_edge, "thread sits higher than edge");
+    assert!(offset_edge < 0, "even the sliver leaves part of the island above the work area");
+}
+
+#[test]
+fn hidden_tuck_still_exposes_a_top_edge_wake_band() {
+    // Every shape's wake band is at least as tall as the minimum, so the fully hidden
+    // island can still be woken by entering the top edge — not by hitting a visible pixel.
+    for shape in [TuckShape::Thread, TuckShape::Hidden, TuckShape::Edge] {
+        assert!(tuck_hot_zone_height(shape) >= TUCK_HOT_ZONE_MIN_HEIGHT);
+    }
+    // The hidden band starts at the work area and covers the top-edge strip.
+    let hidden_top = tucked_work_area_local_y(TuckShape::Hidden, 0.89);
+    let hidden_band = tuck_hot_zone_height(TuckShape::Hidden);
+    assert!(tucked_hot_zone_contains(10.0, hidden_top + 1.0, 0.0, 100.0, hidden_top, hidden_band));
+    assert!(!tucked_hot_zone_contains(10.0, hidden_top + hidden_band + 5.0, 0.0, 100.0, hidden_top, hidden_band));
+    assert!(!tucked_hot_zone_contains(-5.0, hidden_top + 1.0, 0.0, 100.0, hidden_top, hidden_band));
 }

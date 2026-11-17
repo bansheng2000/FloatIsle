@@ -10,7 +10,7 @@ use std::{
 };
 use tauri::{LogicalSize, Monitor, PhysicalPosition, Position, Size, WebviewWindow};
 
-use super::state::{IslandPosition, IslandWindowState, MonitorFollow};
+use super::state::{IslandPosition, IslandWindowState, MonitorFollow, TuckShape};
 
 pub(super) const STAGE_WINDOW_WIDTH: f64 = 820.0;
 pub(super) const STAGE_WINDOW_HEIGHT: f64 = 460.0;
@@ -33,7 +33,15 @@ pub(super) const EXPANDED_RADIUS: f64 = 30.0;
 pub(super) const MIN_CORNER_RADIUS: f64 = 16.0;
 pub(super) const MAX_CORNER_RADIUS: f64 = 48.0;
 pub(super) const STAGE_WINDOW_PADDING_Y: f64 = 24.0;
-pub(super) const TUCKED_VISIBLE_EDGE_HEIGHT: f64 = 10.0;
+/// How many logical pixels of the island stay visible at the top edge for each tuck shape:
+/// a thin line, nothing at all, or a small sliver. `edge` keeps the original reveal height.
+pub(super) const TUCKED_THREAD_HEIGHT: f64 = 3.0;
+pub(super) const TUCKED_HIDDEN_HEIGHT: f64 = 0.0;
+pub(super) const TUCKED_EDGE_HEIGHT: f64 = 10.0;
+/// Minimum height, in logical pixels, of the top-edge band that wakes a tucked island.
+/// It is wider than the visible strip so every shape — including the fully hidden one —
+/// has a usable hot zone the cursor can enter without aiming at a visible pixel.
+pub(super) const TUCK_HOT_ZONE_MIN_HEIGHT: f64 = 20.0;
 pub(super) const POSITION_ANIMATION_DURATION: Duration = Duration::from_millis(320);
 
 pub(super) static POSITION_ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -95,10 +103,7 @@ pub(crate) fn apply_stage_geometry(
     let monitor_size = monitor.size();
     let physical_width = (STAGE_WINDOW_WIDTH * scale).round() as i32;
     let physical_top_offset = (state.margin_y * scale).round() as i32;
-    let tucked_top_offset =
-        -((COLLAPSED_ISLAND_HEIGHT * state.collapsed_scale - TUCKED_VISIBLE_EDGE_HEIGHT).max(0.0)
-            * scale)
-            .round() as i32;
+    let tucked_top_offset = tucked_top_offset(state.tuck_shape, state.collapsed_scale, scale);
     let top_inset = work_area_top_inset(monitor_position.y, monitor.work_area().position.y);
     let centered_x = monitor_position.x + (monitor_size.width as i32 - physical_width) / 2;
     let normal_y = monitor_position.y + top_inset + physical_top_offset;
@@ -186,6 +191,35 @@ fn resize_stage(window: &WebviewWindow, stage_size: LogicalSize<f64>) -> Result<
         }
     });
     Ok(())
+}
+
+/// How many logical pixels of the island remain visible at the top edge for a tuck shape.
+pub(super) fn tucked_visible_height(shape: TuckShape) -> f64 {
+    match shape {
+        TuckShape::Thread => TUCKED_THREAD_HEIGHT,
+        TuckShape::Hidden => TUCKED_HIDDEN_HEIGHT,
+        TuckShape::Edge => TUCKED_EDGE_HEIGHT,
+    }
+}
+
+/// Y offset that hides all but `visible_height` of the collapsed island above the work area.
+/// The top edge stays flush: a smaller visible height pushes the window further up, never down.
+pub(super) fn tucked_top_offset(shape: TuckShape, collapsed_scale: f64, scale: f64) -> i32 {
+    let visible = tucked_visible_height(shape);
+    -((COLLAPSED_ISLAND_HEIGHT * collapsed_scale - visible).max(0.0) * scale).round() as i32
+}
+
+/// Logical height of the top-edge band that wakes a tucked island. It never shrinks below
+/// `TUCK_HOT_ZONE_MIN_HEIGHT`, so even the fully hidden shape is woken by moving the cursor to
+/// the top of the screen — no visible pixel to aim at.
+pub(super) fn tuck_hot_zone_height(shape: TuckShape) -> f64 {
+    tucked_visible_height(shape).max(TUCK_HOT_ZONE_MIN_HEIGHT)
+}
+
+/// Where the work-area top lies in local stage coordinates while tucked, i.e. how far the
+/// window was pushed up. The wake band starts here and runs down the screen.
+pub(super) fn tucked_work_area_local_y(shape: TuckShape, collapsed_scale: f64) -> f64 {
+    (COLLAPSED_ISLAND_HEIGHT * collapsed_scale - tucked_visible_height(shape)).max(0.0)
 }
 
 pub(super) fn interpolate_stage_position(

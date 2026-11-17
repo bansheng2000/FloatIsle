@@ -97,6 +97,28 @@ impl CornerShape {
     }
 }
 
+/// Shape the island holds at the top edge once tucked (the setting offers three choices).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TuckShape {
+    /// A thin line flush with the screen's top edge.
+    Thread,
+    /// Fully slid away; nothing of the island is visible.
+    Hidden,
+    /// A small sliver of the island left visible at the top edge.
+    Edge,
+}
+
+impl TuckShape {
+    /// `thread`, `hidden` or `edge`; anything else falls back to the thin line.
+    pub(super) fn from_value(value: &str) -> Self {
+        match value {
+            "hidden" => Self::Hidden,
+            "edge" => Self::Edge,
+            _ => Self::Thread,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct IslandWindowState {
     pub(super) mode: IslandMode,
@@ -117,6 +139,8 @@ pub(crate) struct IslandWindowState {
     /// radii keep their default ratios to it, matching IslandShell.css.
     pub(super) corner_radius: f64,
     pub(super) corner_shape: CornerShape,
+    /// Shape held at the top edge while tucked; decides how much of the island stays visible.
+    pub(super) tuck_shape: TuckShape,
     pub(super) monitor_follow: MonitorFollow,
     /// A physical point on the monitor the island followed the pointer or the foreground window
     /// to; `None` on the primary monitor. A dragged position (`custom_position`) comes first.
@@ -184,6 +208,8 @@ impl Default for IslandWindowState {
             corner_radius: EXPANDED_RADIUS,
             // The front end's default; it reports the setting with the first interaction sync.
             corner_shape: CornerShape::Squircle,
+            // Matches the front end's default; corrected on the first interaction sync.
+            tuck_shape: TuckShape::Thread,
             monitor_follow: MonitorFollow::Primary,
             followed_monitor: None,
         }

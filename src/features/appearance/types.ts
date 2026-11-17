@@ -13,6 +13,8 @@ export type ExpandTrigger = "click" | "hover";
 export type MinimizeAction = "tray" | "tuck";
 /** What resting the pointer on an island tucked to the edge does: slide it out, or open its panel too. */
 export type TuckedHoverAction = "reveal" | "expand";
+/** Shape held at the top edge: a thin line, fully slid away, or a sliver of the island left visible. */
+export type TuckShape = "thread" | "hidden" | "edge";
 /** How the Agent page shows the program a session runs in. */
 export type AgentHostDisplay = "both" | "icon" | "name" | "off";
 /** How the Agent page shows sessions: flat rows, two-line cards framed in their light, or one-line rows. */
@@ -141,6 +143,8 @@ export type IslandSettings = {
   hoverCollapseDelayMs: number;
   minimizeAction: MinimizeAction;
   tuckedHoverAction: TuckedHoverAction;
+  /** Shape the island holds at the top edge once tucked: a thin line, slid away, or a sliver. */
+  tuckShape: TuckShape;
   /**
    * Module switches. Off hides the module on the island and stops its background work;
    * its data is kept. QQ, WeChat and clipboard history use their existing switches.

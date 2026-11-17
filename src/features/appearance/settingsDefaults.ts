@@ -81,6 +81,8 @@ export const DEFAULT_SETTINGS: IslandSettings = {
   hoverCollapseDelayMs: DEFAULT_HOVER_COLLAPSE_DELAY_MS,
   minimizeAction: "tuck",
   tuckedHoverAction: "reveal",
+  // The collapsed island tucks into a thin line flush with the screen's top edge.
+  tuckShape: "thread",
   todoEnabled: true,
   musicEnabled: true,
   agentStatusEnabled: true,

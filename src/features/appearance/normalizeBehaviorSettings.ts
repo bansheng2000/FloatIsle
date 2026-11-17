@@ -2,7 +2,7 @@
 import { normalizeLyricsSettings } from "../media/lyrics/lyricsSettings.ts";
 import { DEFAULT_SETTINGS } from "./settingsDefaults.ts";
 import { normalizeOrder } from "../../utils/order.ts";
-import { AUTO_COLLAPSE_SECONDS, TUCK_DELAY_SECONDS, COLLAPSED_ITEMS, COLLAPSED_SLOTS, PAGE_DOTS, SHELF_CLEANUP_DAYS, oneOf } from "./settingsLimits.ts";
+import { AUTO_COLLAPSE_SECONDS, TUCK_DELAY_SECONDS, TUCK_SHAPES, COLLAPSED_ITEMS, COLLAPSED_SLOTS, PAGE_DOTS, SHELF_CLEANUP_DAYS, oneOf } from "./settingsLimits.ts";
 import type { IslandSettings, LegacyIslandSettings } from "./types";
 
 /** Todos, tucking and opening, module switches, the file shelf and lyrics. */
@@ -25,6 +25,7 @@ export function normalizeBehaviorSettings(settings: LegacyIslandSettings | null 
     // idling, so it keeps closing after that delay, or never with tucking off.
     autoCollapseSeconds: wholeSeconds(settings?.autoCollapseSeconds, AUTO_COLLAPSE_SECONDS, autoTuck ? AUTO_COLLAPSE_SECONDS.default : 0),
     tuckDelaySeconds: wholeSeconds(settings?.tuckDelaySeconds, TUCK_DELAY_SECONDS, TUCK_DELAY_SECONDS.default),
+    tuckShape: oneOf(TUCK_SHAPES, settings?.tuckShape, DEFAULT_SETTINGS.tuckShape),
     // Game mode: on unless turned off. Tucking while full screen stays at its default (off).
     gameDoNotDisturb: settings?.gameDoNotDisturb !== false,
     expandTrigger: settings?.expandTrigger === "hover" ? "hover" : "click",

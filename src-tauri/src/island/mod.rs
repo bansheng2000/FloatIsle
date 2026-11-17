@@ -30,6 +30,7 @@ use geometry::{
 use glass::{apply_glass_material, parse_hex_color};
 use state::{
     mutate_window_state, read_window_state, window_state, CornerShape, IslandMode, MonitorFollow,
+    TuckShape,
 };
 
 pub(crate) use follow::start_monitor_follow_loop;
@@ -82,6 +83,7 @@ pub fn set_island_interaction(
     corner_shape: Option<String>,
     monitor_follow: Option<String>,
     position_locked: Option<bool>,
+    tuck_shape: Option<String>,
 ) -> Result<String, String> {
     let window = main_window(&app)?;
     let mode = IslandMode::from_value(&mode)?;
@@ -134,6 +136,9 @@ pub fn set_island_interaction(
             .and_then(MonitorFollow::from_value)
         {
             state.monitor_follow = monitor_follow;
+        }
+        if let Some(tuck_shape) = tuck_shape.as_deref() {
+            state.tuck_shape = TuckShape::from_value(tuck_shape);
         }
         *state
     });

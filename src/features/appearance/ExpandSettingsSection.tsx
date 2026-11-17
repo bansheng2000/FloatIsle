@@ -6,7 +6,7 @@ import { SettingsRow } from "../../components/settings/SettingsRow";
 import { SettingsNumberRow } from "../../components/settings/SettingsNumberRow";
 import { SettingsToggleRow } from "../../components/settings/SettingsToggleRow";
 import { AUTO_COLLAPSE_SECONDS, TUCK_DELAY_SECONDS } from "./settingsLimits";
-import type { ExpandTrigger, IslandSettings } from "./types";
+import type { ExpandTrigger, IslandSettings, TuckShape } from "./types";
 
 /**
  * Settings → General → Island: how the island opens, (A) how long the open island stays after the
@@ -29,6 +29,11 @@ export function ExpandSettingsSection({
   const triggers: { value: ExpandTrigger; label: string }[] = [
     { value: "click", label: expand.click },
     { value: "hover", label: expand.hover },
+  ];
+  const tuckShapes: { value: TuckShape; label: string }[] = [
+    { value: "thread", label: expand.thread },
+    { value: "hidden", label: expand.hidden },
+    { value: "edge", label: expand.edge },
   ];
 
   return (
@@ -60,16 +65,30 @@ export function ExpandSettingsSection({
         onChange={(autoTuck) => update({ autoTuck })}
       />
       {settings.autoTuck ? (
-        <SettingsNumberRow
-          title={expand.tuckDelay}
-          description={expand.tuckDelayHint}
-          value={settings.tuckDelaySeconds}
-          min={TUCK_DELAY_SECONDS.min}
-          max={TUCK_DELAY_SECONDS.max}
-          unit={expand.secondsUnit}
-          indent
-          onChange={(tuckDelaySeconds) => update({ tuckDelaySeconds })}
-        />
+        <>
+          <SettingsNumberRow
+            title={expand.tuckDelay}
+            description={expand.tuckDelayHint}
+            value={settings.tuckDelaySeconds}
+            min={TUCK_DELAY_SECONDS.min}
+            max={TUCK_DELAY_SECONDS.max}
+            unit={expand.secondsUnit}
+            indent
+            onChange={(tuckDelaySeconds) => update({ tuckDelaySeconds })}
+          />
+          <SettingsRow
+            title={expand.tuckShape}
+            description={expand.tuckShapeHint}
+            control={
+              <SettingsChoice
+                value={settings.tuckShape}
+                options={tuckShapes}
+                ariaLabel={expand.tuckShape}
+                onChange={(tuckShape) => update({ tuckShape })}
+              />
+            }
+          />
+        </>
       ) : null}
       <SettingsToggleRow
         title={t.settings.layout.gameQuiet}

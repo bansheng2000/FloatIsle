@@ -45,6 +45,8 @@ export type IslandInteraction = {
   collapsedWidth: number;
   customPosition: IslandPosition | null;
   isTucked: boolean;
+  /** Shape the island holds at the top edge once tucked. */
+  tuckShape: "thread" | "hidden" | "edge";
   positionLocked: boolean;
   animatePosition: boolean;
   glassEnabled: boolean;

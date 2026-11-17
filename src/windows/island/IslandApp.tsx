@@ -187,7 +187,11 @@ export function IslandApp() {
   );
 
   return (
-    <main className={`stage stage--font-${settings.fontFamily}`} style={stageStyle}>
+    <main
+      className={`stage stage--font-${settings.fontFamily}`}
+      style={stageStyle}
+      data-island-tuck-shape={settings.tuckShape}
+    >
       <IslandShell
         qqMail={qqMail}
         qqNotifications={qqNotifications}

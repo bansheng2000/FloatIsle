@@ -5,7 +5,7 @@ use tauri::{Emitter, WebviewWindow};
 use windows::Win32::Foundation::HWND;
 
 use super::{
-    geometry::STAGE_WINDOW_WIDTH,
+    geometry::{tuck_hot_zone_height, tucked_work_area_local_y, STAGE_WINDOW_WIDTH},
     state::{read_window_state, CornerShape},
 };
 use crate::win32;
@@ -68,7 +68,7 @@ pub(super) fn cursor_is_inside_island(hwnd: HWND) -> bool {
     let radius = state.bottom_corner_radius() * state.active_scale() * physical_scale;
     let top_radius = state.top_corner_radius() * state.active_scale() * physical_scale;
 
-    point_in_notch(
+    let inside_island = point_in_notch(
         local_x,
         local_y,
         island_left,
@@ -78,7 +78,38 @@ pub(super) fn cursor_is_inside_island(hwnd: HWND) -> bool {
         radius,
         top_radius,
         state.corner_shape,
-    )
+    );
+    if !state.is_tucked {
+        return inside_island;
+    }
+
+    // Tucked, the island sits above the work area with only a strip (or nothing) showing.
+    // Each shape still exposes a wake band at the top edge, so entering it wakes the island
+    // without having to hit a visible pixel — including the fully hidden shape.
+    let band_top = tucked_work_area_local_y(state.tuck_shape, state.collapsed_scale) * physical_scale;
+    let band_height = tuck_hot_zone_height(state.tuck_shape) * physical_scale;
+    inside_island
+        || tucked_hot_zone_contains(
+            local_x,
+            local_y,
+            island_left,
+            island_width,
+            band_top,
+            band_height,
+        )
+}
+
+/// Whether a point is inside the top-edge wake band: the island's horizontal span and a
+/// band of `band_height` starting at `band_top`, both in physical stage coordinates.
+pub(super) fn tucked_hot_zone_contains(
+    x: f64,
+    y: f64,
+    left: f64,
+    width: f64,
+    band_top: f64,
+    band_height: f64,
+) -> bool {
+    x >= left && x <= left + width && y >= band_top && y <= band_top + band_height
 }
 
 #[expect(

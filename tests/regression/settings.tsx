@@ -13,6 +13,7 @@ import { I18nProvider, LOCALE_STORAGE_KEY } from "../../src/i18n";
 import { commands, mailCalls, REPLY_MARKER, replyMarkerCalls, translationShortcutCalls } from "./settingsMocks";
 import { checkBridgeScenarios } from "./dshBridgeChecks";
 import { checkUsageScenarios } from "./dshUsageChecks";
+import { checkTuckShape } from "./tuckShapeChecks";
 
 const query = new URLSearchParams(location.search);
 const automated = query.has("test");
@@ -94,12 +95,12 @@ if (!automated) {
       check(!panel.querySelector("input[type=number]"), `${category}: no native number inputs`);
       // Settings stay short: a handful of rows per page (Messages lists mailboxes, so it is left out).
       // General has two more for the two island timers the owner asked for (2026-11-11): collapsing
-      // the open island and tucking the collapsed one.
+      // the open island and tucking the collapsed one, plus one for the top-edge tuck shape.
       const rowCount = panel.querySelectorAll(".settings-row").length;
       // Our own rows follow the four hook rows (status, Codex, Claude Code, reply marker); the
       // limit is ours plus one spare, and the exact row list below pins every row in order.
       const measuredRows = category === "agentConnect" ? rowCount - 4 : rowCount;
-      const maxRows = category === "general" ? 10 : category === "appearance" ? 9 : category === "agentConnect" ? 14 : 8;
+      const maxRows = category === "general" ? 11 : category === "appearance" ? 9 : category === "agentConnect" ? 14 : 8;
       if (category === "general") {
         const timers = [...panel.querySelectorAll<HTMLInputElement>("input[role='spinbutton']")];
         const labels = timers.map((input) => panel.querySelector(`label[for='${CSS.escape(input.id)}']`)?.textContent ?? "");
@@ -179,11 +180,11 @@ if (!automated) {
     check(!document.querySelector(".island-preview__island--glass") && ![...document.querySelectorAll<HTMLButtonElement>(".editor-panel button")].some((button) => button.textContent === "液态玻璃"),
       "Liquid glass is paused: the preview stays classic and the choice is not offered");
     check(document.querySelectorAll("[title]").length === 0, "No hover tooltips anywhere in Settings");
-
     await openPage("general");
     const generalTitles = [...document.querySelectorAll<HTMLElement>(".editor-panel .settings-row__title")].map((title) => title.textContent);
     check(generalTitles.includes("展开方式") && generalTitles.includes("闲置时贴边隐藏") && !generalTitles.includes("鼠标移到隐藏的岛上") && !generalTitles.includes("显示在"),
       "General keeps opening and tucking; hover timings, the monitor and game mode are gone");
+    await checkTuckShape(check, generalTitles, act);
     const detachedRow = [...document.querySelectorAll<HTMLElement>(".settings-row")].find((row) => row.querySelector(".settings-row__title")?.textContent === "独立设置窗口");
     const detachedSwitch = detachedRow?.querySelector<HTMLInputElement>("[role='switch']");
     check(detachedSwitch?.checked && !commands.includes("dock_settings_window"), "Settings start in a separate window by default");
