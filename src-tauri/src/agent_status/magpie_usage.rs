@@ -75,6 +75,7 @@ pub(crate) async fn read_at(base: &str) -> MagpieUsage {
     let Ok(client) = reqwest::Client::builder()
         .timeout(TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
         .build()
     else {
         usage.error = Some("HTTP client unavailable".to_string());

@@ -1,6 +1,6 @@
 [package]
 name = "floatisle"
-version = "261117.8.9"
+version = "261118.16.28"
 description = "A compact floating island shell for Windows."
 authors = ["you"]
 edition = "2021"
