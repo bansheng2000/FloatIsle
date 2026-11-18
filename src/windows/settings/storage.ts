@@ -1,4 +1,5 @@
 import { readString, writeJson, writeString } from "../../lib/storage.ts";
+import type { TuckShape } from "../../features/appearance/types";
 
 // Whether settings open in their own window instead of as a page of the island.
 export const DETACHED_SETTINGS_STORAGE_KEY = "focusd-island-detached-settings";
@@ -108,6 +109,43 @@ export function parsePanelPreview(stored: string | null, now = Date.now()): Pane
       typeof request.requestedAt === "number" &&
       now - request.requestedAt < PANEL_PREVIEW_MAX_AGE_MS
       ? request.mode
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+// Settings window -> island: briefly tuck the island in the shape a picker just chose so
+// the change is visible even when the island is expanded on another window. Each request
+// carries a fresh time so repeated picks of the same shape still fire a storage event.
+export const TUCK_PREVIEW_STORAGE_KEY = "focusd-island-tuck-preview";
+
+const TUCK_PREVIEW_MAX_AGE_MS = 1_000;
+
+const TUCK_SHAPES: readonly TuckShape[] = ["thread", "hidden", "edge"];
+
+// A same-window notice: storage events do not fire in the window that wrote them, so an
+// attached (in-island) settings page needs this to drive the island it lives in.
+export const TUCK_PREVIEW_EVENT = "focusd-tuck-preview-requested";
+
+export function requestTuckPreview(shape: TuckShape) {
+  const request = { shape, requestedAt: Date.now() };
+  writeJson(TUCK_PREVIEW_STORAGE_KEY, request);
+  window.dispatchEvent(new CustomEvent(TUCK_PREVIEW_EVENT, { detail: JSON.stringify(request) }));
+}
+
+/** The shape a stored preview asks for, or null if malformed or stale. */
+export function parseTuckPreview(stored: string | null, now = Date.now()): TuckShape | null {
+  if (stored === null) {
+    return null;
+  }
+
+  try {
+    const request = JSON.parse(stored) as { shape?: unknown; requestedAt?: unknown };
+    return TUCK_SHAPES.includes(request.shape as TuckShape) &&
+      typeof request.requestedAt === "number" &&
+      now - request.requestedAt < TUCK_PREVIEW_MAX_AGE_MS
+      ? request.shape as TuckShape
       : null;
   } catch {
     return null;

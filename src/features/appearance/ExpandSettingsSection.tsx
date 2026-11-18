@@ -18,10 +18,13 @@ export function ExpandSettingsSection({
   settings,
   onSettingsChange,
   onResetPosition,
+  onPreviewTuckShape,
 }: {
   settings: IslandSettings;
   onSettingsChange: (settings: IslandSettings) => void;
   onResetPosition: () => void;
+  /** E3-C: ask the island to briefly show a tuck shape while the choice is being made. */
+  onPreviewTuckShape?: (shape: TuckShape) => void;
 }) {
   const t = useTranslation();
   const expand = t.settings.expand;
@@ -84,9 +87,34 @@ export function ExpandSettingsSection({
                 value={settings.tuckShape}
                 options={tuckShapes}
                 ariaLabel={expand.tuckShape}
-                onChange={(tuckShape) => update({ tuckShape })}
+                onChange={(tuckShape) => {
+                  update({ tuckShape });
+                  onPreviewTuckShape?.(tuckShape);
+                }}
               />
             }
+          />
+          <SettingsRow title={expand.noTuckGroup} />
+          <SettingsToggleRow
+            title={expand.noTuckWhileAgent}
+            description={expand.noTuckWhileAgentHint}
+            checked={settings.noTuckWhileAgent}
+            indent
+            onChange={(noTuckWhileAgent) => update({ noTuckWhileAgent })}
+          />
+          <SettingsToggleRow
+            title={expand.noTuckWhileLyrics}
+            description={expand.noTuckWhileLyricsHint}
+            checked={settings.noTuckWhileLyrics}
+            indent
+            onChange={(noTuckWhileLyrics) => update({ noTuckWhileLyrics })}
+          />
+          <SettingsToggleRow
+            title={expand.noTuckWhileTimer}
+            description={expand.noTuckWhileTimerHint}
+            checked={settings.noTuckWhileTimer}
+            indent
+            onChange={(noTuckWhileTimer) => update({ noTuckWhileTimer })}
           />
         </>
       ) : null}

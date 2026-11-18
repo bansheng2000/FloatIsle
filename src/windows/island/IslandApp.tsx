@@ -30,6 +30,7 @@ import { useIslandNavigation } from "./useIslandNavigation";
 import { useIslandSessionJump } from "./useIslandSessionJump";
 import { useIslandTodos } from "./useIslandTodos";
 import { useIslandTucking } from "./useIslandTucking";
+import { useTuckPreview } from "./useTuckPreview";
 import { useIslandShelf } from "./useIslandShelf";
 import { useIslandHover } from "./useIslandHover";
 import { useIslandTranslation } from "./useIslandTranslation";
@@ -83,10 +84,26 @@ export function IslandApp() {
     );
   // The cover goes with the lyric line: when something ranked above lyrics is shown, it goes too.
   const collapsedCover = collapsedItem === "lyrics" ? cover : null;
+  // E3: the three "don't tuck while" switches watch these live states. Lyrics means the
+  // collapsed bar is actually showing the lyric slot, not merely that a song is playing.
+  const noTuckConditions = {
+    agentActive: activeAgentSessionCount > 0,
+    lyricsShown: collapsedItem === "lyrics",
+    timerRunning: timer !== null,
+  };
   useIslandTucking({
     settings,
     navigation,
     hasMessagePreview,
+    noTuckConditions,
+  });
+  useTuckPreview({
+    mode,
+    isTucked,
+    page,
+    onTuck: tuckIsland,
+    onCollapse: collapseIsland,
+    onOpenPage: openIslandPage,
   });
 
   const { messageSource, setMessageSource, openMessages } = useMessageView(qqMail.closeReader, openIslandPage);

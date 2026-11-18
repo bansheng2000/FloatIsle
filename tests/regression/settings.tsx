@@ -26,7 +26,6 @@ const restore = () => {
   for (const [key, value] of original) localStorage.setItem(key, value);
 };
 window.addEventListener("beforeunload", restore);
-
 localStorage.setItem(LOCALE_STORAGE_KEY, query.get("locale") === "en" ? "en" : "zh-CN");
 // The checks below expect a customized look plus a General page choice that a reset must keep.
 if (automated) { localStorage.setItem("focusd-island-settings", JSON.stringify({ opacity: 60, carryOverIncompleteTodos: false, autoTuck: true })); localStorage.setItem(E1_COLOR_REFRESH_MIGRATION_KEY, "1"); localStorage.setItem(E1_SORT_DEFAULT_MIGRATION_KEY, "1"); }
@@ -39,7 +38,6 @@ localStorage.removeItem("focusd-island-agent-sounds");
 localStorage.removeItem("focusd-island-detached-settings");
 // The player order as the old Music page saved it.
 localStorage.setItem("focusd-island-music-sources", JSON.stringify([{ id: "Spotify.exe", label: "Spotify" }, { id: "QQMusic", label: "QQ音乐" }]));
-
 const root = createRoot(document.getElementById("root")!);
 const mount = () => root.render(<StrictMode><I18nProvider><SettingsWindow /></I18nProvider></StrictMode>);
 const messages: string[] = [];
@@ -64,7 +62,6 @@ const type = async (input: HTMLInputElement, value: string) => {
 const openPage = (category: string) => click(`.settings-sidebar__item[data-category='${category}']`);
 const categories = () =>
   [...document.querySelectorAll<HTMLElement>(".settings-sidebar__item[data-category]")].map(item => item.dataset.category!);
-
 if (!automated) {
   mount();
   // Old names of merged pages (qq, wechat, mail) open the page they became.
@@ -82,7 +79,6 @@ if (!automated) {
   try {
     await act(async () => { mount(); });
     check(categories().length > 0, "The sidebar lists the settings pages");
-
     for (const category of categories()) {
       await openPage(category);
       const item = element(`.settings-sidebar__item[data-category='${category}']`);
@@ -93,15 +89,12 @@ if (!automated) {
       check(panel.scrollWidth <= panel.clientWidth, `${category}: nothing overflows horizontally`);
       check(!panel.querySelector("input[type=number]"), `${category}: no native number inputs`);
       // Settings stay short: a handful of rows per page (Messages lists mailboxes, so it is left out).
-      // General has two more for the two island timers the owner asked for (2026-11-11): collapsing
-      // the open island and tucking the collapsed one, plus one for the top-edge tuck shape.
       const rowCount = panel.querySelectorAll(".settings-row").length;
-      // Our own rows follow the four hook rows (status, Codex, Claude Code, reply marker); the
-      // limit is ours plus one spare, and the exact row list below pins every row in order.
+      // agentConnect's own rows follow four hook rows (status, Codex, Claude, reply marker).
       const measuredRows = category === "agentConnect" ? rowCount - 4 : rowCount;
-      // (E1) Appearance grew from 9 to 17 rows: colour scheme, texture, text size, collapsed width
-      // and height, page text colour, plus two preset pickers — all specified features, not padding.
-      const maxRows = category === "general" ? 11 : category === "appearance" ? 17 : category === "agentConnect" ? 14 : 8;
+      // Growth is spec-driven, never padding: E1 appearance 9→17 (colour/texture/text size/width/
+      // height/page colour/two pickers); E3 general +4 (don't-tuck group + three switches).
+      const maxRows = category === "general" ? 15 : category === "appearance" ? 17 : category === "agentConnect" ? 14 : 8;
       if (category === "general") {
         const timers = [...panel.querySelectorAll<HTMLInputElement>("input[role='spinbutton']")];
         const labels = timers.map((input) => panel.querySelector(`label[for='${CSS.escape(input.id)}']`)?.textContent ?? "");
@@ -117,6 +110,14 @@ if (!automated) {
         check(first.value === "600" && plus.disabled, `Blur clamps to max and disables Plus (${first.value}, ${plus.disabled}, connected=${first.isConnected})`);
         await type(first, "30");
         await act(async () => { first.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+        // E3: three don't-tuck switches present, default off, and persist when toggled.
+        const noTuck = ["Agent 正在运行", "正在显示歌词", "待办已开始计时"].map((label) =>
+          [...panel.querySelectorAll<HTMLInputElement>("input[role=switch]")].find((s) => panel.querySelector(`label[for='${CSS.escape(s.id)}']`)?.textContent === label));
+        check(noTuck.every(Boolean) && noTuck.every((s) => !s!.checked), `general: three don't-tuck switches present and off`);
+        if (noTuck[2]) {
+          await act(async () => noTuck[2]!.click());
+          check(JSON.parse(localStorage.getItem("focusd-island-settings")!).noTuckWhileTimer === true, `general: timer switch saves`);
+        }
       }
       if (category === "messages") {
         const notice = panel.querySelector(".messages-settings__wechat-risk");
@@ -128,7 +129,6 @@ if (!automated) {
     }
     check(settingsCategoryFor("sounds") === "agents" && settingsCategoryFor("agentAlerts") === "agents" && settingsCategoryFor("agentApprovals") === "agents"
       && settingsCategoryFor("shelf") === "clipboard", "Old names of merged pages open the page they became");
-
     const storedSettings = () => JSON.parse(localStorage.getItem("focusd-island-settings") ?? "{}") as { opacity?: number; carryOverIncompleteTodos?: boolean };
     check(!document.querySelector(".appearance-reset"), "Reset appearance is not offered outside the appearance page");
     await openPage("appearance");

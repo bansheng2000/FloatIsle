@@ -7,7 +7,10 @@ use windows::{
         Foundation::{HWND, LPARAM, POINT, RECT, WPARAM},
         Graphics::{
             Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED},
-            Gdi::{MonitorFromWindow, SetWindowRgn, MONITOR_DEFAULTTONEAREST},
+            Gdi::{
+                GetMonitorInfoW, MonitorFromWindow, SetWindowRgn, MONITORINFO,
+                MONITOR_DEFAULTTONEAREST,
+            },
         },
         System::Threading::{AttachThreadInput, GetCurrentThreadId},
         UI::{
@@ -18,9 +21,9 @@ use windows::{
                 GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindow, GetWindowLongPtrW,
                 GetWindowPlacement, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId,
                 IsGUIThread, IsIconic, IsWindowVisible, SendMessageTimeoutW, SetForegroundWindow,
-                ShowWindow, FLASHWINFO, FLASHW_ALL, FLASHW_TIMERNOFG, GWL_EXSTYLE, GW_OWNER,
-                SMTO_ABORTIFHUNG, SMTO_BLOCK, SMTO_ERRORONEXIT, SW_RESTORE, WINDOWPLACEMENT,
-                WM_NULL, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+                SetWindowLongPtrW, ShowWindow, FLASHWINFO, FLASHW_ALL, FLASHW_TIMERNOFG,
+                GWL_EXSTYLE, GW_OWNER, SMTO_ABORTIFHUNG, SMTO_BLOCK, SMTO_ERRORONEXIT, SW_RESTORE,
+                WINDOWPLACEMENT, WM_NULL, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
             },
         },
     },
@@ -162,6 +165,53 @@ pub(crate) fn window_rect(window: HWND) -> Option<RECT> {
     // the valid local `rect`.
     unsafe { GetWindowRect(window, &mut rect) }.ok()?;
     Some(rect)
+}
+
+/// Screen rectangle of the monitor `window` is on; `None` when it cannot be read.
+pub(crate) fn monitor_rect(window: HWND) -> Option<RECT> {
+    // SAFETY: MonitorFromWindow with DEFAULTTONEAREST returns a monitor handle even for
+    // an invalid HWND; GetMonitorInfoW writes only into the valid local `info`.
+    unsafe {
+        let monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(monitor, &mut info).as_bool() {
+            Some(info.rcMonitor)
+        } else {
+            None
+        }
+    }
+}
+
+/// Whether `outer` covers all of `inner`, allowing `tolerance` pixels of DWM rounding on
+/// each edge. A genuine full-screen window matches its monitor down to a couple of pixels.
+pub(crate) fn rect_covers(outer: RECT, inner: RECT, tolerance: i32) -> bool {
+    outer.left <= inner.left + tolerance
+        && outer.top <= inner.top + tolerance
+        && outer.right >= inner.right - tolerance
+        && outer.bottom >= inner.bottom - tolerance
+}
+
+const FULLSCREEN_TOLERANCE_PX: i32 = 2;
+
+/// Whether the foreground window is a real full-screen app rather than the desktop: it
+/// must be an interactive window (not a tool window or the shell), and its rectangle must
+/// cover the whole monitor it sits on.
+pub(crate) fn foreground_covers_monitor() -> bool {
+    let foreground = foreground_window();
+    if foreground.is_invalid() || !is_interactive(foreground) {
+        return false;
+    }
+    let class = class_name(foreground);
+    if class == "Progman" || class == "WorkerW" {
+        return false;
+    }
+    match (window_rect(foreground), monitor_rect(foreground)) {
+        (Some(rect), Some(monitor)) => rect_covers(rect, monitor, FULLSCREEN_TOLERANCE_PX),
+        _ => false,
+    }
 }
 
 /// Cursor position in screen coordinates; `None` when it cannot be read (for
@@ -313,6 +363,22 @@ pub(crate) fn flash(window: HWND) {
     let _ = unsafe { FlashWindowEx(&info) };
 }
 
+/// Adds WS_EX_TOOLWINDOW to `window` so it stays out of Alt+Tab and the taskbar.
+/// Call once after creation. Returns whether the style was applied.
+pub(crate) fn set_toolwindow_style(window: HWND) -> bool {
+    // SAFETY: SetWindowLongPtrW takes the HWND by value and the plain style flags; a
+    // null HWND makes it fail without touching memory.
+    unsafe {
+        let style = GetWindowLongPtrW(window, GWL_EXSTYLE) as u32;
+        let result = SetWindowLongPtrW(
+            window,
+            GWL_EXSTYLE,
+            (style | WS_EX_TOOLWINDOW.0) as isize,
+        );
+        result != 0 || style & WS_EX_TOOLWINDOW.0 != 0
+    }
+}
+
 /// Turns off the animation Windows plays when `window` is shown or hidden, so it
 /// appears in place at once. Returns whether DWM accepted it.
 pub(crate) fn disable_show_animation(window: HWND) -> bool {
@@ -354,5 +420,26 @@ mod tests {
         for_each_top_level_window(|window| visited.push(window)).unwrap();
         assert!(!visited.is_empty());
         assert!(visited.iter().all(|window| !window.is_invalid()));
+    }
+
+    fn rect(left: i32, top: i32, right: i32, bottom: i32) -> RECT {
+        RECT {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    #[test]
+    fn rect_covers_detects_full_screen_with_tolerance() {
+        let monitor = rect(0, 0, 1920, 1080);
+        assert!(rect_covers(rect(0, 0, 1920, 1080), monitor, 2));
+        // 1px of DWM rounding on each edge is within tolerance.
+        assert!(rect_covers(rect(1, 1, 1921, 1081), monitor, 2));
+        // A window smaller than the monitor is not full-screen.
+        assert!(!rect_covers(rect(0, 0, 1800, 1000), monitor, 2));
+        // A gap beyond tolerance is not full-screen.
+        assert!(!rect_covers(rect(5, 5, 1925, 1085), monitor, 2));
     }
 }

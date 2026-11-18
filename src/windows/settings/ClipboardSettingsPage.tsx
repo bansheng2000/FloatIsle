@@ -6,7 +6,7 @@ import { ModuleSwitchSection } from "./ModuleSwitchSection";
 import { ClipboardShortcutRows } from "../../features/clipboard/ClipboardShortcutRows";
 import { useTranslationSettings } from "../../features/translation/useTranslationSettings";
 import { SettingsGroup } from "../../components/settings/SettingsGroup";
-import { findShortcutOwner } from "./shortcutConflicts";
+import { findShortcutOwner, isReservedSystemShortcut } from "./shortcutConflicts";
 import { ShelfSettingsGroup } from "./ShelfSettingsGroup";
 
 /** Settings → Clipboard & files: clipboard history (switch, images, length, shortcut), then the file shelf. */
@@ -21,13 +21,15 @@ export function ClipboardSettingsPage({
   const [clipboardSettings, updateClipboardSettings] = useClipboardSettings();
   const [translationSettings] = useTranslationSettings();
   // A global hotkey swallows its keys everywhere, so it may not reuse translation's.
-  const takenBy = (shortcut: string) => findShortcutOwner(
-    shortcut,
-    settings.translationEnabled
-      ? [{ id: "translation", label: t.settings.shortcuts.openTranslation, shortcut: translationSettings.shortcut }]
-      : [],
-    "clipboard",
-  );
+  const takenBy = (shortcut: string) =>
+    (isReservedSystemShortcut(shortcut) ? t.settings.shortcuts.reservedSystem : null)
+    ?? findShortcutOwner(
+      shortcut,
+      settings.translationEnabled
+        ? [{ id: "translation", label: t.settings.shortcuts.openTranslation, shortcut: translationSettings.shortcut }]
+        : [],
+      "clipboard",
+    );
 
   return (
     <>

@@ -31,7 +31,11 @@ static STATE: Mutex<ForegroundFullscreen> = Mutex::new(ForegroundFullscreen {
 });
 
 fn read(app: &AppHandle) -> ForegroundFullscreen {
-    let active = win32::notification_state::fullscreen_app_in_front();
+    // Rect coverage is the primary test: the foreground window must really fill its monitor.
+    // The notification-state boolean stays as a fallback for exclusive D3D full-screen apps
+    // that expose no normal window rectangle.
+    let active = win32::window::foreground_covers_monitor()
+        || win32::notification_state::fullscreen_app_in_front();
     let on_island_monitor = active
         && island::main_window(app)
             .and_then(|window| window.hwnd().map_err(|error| error.to_string()))

@@ -154,6 +154,10 @@ export type IslandSettings = {
   autoTuckRetractDelayMs: number;
   /** A tucked island slides back into view to show a new message preview. */
   revealOnMessage: boolean;
+  /** E3: while one of these conditions holds, the island does not auto-tuck at the top edge. */
+  noTuckWhileAgent: boolean;
+  noTuckWhileLyrics: boolean;
+  noTuckWhileTimer: boolean;
   expandTrigger: ExpandTrigger;
   /** Pointer rest time (ms) before a hover opens the island. */
   hoverExpandDelayMs: number;

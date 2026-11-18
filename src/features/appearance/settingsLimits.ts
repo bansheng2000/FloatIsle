@@ -52,6 +52,10 @@ export const AUTO_COLLAPSE_SECONDS = { min: 0, max: 600, default: 30 } as const;
 export const TUCK_DELAY_SECONDS = { min: 3, max: 600, default: 30 } as const;
 /** Shapes the island can hold at the top edge once tucked. */
 export const TUCK_SHAPES: readonly TuckShape[] = ["thread", "hidden", "edge"];
+/** E3-C: how long the island shows a tuck-shape preview before returning to Settings. */
+export const TUCK_PREVIEW_MS = 2500;
+// E3-B (deferred): tucked corner carving is planned with radius 4–24px, default 12,
+// as a top-attached-only inward curve. Not implemented this batch; no region clipping.
 /** Auto-cleanup choices for the file shelf, in days; 0 never cleans up. */
 export const SHELF_CLEANUP_DAYS = [0, 1, 7, 30] as const;
 export const DEFAULT_TASK_TEXT_COLOR = "#ffffff";

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function useTodoRotation(
   todoIds: string[],
@@ -80,4 +80,17 @@ export function useRevealOnMessage(hasPreview: boolean, isTucked: boolean, onRev
   useEffect(() => {
     if (hasPreview && isTucked) onReveal();
   }, [hasPreview, isTucked, onReveal]);
+}
+
+/**
+ * E3: the moment a "don't tuck while" condition first becomes active, call an already
+ * tucked island back out; a condition that was already true at mount does not re-open it.
+ */
+export function useRevealOnNoTuckCondition(blockedNow: boolean, isTucked: boolean, onReveal: () => void) {
+  const blockedBefore = useRef(blockedNow);
+  useEffect(() => {
+    const entered = blockedNow && !blockedBefore.current;
+    blockedBefore.current = blockedNow;
+    if (entered && isTucked) onReveal();
+  }, [blockedNow, isTucked, onReveal]);
 }

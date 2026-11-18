@@ -88,6 +88,11 @@ pub fn run() {
                 eprintln!("failed to initialize notification diagnostics: {error}");
             }
             if let Ok(window) = island::main_window(app.handle()) {
+                // Keep the capsule out of Alt+Tab and the taskbar (skipTaskbar already hides
+                // the taskbar button; the extended style also removes it from the switcher).
+                if let Ok(hwnd) = window.hwnd() {
+                    win32::window::set_toolwindow_style(hwnd);
+                }
                 if let Err(error) = island::apply_stage_geometry(
                     &window,
                     island::IslandWindowState::default(),

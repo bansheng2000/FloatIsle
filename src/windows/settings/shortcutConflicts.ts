@@ -24,3 +24,32 @@ export function findShortcutOwner(shortcut: string, owners: readonly ShortcutOwn
   const wanted = shortcutKey(shortcut);
   return owners.find((owner) => owner.id !== selfId && shortcutKey(owner.shortcut) === wanted)?.label ?? null;
 }
+
+/**
+ * Windows combinations the shell owns. Registering one as a global hotkey can never work
+ * (the shell takes the keys first), so the settings rows refuse them before registration.
+ * Keys are stored in `shortcutKey` form: lowercase, modifiers sorted, "win" for Meta.
+ */
+const RESERVED_SYSTEM_SHORTCUTS: ReadonlySet<string> = new Set([
+  "alt+tab",
+  "alt+shift+tab",
+  "alt+esc",
+  "alt+space",
+  "alt+f4",
+  "win+tab",
+  "win+l",
+  "win+r",
+  "win+d",
+  "win+e",
+  "win+i",
+  "win+p",
+  "win+x",
+  "alt+ctrl+del",
+  "alt+ctrl+delete",
+  "ctrl+shift+esc",
+]);
+
+/** Whether `shortcut` is a Windows shell combination that must not be bound by the island. */
+export function isReservedSystemShortcut(shortcut: string): boolean {
+  return RESERVED_SYSTEM_SHORTCUTS.has(shortcutKey(shortcut));
+}

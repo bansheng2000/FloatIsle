@@ -27,6 +27,10 @@ export function normalizeBehaviorSettings(settings: LegacyIslandSettings | null 
     autoCollapseSeconds: wholeSeconds(settings?.autoCollapseSeconds, AUTO_COLLAPSE_SECONDS, autoTuck ? AUTO_COLLAPSE_SECONDS.default : 0),
     tuckDelaySeconds: wholeSeconds(settings?.tuckDelaySeconds, TUCK_DELAY_SECONDS, TUCK_DELAY_SECONDS.default),
     tuckShape: oneOf(TUCK_SHAPES, settings?.tuckShape, DEFAULT_SETTINGS.tuckShape),
+    // E3: "don't tuck while ..." switches default off; a missing saved value is off.
+    noTuckWhileAgent: settings?.noTuckWhileAgent === true,
+    noTuckWhileLyrics: settings?.noTuckWhileLyrics === true,
+    noTuckWhileTimer: settings?.noTuckWhileTimer === true,
     // Game mode: on unless turned off. Tucking while full screen stays at its default (off).
     gameDoNotDisturb: settings?.gameDoNotDisturb !== false,
     expandTrigger: settings?.expandTrigger === "hover" ? "hover" : "click",

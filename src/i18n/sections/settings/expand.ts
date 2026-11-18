@@ -15,6 +15,14 @@ export type SettingsExpandText = {
   thread: string;
   hidden: string;
   edge: string;
+  /** E3: don't auto-tuck while a given condition holds. */
+  noTuckWhileAgent: string;
+  noTuckWhileAgentHint: string;
+  noTuckWhileLyrics: string;
+  noTuckWhileLyricsHint: string;
+  noTuckWhileTimer: string;
+  noTuckWhileTimerHint: string;
+  noTuckGroup: string;
   /** Unit after the number fields. */
   secondsUnit: string;
 };
@@ -33,6 +41,13 @@ export const zhCN: SettingsExpandText = {
   thread: "细线",
   hidden: "隐藏",
   edge: "露边",
+  noTuckGroup: "这些时候不贴边",
+  noTuckWhileAgent: "Agent 正在运行",
+  noTuckWhileAgentHint: "打开后有 Agent 会话运行时，小岛不自动贴边。",
+  noTuckWhileLyrics: "正在显示歌词",
+  noTuckWhileLyricsHint: "打开后折叠栏确实在显示歌词时，小岛不自动贴边。",
+  noTuckWhileTimer: "待办已开始计时",
+  noTuckWhileTimerHint: "打开后有待办计时在进行时，小岛不自动贴边。",
   secondsUnit: "秒",
 };
 
@@ -50,5 +65,12 @@ export const en: SettingsExpandText = {
   thread: "Thin line",
   hidden: "Hidden",
   edge: "Sliver",
+  noTuckGroup: "Don't tuck during these",
+  noTuckWhileAgent: "An agent is running",
+  noTuckWhileAgentHint: "When on, the island will not auto-tuck while an agent session is running.",
+  noTuckWhileLyrics: "Lyrics are showing",
+  noTuckWhileLyricsHint: "When on, the island will not auto-tuck while the collapsed bar is actually showing lyrics.",
+  noTuckWhileTimer: "A todo timer is running",
+  noTuckWhileTimerHint: "When on, the island will not auto-tuck while a todo timer is counting down.",
   secondsUnit: "s",
 };

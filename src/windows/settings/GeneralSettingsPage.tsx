@@ -2,7 +2,7 @@ import type { LocaleCode } from "../../i18n";
 import { BehaviorSettingsSection } from "../../features/appearance/BehaviorSettingsSection";
 import { ExpandSettingsSection } from "../../features/appearance/ExpandSettingsSection";
 import type { IslandSettings } from "../../features/appearance/types";
-import { requestIslandPositionReset } from "./storage";
+import { requestIslandPositionReset, requestTuckPreview } from "./storage";
 import { useLaunchAtStartup } from "./useLaunchAtStartup";
 
 /** Settings → General: system (startup, language, settings window), then the island's opening and tucking. */
@@ -33,7 +33,12 @@ export function GeneralSettingsPage({
         onLaunchAtStartupChange={updateLaunchAtStartup}
         onLocaleChange={onLocaleChange}
       />
-      <ExpandSettingsSection settings={settings} onSettingsChange={onSettingsChange} onResetPosition={requestIslandPositionReset} />
+      <ExpandSettingsSection
+        settings={settings}
+        onSettingsChange={onSettingsChange}
+        onResetPosition={requestIslandPositionReset}
+        onPreviewTuckShape={requestTuckPreview}
+      />
     </>
   );
 }

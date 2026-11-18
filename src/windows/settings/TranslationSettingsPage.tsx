@@ -5,7 +5,7 @@ import { ModuleSwitchSection } from "./ModuleSwitchSection";
 import { TranslationShortcutRows } from "../../features/translation/TranslationShortcutRows";
 import { useTranslationSettings } from "../../features/translation/useTranslationSettings";
 import { useClipboardSettings } from "../../features/clipboard/useClipboardSettings";
-import { findShortcutOwner } from "./shortcutConflicts";
+import { findShortcutOwner, isReservedSystemShortcut } from "./shortcutConflicts";
 import { SettingsGroup } from "../../components/settings/SettingsGroup";
 
 export function TranslationSettingsPage({
@@ -19,13 +19,15 @@ export function TranslationSettingsPage({
   const [translationSettings, setTranslationSettings] = useTranslationSettings();
   const [clipboardSettings] = useClipboardSettings();
   // A global hotkey swallows its keys everywhere, so it may not reuse the clipboard's.
-  const takenBy = (shortcut: string) => findShortcutOwner(
-    shortcut,
-    clipboardSettings.enabled && clipboardSettings.shortcutEnabled
-      ? [{ id: "clipboard", label: t.settings.clipboard.shortcut, shortcut: clipboardSettings.shortcut }]
-      : [],
-    "translation",
-  );
+  const takenBy = (shortcut: string) =>
+    (isReservedSystemShortcut(shortcut) ? t.settings.shortcuts.reservedSystem : null)
+    ?? findShortcutOwner(
+      shortcut,
+      clipboardSettings.enabled && clipboardSettings.shortcutEnabled
+        ? [{ id: "clipboard", label: t.settings.clipboard.shortcut, shortcut: clipboardSettings.shortcut }]
+        : [],
+      "translation",
+    );
 
   return (
     <>

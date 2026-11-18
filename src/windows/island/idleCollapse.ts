@@ -12,18 +12,20 @@ type IdleSettings = Pick<IslandSettings, "autoTuck" | "tuckDelaySeconds" | "auto
  * (A) the open island collapses `autoCollapseSeconds` after the cursor leaves it (it waits while
  * the cursor is on it); (B) the collapsed island tucks into a line after `tuckDelaySeconds`
  * without use, when tucking is on and no message preview shows. (A) never tucks by itself.
+ * E3: a live "don't tuck while" condition also cancels (B) until it ends.
  */
 export function idlePlan(
   mode: IslandMode,
   settings: IdleSettings,
   hasMessagePreview: boolean,
   isHovering = false,
+  tuckBlocked = false,
 ): IdlePlan | null {
   if (mode === "expanded") {
     const seconds = settings.autoCollapseSeconds;
     if (seconds <= 0 || isHovering) return null;
     return { seconds, action: "collapse" };
   }
-  if (!settings.autoTuck || hasMessagePreview) return null;
+  if (!settings.autoTuck || hasMessagePreview || tuckBlocked) return null;
   return { seconds: settings.tuckDelaySeconds, action: "tuck" };
 }
