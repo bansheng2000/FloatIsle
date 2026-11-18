@@ -133,6 +133,8 @@ pub fn remember_bounds(app: &AppHandle) {
 #[tauri::command]
 pub fn quit_island(app: AppHandle) {
     remember_bounds(&app);
+    // Deliberate user exit: tell the watchdog not to relaunch us.
+    crate::system::guard_optout::mark_deliberate_exit();
     app.exit(0);
 }
 

@@ -77,6 +77,8 @@ pub(crate) fn build_tray(app: &App) -> tauri::Result<()> {
             }
             "quit" => {
                 settings_window::remember_bounds(app);
+                // Deliberate user exit: tell the watchdog not to relaunch us.
+                crate::system::guard_optout::mark_deliberate_exit();
                 app.exit(0);
             }
             _ => {}

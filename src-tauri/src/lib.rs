@@ -62,6 +62,9 @@ pub fn run() {
             // changes. Liquid glass is rendered inside the island element.
         })
         .setup(|app| {
+            // A successful launch ends the previous session: clear any opt-out
+            // marker left by a deliberate quit so the watchdog guards this run.
+            system::guard_optout::clear_deliberate_exit();
             tray::build_tray(app)?;
             if let Err(error) = clipboard_history::init(app.handle()) {
                 eprintln!("failed to initialize clipboard history: {error}");

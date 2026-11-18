@@ -1,7 +1,7 @@
 {
   "name": "floatisle",
   "private": true,
-  "version": "261118.16.28",
+  "version": "261118.21.36",
   "type": "module",
   "scripts": {
     "dev": "vite",

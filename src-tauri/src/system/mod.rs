@@ -2,6 +2,7 @@
 //! export, full-screen app detection, settings backups.
 
 pub(crate) mod fullscreen;
+pub(crate) mod guard_optout;
 pub(crate) mod startup;
 pub(crate) mod theme_file;
 pub(crate) mod todo_export;

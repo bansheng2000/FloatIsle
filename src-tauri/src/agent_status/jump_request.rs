@@ -51,6 +51,8 @@ pub async fn jump(session_id: &str, app_dir: Option<&Path>) -> JumpOutcome {
     let started = Instant::now();
     let client = reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
+        // Loopback only (127.0.0.1:47822): a system WinINET proxy must not swallow the jump.
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .build();
     let client = match client {

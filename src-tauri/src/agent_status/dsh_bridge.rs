@@ -408,6 +408,8 @@ fn truncated(body: &str) -> String {
 async fn probe() -> Answer {
     let Ok(client) = reqwest::Client::builder()
         .timeout(PROBE_TIMEOUT)
+        // Loopback only (127.0.0.1:47822): keep the status probe off any system proxy.
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .build()
     else {
@@ -478,6 +480,8 @@ fn interpret(
 async fn read_mounts() -> Result<Vec<DshMount>, String> {
     let client = reqwest::Client::builder()
         .timeout(PROBE_TIMEOUT)
+        // Loopback only (127.0.0.1:47822): keep the mounts read off any system proxy.
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|error| error.to_string())?;
