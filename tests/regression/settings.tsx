@@ -222,7 +222,6 @@ if (!automated) {
     await click(".save-path-panel .settings-link-button");
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 1_500)); });
     check(document.querySelector(".save-path-panel .save-path-saved"), "The saved confirmation stays long enough to notice");
-
     await openPage("messages");
     const rows = () => [...document.querySelectorAll<HTMLElement>(".mail-settings__account")];
     check(rows().length === 2 && rows()[0].textContent?.includes("demo@qq.com"), "The mail page lists every mailbox");
@@ -360,7 +359,6 @@ if (!automated) {
     await openPage("clipboard");
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
     check(recordButtonText() === "Ctrl+Shift+/", `The clipboard page shows the recorded shortcut when opened again (${recordButtonText()})`);
-
     // About: the island's identity, one GitHub link, the changelog and quitting. The upstream rows
     // (community group, star the project, tip the author) are gone for good.
     localStorage.removeItem("focusd-island-community-invite-seen");
@@ -382,11 +380,13 @@ if (!automated) {
     const sidebarItems = [...document.querySelectorAll<HTMLElement>(".settings-sidebar__item")].map((item) => item.textContent);
     check(authorLink?.href.replace(/\/$/, "") === "https://github.com/bansheng2000" && sidebarItems.slice(-2).join() === "关于,GitHub",
       `关于作者是侧栏里关于下面的一项，打开 GitHub (${authorLink?.href ?? "none"} | ${sidebarItems.slice(-2).join()})`);
+    // E4: About keeps the always-visible update group with a check control.
+    check([...document.querySelectorAll<HTMLButtonElement>(".settings-link-button")].some((button) => button.textContent === "检查更新"),
+      "About keeps the update group with a check-for-updates control");
     const aboutLink = (label: string) =>
       [...document.querySelectorAll<HTMLButtonElement>(".settings-link-button")].find((button) => button.textContent === label);
     await act(async () => { aboutLink("退出")!.click(); });
     check(commands.includes("quit_island"), "Quit asks the island to exit");
-
     await act(async () => { root.unmount(); });
     document.documentElement.dataset.testResult = "passed";
   } catch (error) {

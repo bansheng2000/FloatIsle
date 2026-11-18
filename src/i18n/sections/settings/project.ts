@@ -29,6 +29,16 @@ export type SettingsProjectText = {
     updateNow: string;
     updateDownloading: (percent: number) => string;
     installing: string;
+    /** About: the always-visible update group and its controls. */
+    title: string;
+    checkAction: string;
+    statusLatest: string;
+    statusFound: string;
+    statusDownloading: string;
+    statusReady: string;
+    statusChecking: string;
+    statusInstalling: string;
+    statusError: string;
   };
 };
 
@@ -57,6 +67,15 @@ export const zhCN: SettingsProjectText = {
     updateNow: "更新",
     updateDownloading: (percent) => `下载 ${percent}%`,
     installing: "正在安装，小岛会自动重启",
+    title: "更新",
+    checkAction: "检查更新",
+    statusLatest: "已是最新版本",
+    statusFound: "有可用更新",
+    statusDownloading: "正在下载更新",
+    statusReady: "更新已下载，等待安装",
+    statusChecking: "正在检查更新",
+    statusInstalling: "正在安装更新",
+    statusError: "检查更新失败",
   },
 };
 
@@ -85,5 +104,14 @@ export const en: SettingsProjectText = {
     updateNow: "Update",
     updateDownloading: (percent) => `Downloading ${percent}%`,
     installing: "Installing — the island will restart itself",
+    title: "Updates",
+    checkAction: "Check for updates",
+    statusLatest: "You're up to date",
+    statusFound: "An update is available",
+    statusDownloading: "Downloading the update",
+    statusReady: "Update downloaded, waiting to install",
+    statusChecking: "Checking for updates",
+    statusInstalling: "Installing the update",
+    statusError: "Update check failed",
   },
 };

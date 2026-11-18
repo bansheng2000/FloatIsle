@@ -47,6 +47,17 @@
   box-shadow: 0 0 14px rgba(255, 209, 102, 0.72);
 }
 
+/* Pending-update dot on the collapsed island, same signal as the header/todo dots. */
+.island__update-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-circle);
+  background: var(--update-dot-color, #f0b64a);
+  box-shadow: 0 0 0 2px var(--island-background-color);
+  pointer-events: none;
+}
+
 .island--title-hidden .island__open-button {
   padding-left: 8px;
 }

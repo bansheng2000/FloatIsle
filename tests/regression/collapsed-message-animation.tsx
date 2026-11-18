@@ -197,7 +197,9 @@ async function runChecks() {
     check(!pixelMessageStyle.fontFamily.includes("Fusion Pixel") && Number(pixelMessageStyle.fontWeight) >= 600, "像素主题中的消息仍使用清晰的系统中粗字体");
     await act(async () => button().click());
     await settle();
-    check(incoming().textContent?.includes("fly-island") && incoming().textContent?.includes("完成今日设计评审"), "像素字体和标题开启时恢复当前专注任务");
+    // E4: the collapsed bar's brand name follows the product identity (FloatIsle),
+    // not the old "fly-island" string that used to be hard-coded here.
+    check(incoming().textContent?.includes("FloatIsle") && incoming().textContent?.includes("完成今日设计评审"), "像素字体和标题开启时恢复当前专注任务");
     await notify("qq");
     await act(async () => changeMode("expanded"));
     check(summary().children.length === 1 && !summary().querySelector(".island-message-preview"), "展开立即清除消息动画和离场内容");

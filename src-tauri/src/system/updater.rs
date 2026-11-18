@@ -26,17 +26,44 @@ pub(super) fn registry_value(key: &str, value: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-pub(super) fn normalize_proxy(raw: &str) -> String {
+/// Picks the first supported HTTP(S) proxy out of a Windows proxy string.
+///
+/// Windows lists proxy entries as `http=host:port;https=host:port;socks=host:port`.
+/// SOCKS entries are recognised but deliberately skipped: this build's HTTP
+/// client has no SOCKS support, so feeding it `http://socks=...` fails the URL
+/// parse outright. When a string contains only unsupported protocols we return
+/// `None` and the updater connects directly, which is what the feature asks for
+/// ("ignore unsupported protocols").
+pub(super) fn normalize_proxy(raw: &str) -> Option<String> {
     let entries: Vec<&str> = raw
         .split(';')
         .map(str::trim)
         .filter(|entry| !entry.is_empty())
         .collect();
-    let server = ["https=", "http="]
-        .iter()
-        .find_map(|prefix| entries.iter().find_map(|entry| entry.strip_prefix(prefix)))
-        .unwrap_or_else(|| entries.first().copied().unwrap_or(""));
 
+    for prefix in ["https=", "http="] {
+        if let Some(server) = entries
+            .iter()
+            .find_map(|entry| entry.strip_prefix(prefix))
+            .map(str::trim)
+            .filter(|server| !server.is_empty())
+        {
+            return Some(with_http_scheme(server));
+        }
+    }
+
+    // No labelled HTTP(S) entry: a bare `host:port` keeps the historical
+    // http:// default. Entries carrying any other `key=` protocol (socks, etc.)
+    // are skipped rather than mistaken for a host.
+    entries
+        .iter()
+        .find(|entry| !entry.contains('='))
+        .map(|entry| entry.trim())
+        .filter(|entry| !entry.is_empty())
+        .map(with_http_scheme)
+}
+
+fn with_http_scheme(server: &str) -> String {
     if server.contains("://") {
         server.to_string()
     } else {
@@ -51,7 +78,7 @@ pub fn get_updater_proxy() -> Option<String> {
         if let Ok(value) = std::env::var(key) {
             let value = value.trim();
             if !value.is_empty() {
-                return Some(normalize_proxy(value));
+                return normalize_proxy(value);
             }
         }
     }
@@ -65,7 +92,7 @@ pub fn get_updater_proxy() -> Option<String> {
         return None;
     }
 
-    Some(normalize_proxy(&server))
+    normalize_proxy(&server)
 }
 
 /// Whether this build carries an updater public key. tauri.conf.json ships the
@@ -84,6 +111,7 @@ pub fn updater_configured(app: AppHandle) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::normalize_proxy;
     use serde_json::{json, Value};
 
     // tauri-plugin-updater declares `pubkey` as a mandatory config field with no
@@ -106,6 +134,40 @@ mod tests {
 
         assert_eq!(parsed.pubkey, "");
         assert!(!parsed.endpoints.is_empty());
+    }
+
+    #[test]
+    fn proxy_strings_pick_http_and_ignore_socks() {
+        // A mixed Windows proxy string: HTTP wins over SOCKS regardless of order.
+        assert_eq!(
+            normalize_proxy("http=1.2.3.4:8080;socks=127.0.0.1:1080"),
+            Some("http://1.2.3.4:8080".to_string())
+        );
+        assert_eq!(
+            normalize_proxy("socks5h=127.0.0.1:1080;https=proxy.example:443"),
+            Some("http://proxy.example:443".to_string())
+        );
+        // https= takes priority over http= when both are present.
+        assert_eq!(
+            normalize_proxy("http=a:1;https=b:2"),
+            Some("http://b:2".to_string())
+        );
+        // A bare host:port keeps the historical http:// prefix.
+        assert_eq!(
+            normalize_proxy("proxy.example:3128"),
+            Some("http://proxy.example:3128".to_string())
+        );
+    }
+
+    #[test]
+    fn proxy_strings_with_only_unsupported_protocols_are_ignored() {
+        // SOCKS cannot be used by this build's HTTP client: ignore it so the
+        // updater connects directly instead of failing on http://socks=...
+        assert_eq!(normalize_proxy("socks=127.0.0.1:1080"), None);
+        assert_eq!(normalize_proxy("socks5=127.0.0.1:1080"), None);
+        assert_eq!(normalize_proxy("socks5h=127.0.0.1:1080;socks=127.0.0.1:1081"), None);
+        assert_eq!(normalize_proxy(""), None);
+        assert_eq!(normalize_proxy("socks=127.0.0.1:1080;http=a:1"), Some("http://a:1".to_string()));
     }
 
     #[test]

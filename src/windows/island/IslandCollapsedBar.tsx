@@ -18,6 +18,7 @@ import type { MailController } from "../../features/messages/mail/MailPanel";
 import type { QQNotificationsController } from "../../features/messages/qq-notifications/QQNotifications";
 import type { WeChatRemindersController } from "../../features/messages/wechat/WeChatReminders";
 import { useTranslation } from "../../i18n";
+import { useUpdateAttention } from "../../features/updater/useUpdateAttention";
 import { TodoCountdown } from "../../features/todos/TodoCountdown";
 import type { TodoTimer } from "../../features/todos/timer";
 import { collapsedClickTarget, type CollapsedClickZone } from "./collapsedOpenPage";
@@ -101,6 +102,7 @@ export function IslandCollapsedBar({
   onTuck,
 }: IslandCollapsedBarProps) {
   const t = useTranslation();
+  const updateAttention = useUpdateAttention();
   const { didDragRef, prepareWindowDrag, handleWindowDragMove, cancelWindowDrag } =
     useWindowDragGesture(isTucked || positionLocked, onWindowDragStart);
   const isMusicPlaying = mediaState.playbackStatus === "playing";
@@ -149,13 +151,14 @@ export function IslandCollapsedBar({
           }}
         >
           <span className={pulseClassName} />
+          {updateAttention && <span className="island__update-dot" aria-label={t.island.updatePending} />}
           {collapsedCover && <img className="collapsed-cover" src={collapsedCover} alt="" draggable={false} />}
           <CollapsedMessageContent preview={preview} enabled={!isExpanded && !isTucked}>
             {quotaAlert ? (
               <QuotaAlertPopup alert={quotaAlert} />
             ) : <>
             {showCollapsedText && showTitle && (
-              <span className="island__brand">fly-island</span>
+              <span className="island__brand">{t.settings.project.appName}</span>
             )}
             {showCollapsedText && shownAgent && (
               <span className="island__agent-session" key={`${shownAgent.label}:${shownAgent.title}`}>

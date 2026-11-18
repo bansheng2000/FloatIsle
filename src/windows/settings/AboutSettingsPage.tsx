@@ -2,6 +2,7 @@ import { SettingsGroup } from "../../components/settings/SettingsGroup";
 import { SettingsLinkButton } from "../../components/settings/SettingsLinkButton";
 import { SettingsRow } from "../../components/settings/SettingsRow";
 import { ProjectIdentitySection, ProjectLinksSection } from "../../features/updater/ProjectSettingsSection";
+import { UpdateSettingsSection } from "../../features/updater/UpdateSettingsSection";
 import { ChangelogSection } from "../../features/updater/ChangelogSection";
 import { useTranslation } from "../../i18n";
 import { quitIsland } from "./api";
@@ -13,6 +14,7 @@ export function AboutSettingsPage() {
   return (
     <>
       <ProjectIdentitySection />
+      <UpdateSettingsSection />
       <ProjectLinksSection />
       <ChangelogSection />
       <SettingsGroup>

@@ -82,6 +82,42 @@ fn configured_endpoints(app: &AppHandle) -> Result<Vec<Url>, String> {
         .map_err(|error| error.to_string())
 }
 
+/// Rewrites a manifest download URL onto each configured mirror, in order.
+///
+/// The endpoints in tauri.conf.json are manifest URLs of the shape
+/// `https://<mirror>/https://github.com/<repo>/releases/.../latest.json`;
+/// the package URL inside the manifest is a plain GitHub absolute URL. To fall
+/// back when GitHub is unreachable we splice the same mirror prefix onto that
+/// package URL. The first candidate is the original GitHub URL, then the
+/// mirrors in configured order (ghfast.top, gh-proxy.com as shipped).
+///
+/// This only touches the URL. The `signature` field and pubkey stay on the
+/// `Update` object, so `Update::download` still verifies every candidate with
+/// `verify_signature` — a tampered package fails on any mirror.
+pub(crate) fn download_url_candidates(package_url: &Url, endpoints: &[Url]) -> Vec<Url> {
+    let mut candidates = vec![package_url.clone()];
+    for endpoint in endpoints {
+        let manifest = endpoint.as_str();
+        let Some((mirror_prefix, _)) = manifest.split_once("https://github.com/") else {
+            continue;
+        };
+        let package = package_url.as_str();
+        // Only rewrite package URLs pointing at the same GitHub release tree as
+        // the manifest. A package on any other host is left untouched, so a
+        // third-party download URL is never silently redirected to a mirror.
+        if !package.starts_with("https://github.com/") {
+            continue;
+        }
+        let path = package.trim_start_matches("https://github.com/");
+        if let Ok(url) = Url::parse(&format!("{mirror_prefix}https://github.com/{path}")) {
+            if !candidates.contains(&url) {
+                candidates.push(url);
+            }
+        }
+    }
+    candidates
+}
+
 fn pending() -> Result<std::sync::MutexGuard<'static, Option<Update>>, String> {
     PENDING
         .lock()
@@ -92,6 +128,57 @@ fn downloaded() -> Result<std::sync::MutexGuard<'static, Option<Vec<u8>>>, Strin
     DOWNLOADED
         .lock()
         .map_err(|_| "The update state is unavailable".to_string())
+}
+
+/// A signature/verification failure is fatal: never try the next mirror, and
+/// never install a package from a mirror whose bytes failed verification.
+/// Only transport-level failures justify moving on to another mirror.
+fn is_signature_error(error: &tauri_plugin_updater::Error) -> bool {
+    use tauri_plugin_updater::Error as E;
+    matches!(
+        error,
+        E::Minisign(_)
+            | E::Base64(_)
+            | E::SignatureUtf8(_)
+            | E::SignedVersionMismatch { .. }
+            | E::MissingSignedVersion
+    )
+}
+
+/// Downloads the pending package, falling back across mirrors on transport
+/// errors only. Signature verification happens inside `Update::download` for
+/// every candidate; a verification error aborts the whole chain.
+async fn download_with_mirror_fallback(
+    update: &mut Update,
+    endpoints: &[Url],
+    on_event: &Channel<DownloadEvent>,
+) -> Result<Vec<u8>, String> {
+    update.timeout = Some(DOWNLOAD_TIMEOUT);
+    let candidates = download_url_candidates(&update.download_url, endpoints);
+    let mut last_error: Option<tauri_plugin_updater::Error> = None;
+    for candidate in candidates {
+        update.download_url = candidate;
+        match update
+            .download(progress(on_event), || {
+                let _ = on_event.send(DownloadEvent::Finished);
+            })
+            .await
+        {
+            Ok(bytes) => return Ok(bytes),
+            Err(error) => {
+                if is_signature_error(&error) {
+                    return Err(format!("Update signature verification failed: {error}"));
+                }
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(format!(
+        "Update download failed on all mirrors: {}",
+        last_error
+            .map(|error| error.to_string())
+            .unwrap_or_else(|| "no mirror configured".to_string())
+    ))
 }
 
 /// Reports `download` progress as `Started` once, then one `Progress` per chunk.
@@ -139,15 +226,13 @@ pub async fn updater_check(
 
 /// Downloads the pending update without installing it.
 #[tauri::command]
-pub async fn updater_download(on_event: Channel<DownloadEvent>) -> Result<(), String> {
+pub async fn updater_download(
+    app: AppHandle,
+    on_event: Channel<DownloadEvent>,
+) -> Result<(), String> {
+    let endpoints = configured_endpoints(&app)?;
     let mut update = pending()?.clone().ok_or("No update to download")?;
-    update.timeout = Some(DOWNLOAD_TIMEOUT);
-    let bytes = update
-        .download(progress(&on_event), || {
-            let _ = on_event.send(DownloadEvent::Finished);
-        })
-        .await
-        .map_err(|error| error.to_string())?;
+    let bytes = download_with_mirror_fallback(&mut update, &endpoints, &on_event).await?;
     *downloaded()? = Some(bytes);
     Ok(())
 }
@@ -155,19 +240,18 @@ pub async fn updater_download(on_event: Channel<DownloadEvent>) -> Result<(), St
 /// Installs the pending update, downloading it first unless `updater_download`
 /// already did. On Windows the installer exits the app and relaunches it.
 #[tauri::command]
-pub async fn updater_install(on_event: Channel<DownloadEvent>) -> Result<(), String> {
+pub async fn updater_install(
+    app: AppHandle,
+    on_event: Channel<DownloadEvent>,
+) -> Result<(), String> {
     let mut update = pending()?.take().ok_or("No update to install")?;
     if let Some(bytes) = downloaded()?.take() {
         let _ = on_event.send(DownloadEvent::Finished);
         return update.install(bytes).map_err(|error| error.to_string());
     }
-    update.timeout = Some(DOWNLOAD_TIMEOUT);
-    update
-        .download_and_install(progress(&on_event), || {
-            let _ = on_event.send(DownloadEvent::Finished);
-        })
-        .await
-        .map_err(|error| error.to_string())
+    let endpoints = configured_endpoints(&app)?;
+    let bytes = download_with_mirror_fallback(&mut update, &endpoints, &on_event).await?;
+    update.install(bytes).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -215,5 +299,50 @@ mod tests {
                 .expect("plugins.updater must deserialize");
         let beta = channel_endpoints(&updater.endpoints, "beta").expect("beta endpoints");
         assert_eq!(beta.len(), 2 * updater.endpoints.len());
+    }
+
+    #[test]
+    fn download_candidates_start_at_github_then_follow_mirrors_in_order() {
+        let package = Url::parse(
+            "https://github.com/o/r/releases/download/v1/setup.msi",
+        )
+        .unwrap();
+        let endpoints = urls(&[
+            "https://github.com/o/r/releases/latest/download/latest.json",
+            "https://ghfast.top/https://github.com/o/r/releases/latest/download/latest.json",
+            "https://gh-proxy.com/https://github.com/o/r/releases/latest/download/latest.json",
+        ]);
+        let candidates = download_url_candidates(&package, &endpoints);
+        let strings = candidates.iter().map(Url::as_str).collect::<Vec<_>>();
+        assert_eq!(
+            strings,
+            vec![
+                "https://github.com/o/r/releases/download/v1/setup.msi",
+                "https://ghfast.top/https://github.com/o/r/releases/download/v1/setup.msi",
+                "https://gh-proxy.com/https://github.com/o/r/releases/download/v1/setup.msi",
+            ]
+        );
+    }
+
+    #[test]
+    fn download_candidates_leave_non_github_packages_untouched() {
+        let package = Url::parse("https://cdn.example.com/setup.msi").unwrap();
+        let endpoints = urls(&[
+            "https://ghfast.top/https://github.com/o/r/releases/latest/download/latest.json",
+        ]);
+        let candidates = download_url_candidates(&package, &endpoints);
+        assert_eq!(candidates, vec![package]);
+    }
+
+    #[test]
+    fn signature_failures_are_fatal_but_network_errors_are_not() {
+        use tauri_plugin_updater::Error as E;
+        assert!(is_signature_error(&E::SignatureUtf8("bad".into())));
+        assert!(is_signature_error(&E::MissingSignedVersion));
+        assert!(is_signature_error(&E::SignedVersionMismatch {
+            signed: "1".into(),
+            announced: "2".into()
+        }));
+        assert!(!is_signature_error(&E::Network("timeout".into())));
     }
 }
