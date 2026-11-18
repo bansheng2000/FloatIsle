@@ -30,6 +30,18 @@ export type ClipboardText = {
   editNoteLabel: string;
   addNoteLabel: string;
   noteFallback: string;
+  // E2: multi-select, favourites-safe select-all and original-image preview.
+  selectMode: string;
+  exitSelectMode: string;
+  selectAllNoFavorites: string;
+  selectItem: (preview: string) => string;
+  selectedCount: (count: number) => string;
+  confirmDeleteSelected: (count: number) => string;
+  noSelection: string;
+  originalImage: string;
+  loadingOriginal: string;
+  originalUnavailable: string;
+  closePreview: string;
 };
 
 export const zhCN: ClipboardText = {
@@ -64,6 +76,17 @@ export const zhCN: ClipboardText = {
   editNoteLabel: "添加剪贴记录备注",
   addNoteLabel: "添加剪贴记录备注",
   noteFallback: "备注",
+  selectMode: "进入多选",
+  exitSelectMode: "退出多选",
+  selectAllNoFavorites: "全选（不含收藏）",
+  selectItem: (preview) => `勾选剪贴记录：${preview}`,
+  selectedCount: (count) => `已选 ${count} 项`,
+  confirmDeleteSelected: (count) => `确认删除 ${count} 项`,
+  noSelection: "未选择任何记录",
+  originalImage: "查看原图",
+  loadingOriginal: "正在加载原图…",
+  originalUnavailable: "原图暂不可用",
+  closePreview: "关闭原图预览",
 };
 
 export const en: ClipboardText = {
@@ -98,4 +121,15 @@ export const en: ClipboardText = {
   editNoteLabel: "Add note to clipboard entry",
   addNoteLabel: "Add note to clipboard entry",
   noteFallback: "Note",
+  selectMode: "Select entries",
+  exitSelectMode: "Exit selection",
+  selectAllNoFavorites: "Select all (without favorites)",
+  selectItem: (preview) => `Select entry: ${preview}`,
+  selectedCount: (count) => `${count} selected`,
+  confirmDeleteSelected: (count) => `Confirm deleting ${count} entries`,
+  noSelection: "Nothing selected",
+  originalImage: "View original image",
+  loadingOriginal: "Loading original image…",
+  originalUnavailable: "Original image unavailable",
+  closePreview: "Close original image preview",
 };

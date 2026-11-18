@@ -18,6 +18,51 @@
   background: var(--color-white-a04);
 }
 
+/* E2: in multi-select the checkbox takes its own leading column. */
+.clipboard-item--selecting {
+  grid-template-columns: 20px minmax(0, 1fr) minmax(0, 100px) auto;
+}
+
+.clipboard-item__check {
+  width: 16px;
+  height: 16px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  color: var(--color-white);
+  background: transparent;
+  border: 1.5px solid var(--text-3);
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+.clipboard-item__check--on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.clipboard-item__check:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.clipboard-item__check:focus-visible,
+.clipboard-original-button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+/* A magnifier on image rows opens the full-size original, even in multi-select. */
+.clipboard-original-button {
+  color: var(--text-3);
+}
+
+.clipboard-original-button:hover {
+  color: var(--color-white);
+  background: var(--color-white-a16);
+}
+
 .clipboard-item__main {
   min-width: 0;
   display: grid;

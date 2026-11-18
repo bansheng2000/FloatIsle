@@ -126,3 +126,63 @@
   opacity: 0.38;
   transform: none;
 }
+
+/* E2: multi-select affordances share the header's tooling row. */
+.clipboard-select-toggle {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--corner-sm);
+  corner-shape: var(--corner-shape);
+  outline: none;
+  cursor: pointer;
+}
+
+.clipboard-select-toggle:hover:not(:disabled),
+.clipboard-select-all:hover:not(:disabled) {
+  color: var(--color-white);
+  background: var(--color-white-a10);
+}
+
+.clipboard-select-count {
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.clipboard-select-all {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--color-white-a12);
+  border-radius: var(--corner-sm);
+  corner-shape: var(--corner-shape);
+  outline: none;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.clipboard-select-toggle:focus-visible,
+.clipboard-select-all:focus-visible,
+.clipboard-clear-button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.clipboard-select-all:disabled {
+  cursor: default;
+  opacity: 0.38;
+}

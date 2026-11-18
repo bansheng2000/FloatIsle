@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { clearClipboardHistory, copyClipboardItem, deleteClipboardItem, getClipboardHistory, listenClipboardHistoryChanged, listenClipboardHistoryShortcut, setClipboardItemNote, toggleClipboardFavorite, type ClipboardHistorySnapshot } from "./api";
+import { clearClipboardHistory, copyClipboardItem, deleteClipboardItem, deleteClipboardItems, getClipboardHistory, getClipboardImageDataUrl, listenClipboardHistoryChanged, listenClipboardHistoryShortcut, setClipboardItemNote, toggleClipboardFavorite, type ClipboardHistorySnapshot } from "./api";
 import { DEFAULT_CLIPBOARD_HISTORY } from "./settings";
 
 /** Clipboard history snapshot, its item actions, and the native change and shortcut listeners. */
@@ -68,6 +68,26 @@ export function useClipboardHistory(onShortcut: () => void) {
     }
   }, []);
 
+  // E2: one invoke for a whole batch; the native service skips favourites again.
+  const deleteClipboardHistoryItems = useCallback(async (ids: string[]) => {
+    try {
+      const snapshot = await deleteClipboardItems(ids);
+      setClipboardHistory(snapshot);
+    } catch (error) {
+      console.error("Failed to delete clipboard history items", error);
+    }
+  }, []);
+
+  // E2: read a full-size original on demand; returns null when it cannot be read.
+  const readClipboardImage = useCallback(async (id: string) => {
+    try {
+      return await getClipboardImageDataUrl(id);
+    } catch (error) {
+      console.error("Failed to read the original clipboard image", error);
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     void refreshClipboardHistory();
 
@@ -123,5 +143,7 @@ export function useClipboardHistory(onShortcut: () => void) {
     updateClipboardHistoryItemNote,
     deleteClipboardHistoryItem,
     clearClipboardHistoryItems,
+    deleteClipboardHistoryItems,
+    readClipboardImage,
   };
 }

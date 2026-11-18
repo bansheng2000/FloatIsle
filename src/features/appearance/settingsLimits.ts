@@ -35,7 +35,9 @@ export const DEFAULT_AUTO_TUCK_RETRACT_DELAY_MS = 500;
 // height the todo page reached before this was a setting (six rows).
 export const DEFAULT_MAX_PANEL_HEIGHT = 490;
 // Rows the clipboard page shows before it scrolls: a short page, the rest a scroll away.
-export const DEFAULT_CLIPBOARD_VISIBLE_ROWS = 4;
+// E2: adjustable 3–8 from Settings; default keeps the previous four-row look.
+export const CLIPBOARD_VISIBLE_ROWS = { min: 3, max: 8, default: 4 } as const;
+export const DEFAULT_CLIPBOARD_VISIBLE_ROWS = CLIPBOARD_VISIBLE_ROWS.default;
 export const DEFAULT_AGENT_VISIBLE_ROWS = 2;
 export const MIN_AGENT_VISIBLE_ROWS = 2;
 // Five sessions is the tallest Agent page the native window accepts (627px of 656px).

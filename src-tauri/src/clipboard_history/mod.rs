@@ -31,7 +31,9 @@ const LEGACY_DEFAULT_SHORTCUT: &str = "Ctrl+X";
 
 const MIN_MAX_ITEMS: usize = 5;
 
-const MAX_MAX_ITEMS: usize = 200;
+// E2: the history may hold up to 500 entries. Eviction already keeps favourites,
+// so raising this ceiling is the only change needed for the larger limit.
+const MAX_MAX_ITEMS: usize = 500;
 
 const SHORT_DUPLICATE_WINDOW_MS: i64 = 2_000;
 
@@ -196,6 +198,20 @@ pub fn clear_clipboard_history() -> Result<ClipboardHistorySnapshot, String> {
     service()?.clear()
 }
 
+/// E2: delete many entries in one shot. Favourites are skipped even if a caller
+/// sends their ids, so batch deletion cannot remove a pinned item.
+#[tauri::command]
+pub fn delete_clipboard_items(ids: Vec<String>) -> Result<ClipboardHistorySnapshot, String> {
+    service()?.delete_items(&ids, true)
+}
+
+/// E2: read a full-size image on demand. The snapshot only embeds the thumbnail,
+/// so the webview asks for the original here when the user opens the preview.
+#[tauri::command]
+pub fn get_clipboard_image_data_url(id: String) -> Result<String, String> {
+    service()?.original_image_data_url(&id)
+}
+
 /// Puts plain text on the system clipboard without going through the history. Bounded by
 /// the same write path, used by the diagnostics copy buttons so their text does not become
 /// a history entry the user has to clean up.
@@ -265,6 +281,8 @@ macro_rules! tauri_commands {
             crate::clipboard_history::set_clipboard_history_item_note,
             crate::clipboard_history::delete_clipboard_history_item,
             crate::clipboard_history::clear_clipboard_history,
+            crate::clipboard_history::delete_clipboard_items,
+            crate::clipboard_history::get_clipboard_image_data_url,
             crate::clipboard_history::copy_text_to_clipboard,
         ] $($rest)*)
     };

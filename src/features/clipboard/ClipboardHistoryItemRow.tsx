@@ -1,4 +1,4 @@
-import { Check, ClipboardList, Copy, ImageIcon, Pencil, Star, Trash2, X } from "lucide-react";
+import { Check, ClipboardList, Copy, ImageIcon, Pencil, Search, Star, Trash2, X } from "lucide-react";
 import { useTranslation } from "../../i18n";
 import type { ClipboardHistoryItem } from "./api";
 import "./ClipboardHistoryItemRow.css";
@@ -18,6 +18,11 @@ export function ClipboardHistoryItemRow({
   onSaveNote,
   onCancelEditNote,
   onDelete,
+  // E2: selection and original-image preview.
+  multiSelect,
+  selected,
+  onToggleSelect,
+  onOpenOriginal,
 }: {
   item: ClipboardHistoryItem;
   elementRef: (node: HTMLElement | null) => void;
@@ -33,11 +38,33 @@ export function ClipboardHistoryItemRow({
   onSaveNote: (id: string) => void;
   onCancelEditNote: () => void;
   onDelete: (id: string) => void;
+  multiSelect?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
+  onOpenOriginal?: (id: string) => void;
 }) {
   const t = useTranslation();
 
   return (
-    <article className="clipboard-item" role="listitem" ref={elementRef} data-clipboard-id={item.kind === "text" ? item.id : undefined}>
+    <article
+      className={multiSelect ? "clipboard-item clipboard-item--selecting" : "clipboard-item"}
+      role="listitem"
+      ref={elementRef}
+      data-clipboard-id={item.kind === "text" ? item.id : undefined}
+    >
+      {multiSelect ? (
+        <button
+          className={selected ? "clipboard-item__check clipboard-item__check--on" : "clipboard-item__check"}
+          type="button"
+          disabled={item.favorite}
+          aria-label={t.clipboard.selectItem(item.preview)}
+          aria-pressed={Boolean(selected)}
+          onClick={() => onToggleSelect?.(item.id)}
+          data-clipboard-confirm-control="true"
+        >
+          {selected ? <Check size={13} strokeWidth={2.8} /> : null}
+        </button>
+      ) : null}
       <button
         className="clipboard-item__main"
         type="button"
@@ -115,6 +142,17 @@ export function ClipboardHistoryItemRow({
         )}
       </div>
       <div className="clipboard-item__actions">
+        {item.kind === "image" ? (
+          <button
+            className="clipboard-original-button"
+            type="button"
+            aria-label={t.clipboard.originalImage}
+            onClick={() => onOpenOriginal?.(item.id)}
+            data-clipboard-confirm-control="true"
+          >
+            <Search size={14} strokeWidth={2.3} />
+          </button>
+        ) : null}
         <button
           className={[
             "clipboard-favorite-button",

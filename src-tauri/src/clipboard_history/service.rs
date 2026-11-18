@@ -46,6 +46,13 @@ const CLIPBOARD_WRITE_RETRY_DELAY: Duration = Duration::from_millis(35);
 
 static CLIPBOARD_NOTIFY_TX: OnceLock<Mutex<Option<SyncSender<()>>>> = OnceLock::new();
 
+/// E2: pure decision for batch deletion. A selected favourite is kept whenever
+/// favourites are protected, so the "select all without favourites" rule holds
+/// even if a pinned id reaches the service.
+fn item_is_deletable(selected: bool, favorite: bool, skip_favorites: bool) -> bool {
+    selected && !(skip_favorites && favorite)
+}
+
 enum ClipboardCapture {
     Text {
         hash: String,
@@ -194,6 +201,60 @@ impl ClipboardHistoryService {
 
         self.emit_changed();
         Ok(snapshot)
+    }
+
+    /// E2: remove many entries under one lock and one persist. When skip_favorites
+    /// is set (the batch path), a pinned id in `ids` is ignored on both the client
+    /// and here, so favourites survive even a stale or malicious request.
+    pub(super) fn delete_items(
+        &self,
+        ids: &[String],
+        skip_favorites: bool,
+    ) -> Result<ClipboardHistorySnapshot, String> {
+        let mut state = self.state.lock().map_err(|error| error.to_string())?;
+        let mut removed = Vec::new();
+        state.items.retain(|item| {
+            let selected = ids.iter().any(|id| id == &item.id);
+            let deletable = item_is_deletable(selected, item.favorite, skip_favorites);
+            if deletable {
+                removed.push(item.clone());
+            }
+            !deletable
+        });
+        if !removed.is_empty() {
+            for item in &removed {
+                self.remove_item_files(item);
+            }
+            self.persist_locked(&state)?;
+        }
+        let snapshot = Self::snapshot_locked(&state);
+        drop(state);
+
+        if !removed.is_empty() {
+            self.emit_changed();
+        }
+        Ok(snapshot)
+    }
+
+    /// E2: load a full-size clipboard image as a data URL on demand. The original
+    /// PNG is already written to disk by `persist_image`; this only reads it back.
+    pub(super) fn original_image_data_url(&self, id: &str) -> Result<String, String> {
+        let state = self.state.lock().map_err(|error| error.to_string())?;
+        let image = state
+            .items
+            .iter()
+            .find(|item| item.id == id)
+            .and_then(|item| item.image.as_ref())
+            .ok_or_else(|| "Clipboard image was not found.".to_string())?;
+        let bytes = fs::read(&image.original_path)
+            .map_err(|error| format!("Failed to read the original image: {error}"))?;
+        if bytes.len() > MAX_IMAGE_PNG_BYTES {
+            return Err("The original image is larger than the history limit.".to_string());
+        }
+        Ok(format!(
+            "data:image/png;base64,{}",
+            general_purpose::STANDARD.encode(bytes)
+        ))
     }
 
     fn capture_current_clipboard(&self) {
@@ -574,5 +635,18 @@ impl WindowMessages for ClipboardWindow {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::item_is_deletable;
+
+    #[test]
+    fn batch_delete_keeps_favorites_even_when_selected() {
+        assert!(item_is_deletable(true, false, true));
+        assert!(!item_is_deletable(true, true, true));
+        assert!(item_is_deletable(true, true, false));
+        assert!(!item_is_deletable(false, false, true));
     }
 }

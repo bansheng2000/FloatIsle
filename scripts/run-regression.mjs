@@ -25,6 +25,7 @@ export const PAGES = [
   "agent-dsh.html?test=1",
   "agent-dsh-usage.html?test=1",
   "agent-sessions.html?test=1",
+  "clipboard.html",
   "collapsed-message-animation.html?test=1",
   "file-shelf.html",
   "i18n.html?test=1",

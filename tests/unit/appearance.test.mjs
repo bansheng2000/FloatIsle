@@ -76,7 +76,8 @@ test("options no longer in Settings load as their defaults, whatever was saved",
     islandCornerRadius: 30,
     islandCornerShape: "round",
     maxPanelHeight: 320,
-    clipboardVisibleRows: 3,
+    // E2: clipboardVisibleRows now has a Settings control (3–8) and reads back its
+    // saved value, so it is no longer an "option removed from Settings" (see e2-clipboard.test.mjs).
     pulseBrightness: 140,
     todoBackgroundColor: "#ffeeaa",
     showTitle: true,

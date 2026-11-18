@@ -40,6 +40,8 @@ export function ClipboardSettingsPage({
         <ClipboardSettingsSection
           clipboardSettings={clipboardSettings}
           onClipboardSettingsChange={updateClipboardSettings}
+          settings={settings}
+          onSettingsChange={onSettingsChange}
         />
       )}
       {clipboardSettings.enabled && (

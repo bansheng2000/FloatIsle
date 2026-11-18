@@ -143,6 +143,8 @@ export function IslandPages({
           onUpdateNote={updateClipboardHistoryItemNote}
           onDeleteItem={(id) => void deleteClipboardHistoryItem(id)}
           onClear={() => void clearClipboardHistoryItems()}
+          onBatchDelete={(ids) => void clipboard.deleteClipboardHistoryItems(ids)}
+          onLoadOriginal={clipboard.readClipboardImage}
         />
       )}
       {page === "agents" && <AgentSessionsPanel sessions={agentSessions} view={settings.agentSessionView} sort={settings.agentSessionSort} group={settings.agentSessionGroup} archiveMotion={settings.agentArchiveMotion} cardEffects={settings.agentCardEffects} hostDisplay={settings.agentHostDisplay} showElapsed={settings.agentShowElapsed} showModel={settings.agentShowModel} showActivity={settings.agentShowActivity} unseen={unseenAgentSessions} removal={agentRemoval} reveal={alertedSession} showUsage={settings.agentShowUsage} usages={agentUsages} usageMode={settings.agentUsageMode} usageRefreshMs={settings.agentUsageRefreshMs} approvals={agentApprovals} jump={sessionJump} onJumpHandled={onSessionJumpHandled} />}
