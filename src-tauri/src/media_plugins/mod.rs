@@ -28,9 +28,51 @@ impl PluginError {
         Self::new("Network", error.to_string())
     }
 }
+/// (E5-3) Map low-level failure text to a user-actionable reason.
+/// Unknown cases return "Io" so pre-existing behavior is preserved.
+/// This is text/kind heuristics only — no live drive-type or lock probing; real-machine
+/// classification is unverified (see the E5 acceptance ledger).
+pub(crate) fn classify_io_text(text: &str) -> &'static str {
+    let text = text.to_lowercase();
+    if text.contains("loader already exists") || text.contains("foreign loader") {
+        "ForeignLoader"
+    } else if text.contains("being used by another process")
+        || text.contains("sharing violation")
+        || text.contains("locked")
+    {
+        "FileInUse"
+    } else if text.contains("network drive")
+        || text.contains("mapped drive")
+        || text.contains("network path")
+        || text.contains("remote drive")
+    {
+        "NetworkDrive"
+    } else if text.contains("focusd-tmp")
+        || text.contains("temporary")
+        || text.contains("temp file")
+    {
+        "TempInterrupted"
+    } else if text.contains("access is denied") || text.contains("permission denied") {
+        "SecuritySoftware"
+    } else {
+        "Io"
+    }
+}
+
+/// (E5-3) Classify an IO error; falls back to text heuristics for kinds with no direct mapping.
+fn classify_io_error(error: &std::io::Error) -> &'static str {
+    match error.kind() {
+        std::io::ErrorKind::PermissionDenied => "SecuritySoftware",
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => "FileInUse",
+        _ => classify_io_text(&error.to_string()),
+    }
+}
+
 impl From<std::io::Error> for PluginError {
     fn from(error: std::io::Error) -> Self {
-        Self::new("Io", error.to_string())
+        let detail = error.to_string();
+        let kind = classify_io_error(&error);
+        Self::new(kind, detail)
     }
 }
 #[derive(Clone, Serialize)]

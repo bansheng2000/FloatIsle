@@ -132,7 +132,7 @@ export function IslandHeader({
             aria-label={agentStatusLabel}
           />
         )}
-        {showTitle && <span>fly-island</span>}
+        {showTitle && <span>{t.island.appName}</span>}
       </div>
 
       <div

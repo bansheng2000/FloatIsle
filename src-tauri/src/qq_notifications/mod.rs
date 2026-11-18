@@ -167,6 +167,17 @@ pub fn set_qq_notifications_enabled(enabled: bool) -> Result<NotificationSnapsho
     Ok(snapshot)
 }
 
+/// (E5-2) Drop one conversation from the island list by its stable key (the notification
+/// title = contact or group name), keeping every other conversation. `baseline` is left
+/// alone on purpose: a still-present Windows notification must not reappear as "new".
+fn without_conversation(items: &[QQNotification], key: &str) -> Vec<QQNotification> {
+    items
+        .iter()
+        .filter(|item| item.title != key)
+        .cloned()
+        .collect()
+}
+
 #[tauri::command]
 pub fn clear_qq_notifications() -> Result<NotificationSnapshot, String> {
     let service = service()?;
@@ -174,6 +185,21 @@ pub fn clear_qq_notifications() -> Result<NotificationSnapshot, String> {
         let mut state = service.state.lock().map_err(|_| "QQ 通知状态不可用。")?;
         state.buffer.items.clear();
         state.snapshot.items.clear();
+        state.snapshot.revision += 1;
+        state.snapshot.clone()
+    };
+    publish(service, snapshot.clone(), None);
+    Ok(snapshot)
+}
+
+/// (E5-2) Clear only one contact's / group's messages from the island list.
+#[tauri::command]
+pub fn clear_qq_notification(key: String) -> Result<NotificationSnapshot, String> {
+    let service = service()?;
+    let snapshot = {
+        let mut state = service.state.lock().map_err(|_| "QQ 通知状态不可用。")?;
+        state.buffer.items = without_conversation(&state.buffer.items, &key);
+        state.snapshot.items = without_conversation(&state.snapshot.items, &key);
         state.snapshot.revision += 1;
         state.snapshot.clone()
     };
@@ -270,6 +296,7 @@ macro_rules! tauri_commands {
             crate::qq_notifications::request_qq_notification_access,
             crate::qq_notifications::open_qq_notification_settings,
             crate::qq_notifications::clear_qq_notifications,
+            crate::qq_notifications::clear_qq_notification,
             crate::qq_notifications::open_qq,
         ] $($rest)*)
     };

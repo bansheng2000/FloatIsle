@@ -2,7 +2,7 @@ import { useTranslation } from "../../../i18n";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { nextQQPreview, type QQPreviewTiming } from "../qqNotificationTiming";
-import { clearQQNotifications, getQQNotificationState, launchQQ, listenQQNotificationsChanged, openQQNotificationSettings, requestQQNotificationAccess, setQQNotificationsEnabled, type QQNotificationSnapshot } from "./api";
+import { clearQQNotification, clearQQNotifications, getQQNotificationState, launchQQ, listenQQNotificationsChanged, openQQNotificationSettings, requestQQNotificationAccess, setQQNotificationsEnabled, type QQNotificationSnapshot } from "./api";
 import { hasRequestedQQNotificationAccess, isQQNotificationsEnabled, markQQNotificationAccessRequested, saveQQNotificationsEnabled } from "./storage";
 
 const EMPTY_SNAPSHOT: QQNotificationSnapshot = {
@@ -13,12 +13,16 @@ const EMPTY_SNAPSHOT: QQNotificationSnapshot = {
   error: null,
 };
 
-export function useQQNotifications(canPreview: boolean) {
+/** `stayMs`: (E5-1) preview stay time in milliseconds; defaults to the old 5s. */
+export function useQQNotifications(canPreview: boolean, stayMs = 5000) {
   const t = useTranslation();
+  const stayMsRef = useRef(stayMs);
   const [snapshot, setSnapshot] = useState(EMPTY_SNAPSHOT);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(isTauri);
   const [previewWindow, setPreviewWindow] = useState<{ id: string; expiresAt: number; receivedAt: number } | null>(null);
+  const previewWindowRef = useRef(previewWindow);
+  previewWindowRef.current = previewWindow;
   const canPreviewRef = useRef(canPreview);
   const revisionRef = useRef(-1);
   const timingRef = useRef<QQPreviewTiming | null>(null);
@@ -26,11 +30,12 @@ export function useQQNotifications(canPreview: boolean) {
 
   useLayoutEffect(() => {
     canPreviewRef.current = canPreview;
+    stayMsRef.current = stayMs;
     if (!canPreview) {
       timingRef.current = null;
       setPreviewWindow(null);
     }
-  }, [canPreview]);
+  }, [canPreview, stayMs]);
 
   const acceptSnapshot = useCallback((next: QQNotificationSnapshot) => {
     if (next.revision < revisionRef.current) return false;
@@ -53,7 +58,7 @@ export function useQQNotifications(canPreview: boolean) {
         }
         if (payload.newestId) {
           const receivedAt = Date.now();
-          const { timing, expiresAt } = nextQQPreview(timingRef.current, receivedAt);
+          const { timing, expiresAt } = nextQQPreview(timingRef.current, receivedAt, stayMsRef.current);
           timingRef.current = timing;
           setPreviewWindow(expiresAt === null ? null : { id: payload.newestId, expiresAt, receivedAt });
         }
@@ -133,13 +138,23 @@ export function useQQNotifications(canPreview: boolean) {
     setPreviewWindow(null);
   }), [acceptSnapshot, run]);
 
+  /** (E5-2) Clear only one conversation; drop a live preview if it belonged to that key. */
+  const clearConversation = useCallback((key: string) => run(async () => {
+    acceptSnapshot(await clearQQNotification(key));
+    const preview = previewWindowRef.current;
+    if (preview && snapshot.items.find((item) => item.id === preview.id)?.title === key) {
+      setPreviewWindow(null);
+      timingRef.current = null;
+    }
+  }), [acceptSnapshot, run, snapshot.items]);
+
   const openQQ = useCallback(() => run(async () => {
     await launchQQ();
     setPreviewWindow(null);
   }), [run]);
 
   return {
-    snapshot, busy, actionError, setEnabled, requestAccess, openSettings, refresh, clear, openQQ,
+    snapshot, busy, actionError, setEnabled, requestAccess, openSettings, refresh, clear, clearConversation, openQQ,
     previewReceivedAt: canPreview ? previewWindow?.receivedAt ?? null : null,
     preview: canPreview && previewWindow
       ? snapshot.items.find((item) => item.id === previewWindow.id) ?? null

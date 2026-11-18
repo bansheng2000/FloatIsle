@@ -43,7 +43,7 @@ export function SettingsWindow() {
 
   useEffect(() => {
     void getCurrentWindow()
-      .setTitle(`fly-island ${t.settings.title}`)
+      .setTitle(`${t.settings.project.appName} ${t.settings.title}`)
       .catch((error) => {
         console.error("Failed to set settings window title", error);
       });

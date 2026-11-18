@@ -136,9 +136,9 @@ pub(super) fn execute(args: &[String]) -> Result<(), PluginError> {
         if download::hash(source)? != *hash {
             return Err(PluginError::new("HashMismatch", "Source hash mismatch"));
         }
-        // Never overwrite a loader, even if one appears between discovery and elevation.
+        // (E5-3) A loader that appeared mid-install is a distinct, actionable reason.
         if target.exists() {
-            return Err(PluginError::new("Io", "Loader already exists"));
+            return Err(PluginError::new("ForeignLoader", "Loader already exists"));
         }
         atomic_copy(source, target, hash)
     } else {

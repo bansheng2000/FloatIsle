@@ -6,6 +6,8 @@ export type MusicText = {
     disclosure: string; license: string; success: string; removed: string; keptForeignLoader: string; preserved: string;
     needsClose: string; userDeclined: string; legacyConflict: string; unsupported: string;
     network: string; hashMismatch: string; busy: string; io: string; openPlugins: string; openFailed: string;
+    // (E5-3) fine-grained install failure reasons
+    securitySoftware: string; networkDrive: string; fileInUse: string; foreignLoader: string; tempInterrupted: string;
     closeAndRetry: string; restart: string; restarting: string; restarted: string; notice: string;
     states: Record<"none" | "loaderOnly" | "installed" | "foreignLoader" | "unknown", string>;
   };
@@ -56,6 +58,7 @@ export const zhCN: MusicText = {
     needsClose: "需要先关闭网易云音乐", userDeclined: "需要管理员权限才能写入网易云目录",
     legacyConflict: "检测到旧版 InfLink，请先删除旧插件再试", unsupported: "当前网易云版本暂不支持：",
     network: "下载失败，请检查网络后重试", hashMismatch: "下载的文件校验未通过，已丢弃，请重试", busy: "另一个安装或卸载正在进行", io: "文件操作失败：",
+    securitySoftware: "可能被安全软件拦截，请允许写入后将本程序加入白名单再试", networkDrive: "网易云似乎装在网络盘或映射盘上，请把插件目录移到本机磁盘再试", fileInUse: "插件文件被其他程序占用，请关闭相关程序（含网易云）后重试", foreignLoader: "目录里出现了别的加载器，已停止以免冲突，请确认后再试", tempInterrupted: "上次中断留下了临时文件，请先清理安装目录中的 focusd-tmp 临时文件再装",
     openPlugins: "打开插件目录", openFailed: "无法打开链接或目录",
     closeAndRetry: "关闭网易云并继续", restart: "立即重启网易云", restarting: "正在重启网易云…", restarted: "已重启网易云音乐，进度会在播放时同步", notice: "播放器提示",
     states: { none: "未安装插件", loaderOnly: "仅有加载器", installed: "插件已安装", foreignLoader: "已有其他加载器", unknown: "插件状态未知" },
@@ -110,6 +113,7 @@ export const en: MusicText = {
     needsClose: "NetEase Cloud Music needs to be closed first.", userDeclined: "Administrator permission is needed to write to the NetEase directory.",
     legacyConflict: "An old InfLink plugin was found. Remove it before retrying.", unsupported: "This NetEase version is unsupported:",
     network: "Download failed. Check your connection and retry.", hashMismatch: "The download failed verification and was discarded. Retry.", busy: "Another install or uninstall is running.", io: "File operation failed:",
+    securitySoftware: "This may be blocked by security software. Allow the write and add this app to the whitelist, then retry.", networkDrive: "NetEase seems installed on a network or mapped drive. Move the plugin folder to a local disk and retry.", fileInUse: "A plugin file is locked by another program. Close it (including NetEase) and retry.", foreignLoader: "A different loader appeared in the folder; installation stopped to avoid a conflict. Check it and retry.", tempInterrupted: "A previous interrupted run left temp files. Clean the focusd-tmp files in the install folder and retry.",
     openPlugins: "Open plugin folder", openFailed: "Could not open the link or folder",
     closeAndRetry: "Close NetEase and continue", restart: "Restart NetEase now", restarting: "Restarting NetEase…", restarted: "NetEase restarted. Progress syncs once a song plays.", notice: "Player tip",
     states: { none: "Plugin not installed", loaderOnly: "Loader only", installed: "Plugin installed", foreignLoader: "Existing third-party loader", unknown: "Unknown plugin state" },

@@ -38,6 +38,9 @@ export const DEFAULT_MAX_PANEL_HEIGHT = 490;
 // E2: adjustable 3–8 from Settings; default keeps the previous four-row look.
 export const CLIPBOARD_VISIBLE_ROWS = { min: 3, max: 8, default: 4 } as const;
 export const DEFAULT_CLIPBOARD_VISIBLE_ROWS = CLIPBOARD_VISIBLE_ROWS.default;
+// E5-1: how long a QQ message preview stays on the island, in seconds (3–30, default 5).
+// 5 keeps the burst window and 10 the old deadline (twice the stay).
+export const NOTIFICATION_STAY_SECONDS = { min: 3, max: 30, default: 5 } as const;
 export const DEFAULT_AGENT_VISIBLE_ROWS = 2;
 export const MIN_AGENT_VISIBLE_ROWS = 2;
 // Five sessions is the tallest Agent page the native window accepts (627px of 656px).

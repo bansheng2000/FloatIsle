@@ -14,6 +14,7 @@ export type QqText = {
   open: string;
   refresh: string;
   clear: string;
+  clearConversation: (title: string) => string;
   list: string;
   status: {
     disabled: string;
@@ -42,6 +43,7 @@ export const zhCN: QqText = {
   open: "打开 QQ",
   refresh: "刷新 QQ 通知状态",
   clear: "清空岛内 QQ 通知",
+  clearConversation: (title) => `清除「${title}」的消息`,
   list: "最近收到的 QQ 通知",
   status: {
     disabled: "已暂停",
@@ -70,6 +72,7 @@ export const en: QqText = {
   open: "Open QQ",
   refresh: "Refresh QQ notifications",
   clear: "Clear QQ notifications in the island",
+  clearConversation: (title) => `Clear messages from ${title}`,
   list: "Recently received QQ notifications",
   status: {
     disabled: "Paused",

@@ -19,6 +19,8 @@ use super::windows_home_dir;
 use crate::win32::known_folder;
 
 const DATA_DIR_NAME: &str = "FloatIsle";
+/// (E5-4) The pre-rebrand folder name; kept so existing users' todos are not orphaned.
+const LEGACY_DATA_DIR_NAME: &str = "fly-island";
 const DOCUMENT_NAME: &str = "todos.json";
 const LOCK_NAME: &str = "todos.lock";
 const BACKUP_DIR: &str = "backups";
@@ -59,6 +61,18 @@ pub struct TodoSave {
 }
 
 /// The todo folder: the user's chosen one, else `<Documents>\FloatIsle`.
+/// (E5-4) Pick the folder under `documents`: keep using the legacy folder if it
+/// already exists, otherwise the current brand folder. Pure so it can be unit-tested
+/// with a temp directory instead of touching the user's real Documents.
+fn choose_data_folder(documents: &Path) -> PathBuf {
+    let legacy = documents.join(LEGACY_DATA_DIR_NAME);
+    if legacy.is_dir() {
+        legacy
+    } else {
+        documents.join(DATA_DIR_NAME)
+    }
+}
+
 fn resolve(directory: Option<String>) -> Result<PathBuf, String> {
     if let Some(directory) = directory
         .as_deref()
@@ -72,7 +86,7 @@ fn resolve(directory: Option<String>) -> Result<PathBuf, String> {
         .or_else(|| windows_home_dir().ok().map(|home| home.join("Documents")));
 
     documents
-        .map(|documents| documents.join(DATA_DIR_NAME))
+        .map(|documents| choose_data_folder(&documents))
         .ok_or_else(|| "Failed to resolve the Documents folder.".to_string())
 }
 
@@ -459,8 +473,26 @@ pub fn remove_todo_document(directory: Option<String>) -> Result<bool, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{civil_from_days, resolve, stamp};
+    use super::{civil_from_days, choose_data_folder, resolve, stamp, DATA_DIR_NAME, LEGACY_DATA_DIR_NAME};
     use std::time::{Duration, UNIX_EPOCH};
+
+    #[test]
+    fn e5_legacy_folder_is_reused_only_when_present() {
+        let root = std::env::temp_dir().join(format!(
+            "floatisle-todo-folder-{}",
+            std::process::id()
+        ));
+        let legacy = root.join(LEGACY_DATA_DIR_NAME);
+        let current = root.join(DATA_DIR_NAME);
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        // No legacy folder yet -> current brand folder.
+        assert_eq!(choose_data_folder(&root), current);
+        // Legacy folder appears -> keep using it so existing todos stay visible.
+        std::fs::create_dir_all(&legacy).unwrap();
+        assert_eq!(choose_data_folder(&root), legacy);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn the_default_folder_sits_under_the_documents_folder() {

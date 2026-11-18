@@ -1,4 +1,5 @@
 import { useTranslation } from "../../i18n";
+import { X } from "lucide-react";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { formatMessageCardTime, splitMessageSender } from "./messageCardText";
 import "./MessageCard.css";
@@ -13,9 +14,12 @@ type MessageCardProps = {
   disabled?: boolean;
   ariaLabel?: string;
   onOpen?: () => void;
+  /** (E5-2) Optional per-conversation clear affordance. */
+  onClear?: () => void;
+  clearLabel?: string;
 };
 
-export function MessageCard({ source, name, timestamp, body, messageId, muted, disabled, ariaLabel, onOpen }: MessageCardProps) {
+export function MessageCard({ source, name, timestamp, body, messageId, muted, disabled, ariaLabel, onOpen, onClear, clearLabel }: MessageCardProps) {
   const t = useTranslation();
   const sender = muted ? null : splitMessageSender(body);
   const date = new Date(timestamp);
@@ -29,8 +33,15 @@ export function MessageCard({ source, name, timestamp, body, messageId, muted, d
       {sender ? <><strong>{sender.sender}</strong>{sender.separator}{sender.content}</> : body}
     </p>}
   </>;
+  const surface = onOpen
+    ? <button className="message-card__surface" type="button" disabled={disabled} aria-label={ariaLabel} onClick={onOpen}>{content}</button>
+    : <div className="message-card__surface">{content}</div>;
   return <article className="message-card" role="listitem" data-message-id={messageId}>
-    {onOpen ? <button className="message-card__surface" type="button" disabled={disabled} aria-label={ariaLabel} onClick={onOpen}>{content}</button>
-      : <div className="message-card__surface">{content}</div>}
+    {onClear
+      ? <div className="message-card__row">
+        {surface}
+        <button className="icon-button message-card__clear" type="button" disabled={disabled} aria-label={clearLabel} onClick={onClear}><X size={14} strokeWidth={1.8} /></button>
+      </div>
+      : surface}
   </article>;
 }

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { SettingsGroup } from "../../components/settings/SettingsGroup";
 import { SettingsLinkButton } from "../../components/settings/SettingsLinkButton";
+import { SettingsNumberRow } from "../../components/settings/SettingsNumberRow";
 import { SettingsRow } from "../../components/settings/SettingsRow";
 import { SettingsToggleRow } from "../../components/settings/SettingsToggleRow";
 import type { IslandSettings } from "../../features/appearance/types";
+import { NOTIFICATION_STAY_SECONDS } from "../../features/appearance/settingsLimits";
 import { MailAccountList } from "../../features/messages/mail/MailAccountList";
 import { MailConnectForm } from "../../features/messages/mail/MailConnectForm";
 import { MAX_MAIL_ACCOUNTS } from "../../features/messages/mail/mailAccounts";
@@ -38,7 +40,7 @@ export function MessagesSettingsPage({
 
   return (
     <>
-      <QQGroup controller={qqNotifications} title={labels.qqTitle} hint={labels.qqHint} />
+      <QQGroup controller={qqNotifications} title={labels.qqTitle} hint={labels.qqHint} settings={settings} onSettingsChange={onSettingsChange} />
       <SettingsGroup title={labels.wechatTitle} footer={<Problem error={actionError || wechat.error} hint={wechatHint} />}>
         <SettingsToggleRow
           title={t.wechat.receive}
@@ -74,7 +76,7 @@ function Problem({ error, hint }: { error: string | null | undefined; hint: stri
   return error ? <span className="messages-settings__error" role="alert">{error}</span> : <>{hint}</>;
 }
 
-function QQGroup({ controller, title, hint }: { controller: QQNotificationsController; title: string; hint: string }) {
+function QQGroup({ controller, title, hint, settings, onSettingsChange }: { controller: QQNotificationsController; title: string; hint: string; settings: IslandSettings; onSettingsChange: (settings: IslandSettings) => void }) {
   const t = useTranslation();
   const { snapshot, busy, actionError, setEnabled, requestAccess, openSettings } = controller;
   const needsAccess = snapshot.enabled && (snapshot.status === "permissionRequired" || snapshot.status === "permissionDenied");
@@ -83,6 +85,15 @@ function QQGroup({ controller, title, hint }: { controller: QQNotificationsContr
   return (
     <SettingsGroup title={title} footer={<Problem error={error} hint={hint} />}>
       <SettingsToggleRow title={t.qq.receive} checked={snapshot.enabled} onChange={(enabled) => void setEnabled(enabled)} />
+      <SettingsNumberRow
+        title={t.settings.messageSources.notificationStayTitle}
+        description={t.settings.messageSources.notificationStayHint}
+        value={settings.notificationStaySeconds}
+        min={NOTIFICATION_STAY_SECONDS.min}
+        max={NOTIFICATION_STAY_SECONDS.max}
+        unit={t.settings.messageSources.notificationStayUnit}
+        onChange={(notificationStaySeconds) => onSettingsChange({ ...settings, notificationStaySeconds })}
+      />
       {needsAccess && (
         <SettingsRow
           title={t.qq.allowLabel}

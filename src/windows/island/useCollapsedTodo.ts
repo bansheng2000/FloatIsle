@@ -75,7 +75,7 @@ export function useCollapsedTodo(
       : collapsedItem === "lyrics" ? LYRICS_WIDTH_TEXT : collapsedItem === "todo" ? todoText : null;
     // (E1) An explicit width wins over the text-derived one; 0 keeps the old behaviour.
     if (settings.collapsedWidth > 0) return Math.round(settings.collapsedWidth);
-    const text = settings.showCollapsedText ? itemText ?? (settings.showTitle ? "fly-island" : "") : "";
+    const text = settings.showCollapsedText ? itemText ?? (settings.showTitle ? t.island.appName : "") : "";
     return alignCollapsedIslandWidth(
       getCollapsedIslandWidth(text, coverWanted && collapsedItem === "lyrics" ? COVER_WIDTH
         : timerText && collapsedItem === "todo" && settings.showCollapsedText ? timerPillWidth(timerText) : 0),

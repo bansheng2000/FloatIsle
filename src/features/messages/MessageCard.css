@@ -21,9 +21,17 @@
   animation: messageCardEnter 180ms ease-out backwards;
 }
 
+.message-card__row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+
 .message-card__surface {
   display: block;
   box-sizing: border-box;
+  flex: 1 1 auto;
   width: 100%;
   min-width: 0;
   padding: 10px 12px;
@@ -36,6 +44,20 @@
   font-weight: 400;
   transition: background 120ms ease, transform 120ms ease;
 }
+
+.message-card__clear {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: 26px;
+  height: 26px;
+  margin: 4px 4px 0 0;
+  border-radius: var(--corner-md);
+  color: var(--text-3);
+  background: transparent;
+  cursor: pointer;
+}
+.message-card__clear:hover:not(:disabled) { color: #fff; background: rgba(255, 255, 255, .07); }
+.message-card__clear:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
 
 button.message-card__surface { cursor: pointer; }
 button.message-card__surface:hover:not(:disabled) { background: var(--message-card-hover); }

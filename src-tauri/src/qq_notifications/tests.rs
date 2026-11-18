@@ -17,6 +17,26 @@ use windows::{
 };
 
 #[test]
+fn e5_clear_one_conversation_keeps_the_others() {
+    let items = vec![
+        QQNotification { id: "1".into(), title: "Alice".into(), body: "a".into(), created_at: 1 },
+        QQNotification { id: "2".into(), title: "Work group".into(), body: "b".into(), created_at: 2 },
+        QQNotification { id: "3".into(), title: "Alice".into(), body: "c".into(), created_at: 3 },
+        QQNotification { id: "4".into(), title: "Bob".into(), body: "d".into(), created_at: 4 },
+    ];
+    let kept = without_conversation(&items, "Alice");
+    // Both of Alice's messages are gone; every other conversation is untouched, in order.
+    assert_eq!(kept.len(), 2);
+    assert_eq!(kept[0].title, "Work group");
+    assert_eq!(kept[1].title, "Bob");
+    assert!(kept.iter().all(|item| item.title != "Alice"));
+    // A key that matches nothing changes nothing.
+    assert_eq!(without_conversation(&items, "Nobody").len(), 4);
+    // An empty list stays empty.
+    assert!(without_conversation(&[], "Alice").is_empty());
+}
+
+#[test]
 fn diagnostic_reports_never_include_chat_content() {
     let snapshot = NotificationSnapshot {
         items: vec![QQNotification {

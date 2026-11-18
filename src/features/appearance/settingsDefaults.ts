@@ -5,6 +5,7 @@ import {
   DEFAULT_HOVER_EXPAND_DELAY_MS, DEFAULT_ISLAND_CORNER_RADIUS, DEFAULT_MAX_PANEL_HEIGHT, DEFAULT_SHELF_ITEMS, DEFAULT_TASK_TEXT_COLOR,
   DEFAULT_AGENT_USAGE_REFRESH_MS, COLLAPSED_HEIGHT, COLLAPSED_WIDTH, ISLAND_FONT_SIZE,
   AUTO_COLLAPSE_SECONDS, COLLAPSED_ITEMS, COLLAPSED_SLOTS, PAGE_DOTS, TUCK_DELAY_SECONDS,
+  NOTIFICATION_STAY_SECONDS,
 } from "./settingsLimits.ts";
 import type { IslandSettings } from "./types";
 
@@ -33,6 +34,7 @@ export const DEFAULT_SETTINGS: IslandSettings = {
   islandCornerShape: "squircle",
   maxPanelHeight: DEFAULT_MAX_PANEL_HEIGHT,
   clipboardVisibleRows: DEFAULT_CLIPBOARD_VISIBLE_ROWS,
+  notificationStaySeconds: NOTIFICATION_STAY_SECONDS.default,
   agentVisibleRows: DEFAULT_AGENT_VISIBLE_ROWS,
   agentHostDisplay: "icon",
   agentSessionView: "list",

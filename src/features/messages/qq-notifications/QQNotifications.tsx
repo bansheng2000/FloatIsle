@@ -33,7 +33,7 @@ export function QQNotificationControls({ controller, compact = false }: { contro
 }
 
 export function QQNotificationPanel({ controller, navigation }: { controller: QQNotificationsController; navigation: ReactNode }) {
-  const { snapshot, busy, actionError, refresh, openQQ } = controller;
+  const { snapshot, busy, actionError, refresh, openQQ, clearConversation } = controller;
   const t = useTranslation();
   const error = actionError || snapshot.error || (snapshot.status === "permissionRequired" || snapshot.status === "permissionDenied" ? t.qq.status[snapshot.status] : null);
   return (
@@ -52,7 +52,8 @@ export function QQNotificationPanel({ controller, navigation }: { controller: QQ
           <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSourceIcon source="qq" size={28} /></span><span>{t.common.noMessages}</span></div>
         ) : snapshot.items.map((item) => (
           <MessageCard key={item.id} source="qq" messageId={item.id} name={item.title} timestamp={item.createdAt} body={item.body}
-            disabled={busy} ariaLabel={t.qq.openNotification(item.title)} onOpen={() => void openQQ()} />
+            disabled={busy} ariaLabel={t.qq.openNotification(item.title)} onOpen={() => void openQQ()}
+            onClear={() => void clearConversation(item.title)} clearLabel={t.qq.clearConversation(item.title)} />
         ))}
       </div>
     </section>

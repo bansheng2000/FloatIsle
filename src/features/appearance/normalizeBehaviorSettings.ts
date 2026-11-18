@@ -2,7 +2,7 @@
 import { normalizeLyricsSettings } from "../media/lyrics/lyricsSettings.ts";
 import { DEFAULT_SETTINGS } from "./settingsDefaults.ts";
 import { normalizeOrder } from "../../utils/order.ts";
-import { AUTO_COLLAPSE_SECONDS, TUCK_DELAY_SECONDS, TUCK_SHAPES, COLLAPSED_ITEMS, COLLAPSED_SLOTS, PAGE_DOTS, SHELF_CLEANUP_DAYS, CLIPBOARD_VISIBLE_ROWS, oneOf } from "./settingsLimits.ts";
+import { AUTO_COLLAPSE_SECONDS, TUCK_DELAY_SECONDS, TUCK_SHAPES, COLLAPSED_ITEMS, COLLAPSED_SLOTS, PAGE_DOTS, SHELF_CLEANUP_DAYS, CLIPBOARD_VISIBLE_ROWS, NOTIFICATION_STAY_SECONDS, oneOf } from "./settingsLimits.ts";
 import { clamp } from "../../utils/number.ts";
 import type { IslandSettings, LegacyIslandSettings } from "./types";
 
@@ -48,6 +48,8 @@ export function normalizeBehaviorSettings(settings: LegacyIslandSettings | null 
       CLIPBOARD_VISIBLE_ROWS.min,
       CLIPBOARD_VISIBLE_ROWS.max,
     ),
+    // E5-1: message preview stay time, 3–30 whole seconds; a bad saved value falls back to 5.
+    notificationStaySeconds: wholeSeconds(settings?.notificationStaySeconds, NOTIFICATION_STAY_SECONDS, DEFAULT_SETTINGS.notificationStaySeconds),
     ...normalizeLyricsSettings(settings),
     mailEnabled: settings?.mailEnabled !== false,
     collapsedPriority: normalizeOrder(settings?.collapsedPriority, COLLAPSED_ITEMS),

@@ -84,6 +84,8 @@ export type IslandSettings = {
   maxPanelHeight: number;
   /** Clipboard history rows the expanded clipboard page shows before it scrolls. */
   clipboardVisibleRows: number;
+  /** (E5-1) Seconds a QQ message preview stays on the island before it fades (3–30). */
+  notificationStaySeconds: number;
   /** Agent sessions the expanded Agent page shows before it scrolls. */
   agentVisibleRows: number;
   agentHostDisplay: AgentHostDisplay;

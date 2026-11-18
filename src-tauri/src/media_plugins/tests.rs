@@ -21,6 +21,20 @@ impl Drop for Temp {
     }
 }
 #[test]
+fn e5_classify_io_text_covers_reason_buckets() {
+    assert_eq!(super::classify_io_text("Loader already exists"), "ForeignLoader");
+    assert_eq!(
+        super::classify_io_text("The process cannot access the file because it is being used by another process"),
+        "FileInUse"
+    );
+    assert_eq!(super::classify_io_text("Cannot write to a network drive"), "NetworkDrive");
+    assert_eq!(super::classify_io_text("Rename focusd-tmp failed"), "TempInterrupted");
+    assert_eq!(super::classify_io_text("Access is denied"), "SecuritySoftware");
+    assert_eq!(super::classify_io_text("some unrelated io problem"), "Io");
+    assert_eq!(std::io::Error::from(std::io::ErrorKind::PermissionDenied).kind(), std::io::ErrorKind::PermissionDenied);
+}
+
+#[test]
 fn downloads_try_mirrors_before_github() {
     let urls = download::candidate_urls(manifest::PLUGIN.url);
     assert_eq!(urls.len(), 3);

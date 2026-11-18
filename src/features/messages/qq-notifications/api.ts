@@ -46,6 +46,11 @@ export function clearQQNotifications() {
   return invoke<QQNotificationSnapshot>("clear_qq_notifications");
 }
 
+/** (E5-2) Clear one contact's / group's messages by their stable key (notification title). */
+export function clearQQNotification(key: string) {
+  return invoke<QQNotificationSnapshot>("clear_qq_notification", { key });
+}
+
 export function launchQQ() {
   return invoke("open_qq");
 }
