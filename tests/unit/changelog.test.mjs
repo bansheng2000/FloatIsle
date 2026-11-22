@@ -36,7 +36,7 @@ test("upstream notes live in their own folder and stay off our timeline", () => 
   assert.ok(upstream.includes("v3.0.8.md"), "the upstream note is kept, folded away");
   const build = (dir, names) => Object.fromEntries(names.map((name) => [`${dir}/${name}`, readFileSync(`${dir}/${name}`, "utf8")]));
   const ours = buildChangelog(build("docs/releases", own), "zh-CN");
-  assert.deepEqual(ours.map((entry) => entry.version), ["261118.21.36", "261118.16.28", "261117.8.9"]);
+  assert.deepEqual(ours.map((entry) => entry.version), ["261122.17.11", "261118.21.36", "261118.16.28", "261117.8.9"]);
   assert.ok(compareVersionsDescending("261117.8.9", "3.0.8") < 0, "our version sorts ahead of 3.0.8");
   for (const locale of ["zh-CN", "en"]) {
     const folded = buildChangelog(build("docs/releases/upstream", upstream), locale);
