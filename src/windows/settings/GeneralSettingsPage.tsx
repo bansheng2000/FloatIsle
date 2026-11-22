@@ -4,6 +4,7 @@ import { ExpandSettingsSection } from "../../features/appearance/ExpandSettingsS
 import type { IslandSettings } from "../../features/appearance/types";
 import { requestIslandPositionReset, requestTuckPreview } from "./storage";
 import { useLaunchAtStartup } from "./useLaunchAtStartup";
+import { useCrashGuardEnabled } from "./useCrashGuardEnabled";
 
 /** Settings → General: system (startup, language, settings window), then the island's opening and tucking. */
 export function GeneralSettingsPage({
@@ -22,6 +23,7 @@ export function GeneralSettingsPage({
   onDetachedSettingsChange: (detached: boolean) => void;
 }) {
   const [launchAtStartup, updateLaunchAtStartup] = useLaunchAtStartup();
+  const [crashGuardEnabled, updateCrashGuardEnabled] = useCrashGuardEnabled();
 
   return (
     <>
@@ -29,7 +31,9 @@ export function GeneralSettingsPage({
         launchAtStartup={launchAtStartup}
         locale={locale}
         detachedSettings={detachedSettings}
+        crashGuardEnabled={crashGuardEnabled}
         onDetachedSettingsChange={onDetachedSettingsChange}
+        onCrashGuardEnabledChange={updateCrashGuardEnabled}
         onLaunchAtStartupChange={updateLaunchAtStartup}
         onLocaleChange={onLocaleChange}
       />

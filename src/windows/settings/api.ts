@@ -53,6 +53,16 @@ export function saveLaunchAtStartup(enabled: boolean) {
   return invoke("set_launch_at_startup", { enabled });
 }
 
+/** Reads the in-product crash-guard switch. Missing state file means enabled. */
+export function readCrashGuardEnabled() {
+  return invoke<boolean>("get_crash_guard_enabled");
+}
+
+/** Writes the in-product crash-guard switch; turning it off ends the live guardian. */
+export function saveCrashGuardEnabled(enabled: boolean) {
+  return invoke("set_crash_guard_enabled", { enabled });
+}
+
 /** Quits the island, as the tray menu's Quit does. */
 export function quitIsland() {
   return invoke<void>("quit_island");

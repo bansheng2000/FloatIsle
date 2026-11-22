@@ -19,6 +19,8 @@ mod win32;
 
 use tauri::WindowEvent;
 
+pub use system::guardian::{parse_args as guardian_args, run as run_guardian, GuardianArgs};
+
 /// Chains each module's `tauri_commands!` list into a single `generate_handler!`.
 macro_rules! collect_commands {
     ([$($done:tt)*]) => {
@@ -65,6 +67,9 @@ pub fn run() {
             // A successful launch ends the previous session: clear any opt-out
             // marker left by a deliberate quit so the watchdog guards this run.
             system::guard_optout::clear_deliberate_exit();
+            // G1: start one hidden in-product guardian for this process. Best effort;
+            // the island must still start if the spawn fails. G2 adds relaunch.
+            system::guardian::spawn_for_current_process();
             tray::build_tray(app)?;
             if let Err(error) = clipboard_history::init(app.handle()) {
                 eprintln!("failed to initialize clipboard history: {error}");

@@ -11,14 +11,19 @@ export function BehaviorSettingsSection({
   launchAtStartup,
   locale,
   detachedSettings,
+  crashGuardEnabled,
   onLaunchAtStartupChange,
   onLocaleChange,
   onDetachedSettingsChange,
+  onCrashGuardEnabledChange,
 }: {
   launchAtStartup: boolean;
   /** Whether settings open in their own window instead of as a page of the island. */
   detachedSettings: boolean;
+  /** In-product watchdog relaunches the island after an unexpected exit. */
+  crashGuardEnabled: boolean;
   onDetachedSettingsChange: (detached: boolean) => void;
+  onCrashGuardEnabledChange: (enabled: boolean) => void;
   locale: LocaleCode;
   onLaunchAtStartupChange: (enabled: boolean) => void;
   onLocaleChange: (locale: LocaleCode) => void;
@@ -31,6 +36,12 @@ export function BehaviorSettingsSection({
         title={t.settings.layout.launchAtStartup}
         checked={launchAtStartup}
         onChange={onLaunchAtStartupChange}
+      />
+      <SettingsToggleRow
+        title={t.settings.behavior.crashGuard}
+        description={t.settings.behavior.crashGuardHint}
+        checked={crashGuardEnabled}
+        onChange={onCrashGuardEnabledChange}
       />
       <SettingsRow
         title={t.settings.language.label}

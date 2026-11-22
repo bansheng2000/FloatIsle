@@ -3,6 +3,8 @@
 
 pub(crate) mod fullscreen;
 pub(crate) mod guard_optout;
+pub mod guardian;
+pub(crate) mod guardian_config;
 pub(crate) mod startup;
 pub(crate) mod theme_file;
 pub(crate) mod todo_export;
@@ -46,6 +48,8 @@ macro_rules! tauri_commands {
             crate::system::todo_store::open_todo_data_directory,
             crate::system::todo_store::remove_todo_document,
             crate::system::fullscreen::get_foreground_fullscreen,
+            crate::system::guardian_config::get_crash_guard_enabled,
+            crate::system::guardian_config::set_crash_guard_enabled,
             crate::system::startup::get_launch_at_startup,
             crate::system::startup::set_launch_at_startup,
             crate::system::updater::get_updater_proxy,

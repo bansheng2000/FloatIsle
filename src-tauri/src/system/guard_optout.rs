@@ -70,6 +70,13 @@ pub(crate) fn clear_deliberate_exit() {
     }
 }
 
+/// True when a deliberate-quit marker is present. The in-product guardian calls
+/// this after the watched process dies: a user who quit from the tray or About
+/// page must not be brought back (V3).
+pub(crate) fn deliberate_exit_flag_present() -> bool {
+    flag_path().map(|path| path.exists()).unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{flag_path_from, remove_flag, write_flag, FLAG_FILE};

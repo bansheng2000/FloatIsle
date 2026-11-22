@@ -14,7 +14,7 @@ const sysMod = read("src-tauri/src/system/mod.rs");
 const lib = read("src-tauri/src/lib.rs");
 const tray = read("src-tauri/src/tray.rs");
 const settings = read("src-tauri/src/settings_window/mod.rs");
-const guard = readFileSync("C:\\Users\\LY\\floatisle-guard.ps1", "utf8");
+const guardian = read("src-tauri/src/system/guardian.rs");
 
 test("OPTOUT marker path is ASCII-only and prefers LOCALAPPDATA", () => {
   assert.match(mod, /const FLAG_FILE: &str = "floatisle-guard-optout\.flag";/);
@@ -48,7 +48,13 @@ test("OPTOUT About-page quit_island writes the marker before exit", () => {
 test("OPTOUT early startup clears the marker", () => {
   const start = lib.indexOf(".setup(|app| {");
   assert.ok(start >= 0);
-  const head = lib.slice(start, start + 400);
+  const endCall = "clipboard_history::init(app.handle())";
+  const endAt = lib.indexOf(endCall, start);
+  assert.ok(endAt >= 0, "setup must init clipboard history");
+  // G1 inserted the guardian spawn between the clear and the tray build, so a
+  // fixed 400-char window no longer reaches build_tray. Slice by a boundary past
+  // the tray build instead; the ordering assertion below is unchanged.
+  const head = lib.slice(start, endAt + endCall.length);
   assert.match(head, /guard_optout::clear_deliberate_exit\(\);/);
   assert.ok(
     head.indexOf("clear_deliberate_exit") < head.indexOf("build_tray"),
@@ -56,15 +62,37 @@ test("OPTOUT early startup clears the marker", () => {
   );
 });
 
-test("OPTOUT guard checks the marker and skips, else relaunches", () => {
-  assert.match(guard, /floatisle-guard-optout\.flag/);
-  assert.match(guard, /OPTOUT_SKIP/);
-  assert.match(guard, /Test-Path -LiteralPath \$flagPath/, "must actually test for marker presence");
-  const skip = guard.indexOf("OPTOUT_SKIP");
-  const relaunch = guard.indexOf("MethodName Create");
-  assert.ok(skip >= 0 && relaunch >= 0 && skip < relaunch, "skip check must precede the WMI Create launch");
-  assert.match(guard, /\$env:LOCALAPPDATA/);
-  assert.match(guard, /\$env:USERPROFILE/);
+test("OPTOUT in-product guardian reads the native marker and retires instead of relaunching", () => {
+  // The external PowerShell watchdog retires in G4-3, so the in-product guardian
+  // is the authority. Assert against what the product code actually uses:
+  // guard_optout.rs writes floatisle-guard-optout.flag with "deliberate-exit "
+  // and guardian.rs reads it before deciding to relaunch.
+  assert.match(mod, /const FLAG_FILE: &str = "floatisle-guard-optout\.flag";/);
+  assert.ok(
+    mod.includes('format!("deliberate-exit {seconds}\\n")'),
+    "marker body must carry the product-internal deliberate-exit reason"
+  );
+  assert.match(
+    mod,
+    /pub\(crate\) fn deliberate_exit_flag_present\(\) -> bool/,
+    "Rust must expose marker presence to the guardian"
+  );
+
+  const runStart = guardian.indexOf("pub fn run(mut args: GuardianArgs)");
+  const runEnd = guardian.indexOf("pub(crate) fn spawn_for_current_process");
+  assert.ok(runStart >= 0 && runEnd > runStart, "guardian run loop must exist");
+  const run = guardian.slice(runStart, runEnd);
+  const reading = run.indexOf("deliberate_exit_flag_present()");
+  const relaunching = run.indexOf("relaunch_main()");
+  assert.ok(reading >= 0, "the run loop must actually read the opt-out marker");
+  assert.ok(
+    reading < relaunching,
+    "the marker check must precede any relaunch (skip before launch)"
+  );
+
+  const decideStart = guardian.indexOf("pub(crate) fn decide_after_exit(");
+  const decide = guardian.slice(decideStart, guardian.indexOf("pub fn parse_args"));
+  assert.match(decide, /if optout \|\|/, "a present marker must force the Retire branch");
 });
 
 test("OPTOUT crash exit paths do NOT write the marker", () => {

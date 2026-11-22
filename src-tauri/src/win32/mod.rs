@@ -7,6 +7,7 @@ pub(crate) mod chinese;
 pub(crate) mod clipboard;
 pub(crate) mod com;
 pub(crate) mod file_version;
+pub(crate) mod guardian;
 pub(crate) mod hotkey;
 pub(crate) mod icon;
 pub(crate) mod input;
